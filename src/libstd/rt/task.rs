@@ -442,7 +442,7 @@ mod test {
 
     #[test]
     fn comm_shared_chan() {
-        let (port, chan) = SharedChan::new();
+        let (port, chan) = Chan::new();
         chan.send(10);
         assert!(port.recv() == 10);
     }

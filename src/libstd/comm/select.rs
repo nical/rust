@@ -98,6 +98,11 @@ pub struct Handle<'port, T> {
 
 struct Packets { cur: *mut Packet }
 
+pub trait Packet {
+    fn start_selection(&mut self, task: BlockedTask) -> Result<(), BlockedTask>;
+    fn abort_selection(&mut self);
+}
+
 impl Select {
     /// Creates a new selection structure. This set is initially empty and
     /// `wait` will fail!() if called.
