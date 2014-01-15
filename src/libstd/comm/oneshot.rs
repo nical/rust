@@ -33,12 +33,12 @@
 /// it must check for data because there is no "data plus upgrade" state.
 
 use comm::Port;
-use ops::Drop;
 use kinds::Send;
-use result::{Result, Ok, Err};
+use ops::Drop;
 use option::{Some, None, Option};
-use rt::task::{Task, BlockedTask};
+use result::{Result, Ok, Err};
 use rt::local::Local;
+use rt::task::{Task, BlockedTask};
 use sync::atomics;
 use util;
 
@@ -61,6 +61,18 @@ pub enum Failure<T> {
     Empty,
     Disconnected,
     Upgraded(Port<T>),
+}
+
+pub enum UpgradeResult {
+    UpSuccess,
+    UpDisconnected,
+    UpWoke(BlockedTask),
+}
+
+pub enum SelectionResult<T> {
+    SelCanceled(BlockedTask),
+    SelUpgraded(BlockedTask, Port<T>),
+    SelSuccess,
 }
 
 enum MyUpgrade<T> {
@@ -196,7 +208,7 @@ impl<T: Send> Packet<T> {
     // Returns whether the upgrade was completed. If the upgrade wasn't
     // completed, then the port couldn't get sent to the other half (it will
     // never receive it).
-    pub fn upgrade(&mut self, up: Port<T>) -> bool {
+    pub fn upgrade(&mut self, up: Port<T>) -> UpgradeResult {
         let prev = match self.upgrade {
             NothingSent => NothingSent,
             SendUsed => SendUsed,
@@ -210,24 +222,19 @@ impl<T: Send> Packet<T> {
             // If the channel is empty or has data on it, then we're good to go.
             // Senders will check the data before the upgrade (in case we
             // plastered over the DATA state).
-            DATA | EMPTY => true,
+            DATA | EMPTY => UpSuccess,
 
             // If the other end is already disconnected, then we failed the
             // upgrade. Be sure to trash the port we were given.
-            DISCONNECTED => { self.upgrade = prev; false }
+            DISCONNECTED => { self.upgrade = prev; UpDisconnected }
 
             // If someone's waiting, we gotta wake them up
-            n => unsafe {
-                let t = BlockedTask::cast_from_uint(n);
-                t.wake().map(|t| t.reawaken(true));
-                true
-            }
+            n => UpWoke(unsafe { BlockedTask::cast_from_uint(n) })
         }
     }
 
     pub fn drop_chan(&mut self) {
         match self.state.swap(DISCONNECTED, atomics::SeqCst) {
-            // In all of these states, there's nothing for a channel to do.
             DATA | DISCONNECTED | EMPTY => {}
 
             // If someone's waiting, we gotta wake them up
@@ -256,40 +263,95 @@ impl<T: Send> Packet<T> {
             _ => unreachable!()
         }
     }
-}
 
-//impl<T: Send> select::Packet for Packet<T> {
-//    fn start_selection(&mut self, task: BlockedTask) -> Result<(), BlockedTask>{
-//        let n = task.cast_to_uint();
-//        match self.state.compare_and_swap(EMPTY, n, atomics::SeqCst) {
-//            EMPTY => Ok(()),
-//            DISCONNECTED | DATA => Err(unsafe {
-//                BlockedTask::cast_from_uint(n)
-//            }),
-//            _ => unreachable!()
-//        }
-//    }
-//
-//    fn abort_selection(&mut self) {
-//        match self.state.load(atomics::Acquire) {
-//            EMPTY => unreachable!(),
-//            // our task was stolen
-//            DATA | DISCONNECTED => {}
-//
-//            // we've got a task
-//            n => {
-//                match self.state.compare_and_swap(EMPTY, n, atomics::SeqCst) {
-//                    EMPTY => {
-//                        let t = unsafe { BlockedTask::cast_from_uint(n) };
-//                        t.trash();
-//                    }
-//                    DATA | DISCONNECTED => {} // stolen
-//                    _ => unreachable!(),
-//                }
-//            }
-//        }
-//    }
-//}
+    ////////////////////////////////////////////////////////////////////////////
+    // select implementation
+    ////////////////////////////////////////////////////////////////////////////
+
+    // If Ok, the value is whether this port has data, if Err, then the upgraded
+    // port needs to be checked instead of this one.
+    pub fn can_recv(&mut self) -> Result<bool, Port<T>> {
+        // Use Acquire so we can see all previous memory writes
+        match self.state.load(atomics::Acquire) {
+            EMPTY => Ok(false), // Welp, we tried
+            DATA => Ok(true),   // we have some un-acquired data
+            DISCONNECTED if self.data.is_some() => Ok(true), // we have data
+            DISCONNECTED => {
+                match util::replace(&mut self.upgrade, SendUsed) {
+                    // The other end sent us an upgrade, so we need to
+                    // propagate upwards whether the upgrade can receive
+                    // data
+                    GoUp(upgrade) => Err(upgrade),
+
+                    // If the other end disconnected without sending an
+                    // upgrade, then we have data to receive (the channel is
+                    // disconnected).
+                    up => { self.upgrade = up; Ok(true) }
+                }
+            }
+            _ => unreachable!(), // we're the "one blocker"
+        }
+    }
+
+    // Attempts to start selection on this port. This can either succeed, fail
+    // because there is data, or fail because there is an upgrade pending.
+    pub fn start_selection(&mut self, task: BlockedTask) -> SelectionResult<T> {
+        let n = unsafe { task.cast_to_uint() };
+        match self.state.compare_and_swap(EMPTY, n, atomics::SeqCst) {
+            EMPTY => SelSuccess,
+            DATA => SelCanceled(unsafe { BlockedTask::cast_from_uint(n) }),
+            DISCONNECTED if self.data.is_some() => {
+                SelCanceled(unsafe { BlockedTask::cast_from_uint(n) })
+            }
+            DISCONNECTED => {
+                match util::replace(&mut self.upgrade, SendUsed) {
+                    // The other end sent us an upgrade, so we need to
+                    // propagate upwards whether the upgrade can receive
+                    // data
+                    GoUp(upgrade) => {
+                        SelUpgraded(unsafe { BlockedTask::cast_from_uint(n) },
+                                    upgrade)
+                    }
+
+                    // If the other end disconnected without sending an
+                    // upgrade, then we have data to receive (the channel is
+                    // disconnected).
+                    up => {
+                        self.upgrade = up;
+                        SelCanceled(unsafe { BlockedTask::cast_from_uint(n) })
+                    }
+                }
+            }
+            _ => unreachable!(), // we're the "one blocker"
+        }
+    }
+
+    // Remove a previous selecting task from this port. This ensures that the
+    // blocked task will no longer be visible to any other threads.
+    //
+    // The return value indicates whether there's data on this port.
+    pub fn abort_selection(&mut self) -> bool {
+        // use Acquire to make sure we see all previous memory writes
+        match self.state.load(atomics::Acquire) {
+            EMPTY => unreachable!(),
+            DATA | DISCONNECTED => true, // our task was stolen
+
+            // We've got a task, but we still need to acquire ownership of it.
+            n => {
+                match self.state.compare_and_swap(n, EMPTY, atomics::SeqCst) {
+                    EMPTY => unreachable!(),
+                    DATA | DISCONNECTED => true, // stolen
+                    m => {
+                        assert_eq!(m, n);
+                        let t = unsafe { BlockedTask::cast_from_uint(n) };
+                        t.trash();
+                        false
+                    }
+                }
+            }
+        }
+    }
+}
 
 #[unsafe_destructor]
 impl<T: Send> Drop for Packet<T> {

@@ -347,26 +347,6 @@ mod test {
     }
 
     #[test]
-    #[should_fail]
-    #[ignore] // borrow issues with RefCell
-    fn push_bytes_fail_reset_len() {
-        // push_bytes unsafely sets the vector length. This is testing that
-        // upon failure the length is reset correctly.
-        let _reader = ErroringLaterReader {
-            count: 0,
-        };
-        // FIXME (#7049): Figure out some other way to do this.
-        //let buf = RefCell::new(~[8, 9]);
-        (|| {
-            //reader.push_bytes(buf.borrow_mut().get(), 4);
-        }).finally(|| {
-            // NB: Using rtassert here to trigger abort on failure since this is a should_fail test
-            // FIXME: #7049 This fails because buf is still borrowed
-            //rtassert!(buf.borrow().get() == ~[8, 9, 10]);
-        })
-    }
-
-    #[test]
     fn read_to_end() {
         let mut reader = ThreeChunkReader {
             count: 0,

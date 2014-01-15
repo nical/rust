@@ -73,6 +73,7 @@ use util;
 
 use uw = self::libunwind;
 
+#[allow(dead_code)]
 mod libunwind {
     //! Unwind library interface
 

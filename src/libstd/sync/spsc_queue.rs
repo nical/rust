@@ -193,6 +193,19 @@ impl<T: Send> Queue<T> {
             return ret;
         }
     }
+
+    /// Attempts to peek at the head of the queue, returning `None` if the queue
+    /// has no data currently
+    pub fn peek<'a>(&'a mut self) -> Option<&'a mut T> {
+        // This is essentially the same as above with all the popping bits
+        // stripped out.
+        unsafe {
+            let tail = self.tail;
+            let next = (*tail).next.load(Acquire);
+            if next.is_null() { return None }
+            return (*next).value.as_mut();
+        }
+    }
 }
 
 #[unsafe_destructor]

@@ -244,10 +244,12 @@ use kinds::marker;
 use kinds::Send;
 use ops::Drop;
 use option::{Some, None, Option};
-use result::{Ok, Err};
+use result::{Ok, Err, Result};
 use rt::local::Local;
-use rt::task::Task;
+use rt::task::{Task, BlockedTask};
 use sync::arc::UnsafeArc;
+
+pub use comm::select::{Select, Handle};
 
 macro_rules! test (
     { fn $name:ident() $b:block $($a:attr)*} => (
@@ -275,12 +277,14 @@ macro_rules! test (
     )
 )
 
-//mod select;
+mod select;
 mod oneshot;
 mod stream;
 mod shared;
 
-static RESCHED_FREQ: int = 200;
+// Use a power of 2 to allow LLVM to optimize to something that's not a
+// division, this is hit pretty regularly.
+static RESCHED_FREQ: int = 256;
 
 /// The receiving-half of Rust's channel type. This half can only be owned by
 /// one task
@@ -402,11 +406,17 @@ impl<T: Send> Chan<T> {
                         return (*p).send(t);
                     } else {
                         let (a, b) = UnsafeArc::new2(stream::Packet::new());
-                        if (*p).upgrade(Port::my_new(Stream(b))) {
-                            (*a.get()).send(t);
-                            (a, true)
-                        } else {
-                            (a, false)
+                        match (*p).upgrade(Port::my_new(Stream(b))) {
+                            oneshot::UpSuccess => {
+                                (*a.get()).send(t);
+                                (a, true)
+                            }
+                            oneshot::UpDisconnected => (a, false),
+                            oneshot::UpWoke(task) => {
+                                (*a.get()).send(t);
+                                task.wake().map(|t| t.reawaken(true));
+                                (a, true)
+                            }
                         }
                     }
                 }
@@ -425,16 +435,20 @@ impl<T: Send> Chan<T> {
 
 impl<T: Send> Clone for Chan<T> {
     fn clone(&self) -> Chan<T> {
-        let packet = match self.inner {
+        let (packet, sleeper) = match self.inner {
             Oneshot(ref p) => {
                 let (a, b) = UnsafeArc::new2(shared::Packet::new());
-                unsafe { (*p.get()).upgrade(Port::my_new(Shared(a))); }
-                b
+                match unsafe { (*p.get()).upgrade(Port::my_new(Shared(a))) } {
+                    oneshot::UpSuccess | oneshot::UpDisconnected => (b, None),
+                    oneshot::UpWoke(task) => (b, Some(task))
+                }
             }
             Stream(ref p) => {
                 let (a, b) = UnsafeArc::new2(shared::Packet::new());
-                unsafe { (*p.get()).upgrade(Port::my_new(Shared(a))); }
-                b
+                match unsafe { (*p.get()).upgrade(Port::my_new(Shared(a))) } {
+                    stream::UpSuccess | stream::UpDisconnected => (b, None),
+                    stream::UpWoke(task) => (b, Some(task)),
+                }
             }
             Shared(ref p) => {
                 unsafe { (*p.get()).clone_chan(); }
@@ -446,6 +460,13 @@ impl<T: Send> Clone for Chan<T> {
             (*packet.get()).clone_chan();
             let mut tmp = Chan::my_new(Shared(packet.clone()));
             util::swap(&mut cast::transmute_mut(self).inner, &mut tmp.inner);
+
+            match sleeper {
+                Some(task) => {
+                    (*packet.get()).inherit_blocker(task);
+                }
+                None => {}
+            }
         }
         Chan::my_new(Shared(packet))
     }
@@ -597,6 +618,71 @@ impl<T: Send> Port<T> {
     /// `fail!`. It will return `None` when the channel has hung up.
     pub fn iter<'a>(&'a self) -> Messages<'a, T> {
         Messages { port: self }
+    }
+}
+
+impl<T: Send> select::Packet for Port<T> {
+    fn can_recv(&self) -> bool {
+        loop {
+            let mut new_port = match self.inner {
+                Oneshot(ref p) => {
+                    match unsafe { (*p.get()).can_recv() } {
+                        Ok(ret) => return ret,
+                        Err(upgrade) => upgrade,
+                    }
+                }
+                Stream(ref p) => {
+                    match unsafe { (*p.get()).can_recv() } {
+                        Ok(ret) => return ret,
+                        Err(upgrade) => upgrade,
+                    }
+                }
+                Shared(ref p) => {
+                    return unsafe { (*p.get()).can_recv() };
+                }
+            };
+            unsafe {
+                util::swap(&mut cast::transmute_mut(self).inner,
+                           &mut new_port.inner);
+            }
+        }
+    }
+
+    fn start_selection(&self, mut task: BlockedTask) -> Result<(), BlockedTask>{
+        loop {
+            let (t, mut new_port) = match self.inner {
+                Oneshot(ref p) => {
+                    match unsafe { (*p.get()).start_selection(task) } {
+                        oneshot::SelSuccess => return Ok(()),
+                        oneshot::SelCanceled(task) => return Err(task),
+                        oneshot::SelUpgraded(t, port) => (t, port),
+                    }
+                }
+                Stream(ref p) => {
+                    match unsafe { (*p.get()).start_selection(task) } {
+                        stream::SelSuccess => return Ok(()),
+                        stream::SelCanceled(task) => return Err(task),
+                        stream::SelUpgraded(t, port) => (t, port),
+                    }
+                }
+                Shared(ref p) => {
+                    return unsafe { (*p.get()).start_selection(task) };
+                }
+            };
+            task = t;
+            unsafe {
+                util::swap(&mut cast::transmute_mut(self).inner,
+                           &mut new_port.inner);
+            }
+        }
+    }
+
+    fn abort_selection(&self) -> bool {
+        match self.inner {
+            Oneshot(ref p) => unsafe { (*p.get()).abort_selection() },
+            Stream(ref p) => unsafe { (*p.get()).abort_selection() },
+            Shared(ref p) => unsafe { (*p.get()).abort_selection() },
+        }
     }
 }
 

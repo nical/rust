@@ -22,10 +22,11 @@ use int;
 use iter::Iterator;
 use kinds::Send;
 use ops::Drop;
-use option::{Option, Some, None};
+use option::{Some, None};
 use result::{Ok, Err, Result};
 use rt::local::Local;
 use rt::task::{Task, BlockedTask};
+use rt::thread::Thread;
 use spsc = sync::spsc_queue;
 use sync::atomics;
 use vec::OwnedVector;
@@ -37,7 +38,7 @@ pub struct Packet<T> {
 
     cnt: atomics::AtomicInt, // How many items are on this channel
     steals: int, // How many times has a port received without blocking?
-    to_wake: Option<BlockedTask>, // Task to wake up
+    to_wake: atomics::AtomicUint, // Task to wake up
 
     go_home: atomics::AtomicBool, // flag if the channel has been destroyed.
 }
@@ -46,6 +47,18 @@ pub enum Failure<T> {
     Empty,
     Disconnected,
     Upgraded(Port<T>),
+}
+
+pub enum UpgradeResult {
+    UpSuccess,
+    UpDisconnected,
+    UpWoke(BlockedTask),
+}
+
+pub enum SelectionResult<T> {
+    SelSuccess,
+    SelCanceled(BlockedTask),
+    SelUpgraded(BlockedTask, Port<T>),
 }
 
 // Any message could contain an "upgrade request" to a new shared port, so the
@@ -62,27 +75,35 @@ impl<T: Send> Packet<T> {
 
             cnt: atomics::AtomicInt::new(0),
             steals: 0,
-            to_wake: None,
+            to_wake: atomics::AtomicUint::new(0),
 
             go_home: atomics::AtomicBool::new(false),
         }
     }
 
 
-    pub fn send(&mut self, t: T) -> bool { self.do_send(Data(t)) }
-    pub fn upgrade(&mut self, up: Port<T>) -> bool { self.do_send(GoUp(up)) }
+    pub fn send(&mut self, t: T) -> bool {
+        match self.do_send(Data(t)) {
+            UpSuccess => true,
+            UpDisconnected => false,
+            UpWoke(task) => { task.wake().map(|t| t.reawaken(true)); true }
+        }
+    }
+    pub fn upgrade(&mut self, up: Port<T>) -> UpgradeResult {
+        self.do_send(GoUp(up))
+    }
 
-    fn do_send(&mut self, t: Message<T>) -> bool {
+    fn do_send(&mut self, t: Message<T>) -> UpgradeResult {
         // Use an acquire/release ordering to maintain the same position with
         // respect to the atomic loads below
-        if self.go_home.load(atomics::AcqRel) { return false }
+        if self.go_home.load(atomics::AcqRel) { return UpDisconnected }
 
         self.queue.push(t);
         match self.cnt.fetch_add(1, atomics::SeqCst) {
             // As described in the mod's doc comment, -1 == wakeup
-            -1 => { self.wakeup(); true }
+            -1 => UpWoke(self.take_to_wake()),
             // As as described before, SPSC queues must be >= -2
-            -2 => true,
+            -2 => UpSuccess,
 
             // Be sure to preserve the disconnected state, and the return value
             // in this case is going to be whether our data was received or not.
@@ -98,15 +119,48 @@ impl<T: Send> Packet<T> {
                 assert!(second.is_none());
 
                 match first {
-                    Some(..) => false, // we failed to send the data
-                    None => true,      // we successfully sent data
+                    Some(..) => UpSuccess,  // we failed to send the data
+                    None => UpDisconnected, // we successfully sent data
                 }
             }
 
             // Otherwise we just sent some data on a non-waiting queue, so just
             // make sure the world is sane and carry on!
-            n => { assert!(n >= 0); true }
+            n => { assert!(n >= 0); UpSuccess }
         }
+    }
+
+    // Consumes ownership of the 'to_wake' field.
+    fn take_to_wake(&mut self) -> BlockedTask {
+        let task = self.to_wake.load(atomics::SeqCst);
+        self.to_wake.store(0, atomics::SeqCst);
+        assert!(task != 0);
+        unsafe { BlockedTask::cast_from_uint(task) }
+    }
+
+    // Decrements the count on the channel for a sleeper, returning the sleeper
+    // back if it shouldn't sleep. Note that this is the location where we take
+    // steals into account.
+    fn decrement(&mut self, task: BlockedTask) -> Result<(), BlockedTask> {
+        assert_eq!(self.to_wake.load(atomics::AcqRel), 0);
+        let n = unsafe { task.cast_to_uint() };
+        self.to_wake.store(n, atomics::AcqRel);
+
+        let steals = self.steals;
+        self.steals = 0;
+
+        match self.cnt.fetch_sub(1 + steals, atomics::SeqCst) {
+            DISCONNECTED => { self.cnt.store(DISCONNECTED, atomics::SeqCst); }
+            // If we factor in our steals and notice that the channel has no
+            // data, we successfully sleep
+            n => {
+                assert!(n >= 0);
+                if n - steals <= 0 { return Ok(()) }
+            }
+        }
+
+        self.to_wake.store(0, atomics::SeqCst);
+        Err(unsafe { BlockedTask::cast_from_uint(n) })
     }
 
     pub fn recv(&mut self) -> Result<T, Failure<T>> {
@@ -117,31 +171,10 @@ impl<T: Send> Packet<T> {
         }
 
         // Welp, our channel has no data. Deschedule the current task and
-        // initiate the blocking protocol. Note that this is the location at
-        // which we take the number of steals into account (because we're
-        // guaranteed to block).
+        // initiate the blocking protocol.
         let task: ~Task = Local::take();
         task.deschedule(1, |task| {
-            assert!(self.to_wake.is_none());
-            self.to_wake = Some(task);
-            let steals = self.steals;
-            self.steals = 0;
-
-            match self.cnt.fetch_sub(1 + steals, atomics::SeqCst) {
-                // If the other side went away, we wake ourselves back up to go
-                // back into try_recv
-                DISCONNECTED => {
-                    self.cnt.store(DISCONNECTED, atomics::SeqCst);
-                    Err(self.to_wake.take_unwrap())
-                }
-
-                // If we factor in our steals and notice that the channel has no
-                // data, we successfully sleep
-                n if n - steals <= 0 => Ok(()),
-
-                // Someone snuck in and sent data, cancelling our sleep. So sad.
-                _ => Err(self.to_wake.take_unwrap()),
-            }
+            self.decrement(task)
         });
 
         match self.try_recv() {
@@ -201,7 +234,7 @@ impl<T: Send> Packet<T> {
         // Dropping a channel is pretty simple, we just flag it as disconnected
         // and then wakeup a blocker if there is one.
         match self.cnt.swap(DISCONNECTED, atomics::SeqCst) {
-            -1 => { self.wakeup(); }
+            -1 => { self.take_to_wake().wake().map(|t| t.reawaken(true)); }
             DISCONNECTED => {}
             n => { assert!(n >= 0); }
         }
@@ -258,10 +291,102 @@ impl<T: Send> Packet<T> {
         // details in the sending methods that see DISCONNECTED
     }
 
-    // This function must have had at least an acquire fence before it to be
-    // properly called.
-    fn wakeup(&mut self) {
-        self.to_wake.take_unwrap().wake().map(|t| t.reawaken(true));
+    ////////////////////////////////////////////////////////////////////////////
+    // select implementation
+    ////////////////////////////////////////////////////////////////////////////
+
+    // Tests to see whether this port can receive without blocking. If Ok is
+    // returned, then that's the answer. If Err is returned, then the returned
+    // port needs to be queried instead (an upgrade happened)
+    pub fn can_recv(&mut self) -> Result<bool, Port<T>> {
+        // We peek at the queue to see if there's anything on it, and we use
+        // this return value to determine if we should pop from the queue and
+        // upgrade this channel immediately. If it looks like we've got an
+        // upgrade pending, then go through the whole recv rigamarole to update
+        // the internal state.
+        match self.queue.peek() {
+            Some(&GoUp(..)) => {
+                match self.recv() {
+                    Err(Upgraded(port)) => Err(port),
+                    _ => unreachable!(),
+                }
+            }
+            Some(..) => Ok(true),
+            None => Ok(false)
+        }
+    }
+
+    // Attempts to start selecting on this port. Like a oneshot, this can fail
+    // immediately because of an upgrade.
+    pub fn start_selection(&mut self, task: BlockedTask) -> SelectionResult<T> {
+        match self.decrement(task) {
+            Ok(()) => SelSuccess,
+            Err(task) => {
+                let ret = match self.queue.peek() {
+                    Some(&GoUp(..)) => {
+                        match self.queue.pop() {
+                            Some(GoUp(port)) => SelUpgraded(task, port),
+                            _ => unreachable!(),
+                        }
+                    }
+                    Some(..) => SelCanceled(task),
+                    None => SelCanceled(task),
+                };
+                // Undo our decrement above, and we should be guaranteed that the
+                // previous value is positive because we're not going to sleep
+                let prev = self.cnt.fetch_add(1, atomics::SeqCst);
+                assert!(prev >= 0);
+                return ret;
+            }
+        }
+    }
+
+    // Removes a previous task from being blocked in this port
+    pub fn abort_selection(&mut self) -> bool {
+        // We want to make sure that the count on the channel goes non-negative,
+        // and in the stream case we can have at most one steal, so just assume
+        // that we had one steal.
+        let steals = 1;
+        let prev = self.cnt.fetch_add(steals + 1, atomics::SeqCst);
+
+        // If we were previously disconnected, then we know for sure that there
+        // is no task in to_wake, so just keep going
+        if prev == DISCONNECTED {
+            assert_eq!(self.to_wake.load(atomics::SeqCst), 0);
+            self.cnt.store(DISCONNECTED, atomics::SeqCst);
+            true // there is data, that data is that we're disconnected
+        } else {
+            let cur = prev + steals + 1;
+            assert!(cur >= 0);
+
+            // If the previous count was negative, then we just made things go
+            // positive, hence we passed the -1 boundary and we're responsible
+            // for removing the to_wake() field and trashing it.
+            //
+            // If the previous count was positive then we're in a tougher
+            // situation. A possible race is that a sender just incremented
+            // through -1 (meaning it's going to try to wake a task up), but it
+            // hasn't yet read the to_wake. In order to prevent a future recv()
+            // from waking up too early (this sender picking up the plastered
+            // over to_wake), we spin loop here waiting for to_wake to be 0.
+            // Note that this entire select() implementation needs an overhaul,
+            // and this is *not* the worst part of it, so this is not done as a
+            // final solution but rather out of necessity for now to get
+            // something working.
+            if prev < 0 {
+                self.take_to_wake().trash();
+            } else {
+                while self.to_wake.load(atomics::SeqCst) != 0 {
+                    Thread::yield_now();
+                }
+            }
+            assert_eq!(self.steals, 0);
+            self.steals = steals;
+
+            // if we were previously positive, then there's surely data to
+            // receive
+            prev >= 0
+        }
     }
 }
 
@@ -274,7 +399,7 @@ impl<T: Send> Drop for Packet<T> {
             // `to_wake`, so this assert cannot be removed with also removing
             // the `to_wake` assert.
             assert_eq!(self.cnt.load(atomics::SeqCst), DISCONNECTED);
-            assert!(self.to_wake.is_none());
+            assert_eq!(self.to_wake.load(atomics::SeqCst), 0);
         }
     }
 }
