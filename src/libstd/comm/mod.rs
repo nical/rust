@@ -20,7 +20,7 @@
 //! * `Chan`
 //! * `Port`
 //!
-//! `Chan` use used to send data to a `Port`. A `Chan` is clone-able such that
+//! `Chan` is used to send data to a `Port`. A `Chan` is clone-able such that
 //! many tasks can send simultaneously to one receiving port. These
 //! communication primitives are *task blocking*, not *thread blocking*. This
 //! means that if one task is blocked on a channel, other tasks can continue to
@@ -383,6 +383,16 @@ impl<T: Send> Chan<T> {
     /// Like `send`, this method will never block. If the failure of send cannot
     /// be tolerated, then this method should be used instead.
     pub fn try_send(&self, t: T) -> bool {
+        self.try_send_resched(t, true)
+    }
+
+    /// This function will not stick around for very long. The purpose of this
+    /// function is to guarantee that no rescheduling is performed.
+    pub fn try_send_deferred(&self, t: T) -> bool {
+        self.try_send_resched(t, false)
+    }
+
+    fn try_send_resched(&self, t: T, can_resched: bool) {
         // In order to prevent starvation of other tasks in situations where
         // a task sends repeatedly without ever receiving, we occassionally
         // yield instead of doing a send immediately.  Only doing this if
@@ -391,11 +401,13 @@ impl<T: Send> Chan<T> {
         //
         // Note that we don't unconditionally attempt to yield because the
         // TLS overhead can be a bit much.
-        let cnt = self.sends.get() + 1;
-        self.sends.set(cnt);
-        if cnt % (RESCHED_FREQ as uint) == 0 {
-            let task: ~Task = Local::take();
-            task.maybe_yield();
+        if can_resched {
+            let cnt = self.sends.get() + 1;
+            self.sends.set(cnt);
+            if cnt % (RESCHED_FREQ as uint) == 0 {
+                let task: ~Task = Local::take();
+                task.maybe_yield();
+            }
         }
 
         let (new_inner, ret) = match self.inner {
@@ -403,26 +415,26 @@ impl<T: Send> Chan<T> {
                 let p = p.get();
                 unsafe {
                     if !(*p).sent() {
-                        return (*p).send(t);
+                        return (*p).send(t, can_resched);
                     } else {
                         let (a, b) = UnsafeArc::new2(stream::Packet::new());
                         match (*p).upgrade(Port::my_new(Stream(b))) {
                             oneshot::UpSuccess => {
-                                (*a.get()).send(t);
+                                (*a.get()).send(t, can_resched);
                                 (a, true)
                             }
                             oneshot::UpDisconnected => (a, false),
                             oneshot::UpWoke(task) => {
                                 (*a.get()).send(t);
-                                task.wake().map(|t| t.reawaken(true));
+                                task.wake().map(|t| t.reawaken(can_resched));
                                 (a, true)
                             }
                         }
                     }
                 }
             }
-            Stream(ref p) => return unsafe { (*p.get()).send(t) },
-            Shared(ref p) => return unsafe { (*p.get()).send(t) },
+            Stream(ref p) => return unsafe { (*p.get()).send(t, can_resched) },
+            Shared(ref p) => return unsafe { (*p.get()).send(t, can_resched) },
         };
 
         unsafe {

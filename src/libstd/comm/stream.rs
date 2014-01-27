@@ -32,6 +32,7 @@ use sync::atomics;
 use vec::OwnedVector;
 
 static DISCONNECTED: int = int::min_value;
+static MAX_STEALS: int = 1 << 20;
 
 pub struct Packet<T> {
     queue: spsc::Queue<Message<T>>, // internal queue for all message
@@ -40,7 +41,7 @@ pub struct Packet<T> {
     steals: int, // How many times has a port received without blocking?
     to_wake: atomics::AtomicUint, // Task to wake up
 
-    go_home: atomics::AtomicBool, // flag if the channel has been destroyed.
+    port_dropped: atomics::AtomicBool, // flag if the channel has been destroyed.
 }
 
 pub enum Failure<T> {
@@ -77,16 +78,19 @@ impl<T: Send> Packet<T> {
             steals: 0,
             to_wake: atomics::AtomicUint::new(0),
 
-            go_home: atomics::AtomicBool::new(false),
+            port_dropped: atomics::AtomicBool::new(false),
         }
     }
 
 
-    pub fn send(&mut self, t: T) -> bool {
+    pub fn send(&mut self, t: T, can_resched: bool) -> bool {
         match self.do_send(Data(t)) {
             UpSuccess => true,
             UpDisconnected => false,
-            UpWoke(task) => { task.wake().map(|t| t.reawaken(true)); true }
+            UpWoke(task) => {
+                task.wake().map(|t| t.reawaken(can_resched));
+                true
+            }
         }
     }
     pub fn upgrade(&mut self, up: Port<T>) -> UpgradeResult {
@@ -96,7 +100,7 @@ impl<T: Send> Packet<T> {
     fn do_send(&mut self, t: Message<T>) -> UpgradeResult {
         // Use an acquire/release ordering to maintain the same position with
         // respect to the atomic loads below
-        if self.go_home.load(atomics::AcqRel) { return UpDisconnected }
+        if self.port_dropped.load(atomics::AcqRel) { return UpDisconnected }
 
         self.queue.push(t);
         match self.cnt.fetch_add(1, atomics::SeqCst) {
@@ -164,10 +168,12 @@ impl<T: Send> Packet<T> {
     }
 
     pub fn recv(&mut self) -> Result<T, Failure<T>> {
-        // optimistic preflight check (scheduling is expensive)
-        match self.try_recv() {
-            Err(Empty) => {}
-            data => return data,
+        // Optimistic preflight check (scheduling is expensive).
+        if self.steals < MAX_STEALS {
+            match self.try_recv() {
+                Err(Empty) => {}
+                data => return data,
+            }
         }
 
         // Welp, our channel has no data. Deschedule the current task and
@@ -194,9 +200,22 @@ impl<T: Send> Packet<T> {
     pub fn try_recv(&mut self) -> Result<T, Failure<T>> {
         match self.queue.pop() {
             // If we stole some data, record to that effect (this will be
-            // factored into cnt later on)
+            // factored into cnt later on). Note that we don't allow steals to
+            // grow without bound in order to prevent eventual overflow of
+            // either steals or cnt as an overflow would have catastrophic
+            // results. Also note that we don't unconditionally set steals to 0
+            // because it can be true that steals > cnt.
             Some(data) => {
                 self.steals += 1;
+                if self.steals > MAX_STEALS {
+                    match self.cnt.swap(0, atomics::SeqCst) {
+                        DISCONNECTED => {
+                            self.cnt.store(DISCONNECTED, atomics::SeqCst);
+                        }
+                        n => { self.steals -= n; }
+                    }
+                    assert!(self.steals >= 0);
+                }
                 match data {
                     Data(t) => Ok(t),
                     GoUp(up) => Err(Upgraded(up)),
@@ -260,7 +279,7 @@ impl<T: Send> Packet<T> {
         // sends are gated on this flag, so we're immediately guaranteed that
         // there are a bounded number of active sends that we'll have to deal
         // with.
-        self.go_home.store(true, atomics::SeqCst);
+        self.port_dropped.store(true, atomics::SeqCst);
 
         // Now that we're guaranteed to deal with a bounded number of senders,
         // we need to drain the queue. This draining process happens atomically

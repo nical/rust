@@ -54,7 +54,7 @@ impl WaitQueue {
             comm::Data(ch) => {
                 // Send a wakeup signal. If the waiter was killed, its port will
                 // have closed. Keep trying until we get a live task.
-                if ch.try_send(()) {
+                if ch.try_send_deferred(()) {
                     true
                 } else {
                     self.signal()
@@ -81,7 +81,7 @@ impl WaitQueue {
 
     fn wait_end(&self) -> WaitEnd {
         let (wait_end, signal_end) = Chan::new();
-        assert!(self.tail.try_send(signal_end));
+        assert!(self.tail.try_send_deferred(signal_end));
         wait_end
     }
 }

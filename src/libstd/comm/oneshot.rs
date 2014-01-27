@@ -45,7 +45,7 @@ use util;
 // Various states you can find a port in.
 static EMPTY: uint = 0;
 static DATA: uint = 1;
-static DISCONNECTED: uint = 3;
+static DISCONNECTED: uint = 2;
 
 pub struct Packet<T> {
     // Internal state of the chan/port pair (stores the blocked task as well)
@@ -90,7 +90,7 @@ impl<T: Send> Packet<T> {
         }
     }
 
-    pub fn send(&mut self, t: T) -> bool {
+    pub fn send(&mut self, t: T, can_resched: bool) -> bool {
         // Sanity check
         match self.upgrade {
             NothingSent => {}
@@ -123,7 +123,7 @@ impl<T: Send> Packet<T> {
             // other end.
             n => unsafe {
                 let t = BlockedTask::cast_from_uint(n);
-                t.wake().map(|t| t.reawaken(true));
+                t.wake().map(|t| t.reawaken(can_resched));
                 true
             }
         }

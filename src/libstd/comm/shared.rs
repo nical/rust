@@ -34,6 +34,7 @@ use mpsc = sync::mpsc_queue;
 
 static DISCONNECTED: int = int::min_value;
 static FUDGE: int = 1024;
+static MAX_STEALS: int = 1 << 20;
 
 pub struct Packet<T> {
     queue: mpsc::Queue<T>,
@@ -46,7 +47,7 @@ pub struct Packet<T> {
 
     // See the discussion in Port::drop and the channel send methods for what
     // these are used for
-    go_home: atomics::AtomicBool,
+    port_dropped: atomics::AtomicBool,
     sender_drain: atomics::AtomicInt,
 }
 
@@ -63,14 +64,14 @@ impl<T: Send> Packet<T> {
             steals: 0,
             to_wake: atomics::AtomicUint::new(0),
             channels: atomics::AtomicInt::new(1),
-            go_home: atomics::AtomicBool::new(false),
+            port_dropped: atomics::AtomicBool::new(false),
             sender_drain: atomics::AtomicInt::new(0),
         }
     }
 
-    pub fn send(&mut self, t: T) -> bool {
+    pub fn send(&mut self, t: T, can_resched: bool) -> bool {
         // See Port::drop for what's going on
-        if self.go_home.load(atomics::AcqRel) { return false }
+        if self.port_dropped.load(atomics::AcqRel) { return false }
 
         // Note that the multiple sender case is a little tricker
         // semantically than the single sender case. The logic for
@@ -103,7 +104,9 @@ impl<T: Send> Packet<T> {
 
         self.queue.push(t);
         match self.cnt.fetch_add(1, atomics::SeqCst) {
-            -1 => { self.take_to_wake().wake().map(|t| t.reawaken(true)); }
+            -1 => {
+                self.take_to_wake().wake().map(|t| t.reawaken(can_resched));
+            }
 
             // In this case, we have possibly failed to send our data, and
             // we need to consider re-popping the data in order to fully
@@ -132,8 +135,7 @@ impl<T: Send> Packet<T> {
                         }
                         // maybe we're done, if we're not the last ones
                         // here, then we need to go try again.
-                        if self.sender_drain.compare_and_swap(
-                                1, 0, atomics::SeqCst) == 1 {
+                        if self.sender_drain.fetch_sub(1, atomics::SeqCst) == 1 {
                             break
                         }
                     }
@@ -155,9 +157,11 @@ impl<T: Send> Packet<T> {
     pub fn recv(&mut self) -> Result<T, Failure> {
         // This code is essentially the exact same as that found in the stream
         // case (see stream.rs)
-        match self.try_recv() {
-            Err(Empty) => {}
-            data => return data,
+        if self.steals < MAX_STEALS {
+            match self.try_recv() {
+                Err(Empty) => {}
+                data => return data,
+            }
         }
 
         let task: ~Task = Local::take();
@@ -238,7 +242,21 @@ impl<T: Send> Packet<T> {
             }
         };
         match ret {
-            Some(data) => { self.steals += 1; Ok(data) }
+            // See the discussion in the stream implementation for why we we
+            // might decrement steals.
+            Some(data) => {
+                self.steals += 1;
+                if self.steals > MAX_STEALS {
+                    match self.cnt.swap(0, atomics::SeqCst) {
+                        DISCONNECTED => {
+                            self.cnt.store(DISCONNECTED, atomics::SeqCst);
+                        }
+                        n => { self.steals -= n; }
+                    }
+                    assert!(self.steals >= 0);
+                }
+                Ok(data)
+            }
 
             // See the discussion in the stream implementation for why we try
             // again.
@@ -284,7 +302,7 @@ impl<T: Send> Packet<T> {
     // See the long discussion inside of stream.rs for why the queue is drained,
     // and why it is done in this fashion.
     pub fn drop_port(&mut self) {
-        self.go_home.store(true, atomics::Relaxed);
+        self.port_dropped.store(true, atomics::Relaxed);
         let mut steals = self.steals;
         while {
             let cnt = self.cnt.compare_and_swap(
