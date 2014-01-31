@@ -240,14 +240,15 @@ use cast;
 use cell::Cell;
 use clone::Clone;
 use iter::Iterator;
-use kinds::marker;
 use kinds::Send;
+use kinds::marker;
 use ops::Drop;
 use option::{Some, None, Option};
 use result::{Ok, Err, Result};
 use rt::local::Local;
 use rt::task::{Task, BlockedTask};
 use sync::arc::UnsafeArc;
+use util;
 
 pub use comm::select::{Select, Handle};
 
@@ -392,7 +393,7 @@ impl<T: Send> Chan<T> {
         self.try_send_resched(t, false)
     }
 
-    fn try_send_resched(&self, t: T, can_resched: bool) {
+    fn try_send_resched(&self, t: T, can_resched: bool) -> bool {
         // In order to prevent starvation of other tasks in situations where
         // a task sends repeatedly without ever receiving, we occassionally
         // yield instead of doing a send immediately.  Only doing this if
@@ -425,7 +426,7 @@ impl<T: Send> Chan<T> {
                             }
                             oneshot::UpDisconnected => (a, false),
                             oneshot::UpWoke(task) => {
-                                (*a.get()).send(t);
+                                (*a.get()).send(t, can_resched);
                                 task.wake().map(|t| t.reawaken(can_resched));
                                 (a, true)
                             }
@@ -497,7 +498,7 @@ impl<T: Send> Drop for Chan<T> {
 
 impl<T: Send> Port<T> {
     fn my_new(inner: Flavor<T>) -> Port<T> {
-        Port { inner: inner, receives: Cell::new(0) }
+        Port { inner: inner, receives: Cell::new(0), marker: marker::NoFreeze }
     }
 
     /// Blocks waiting for a value on this port

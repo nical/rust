@@ -32,7 +32,7 @@ use vec::OwnedVector;
 
 use mpsc = sync::mpsc_queue;
 
-static DISCONNECTED: int = int::min_value;
+static DISCONNECTED: int = int::MIN;
 static FUDGE: int = 1024;
 static MAX_STEALS: int = 1 << 20;
 

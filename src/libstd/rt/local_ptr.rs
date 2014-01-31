@@ -227,7 +227,6 @@ pub mod compiled {
 /// Native implementation of having the runtime thread-local pointer. This
 /// implementation uses the `thread_local_storage` module to provide a
 /// thread-local value.
-#[cfg(not(test))]
 pub mod native {
     use cast;
     use option::{Option, Some, None};

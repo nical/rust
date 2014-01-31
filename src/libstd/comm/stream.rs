@@ -31,7 +31,7 @@ use spsc = sync::spsc_queue;
 use sync::atomics;
 use vec::OwnedVector;
 
-static DISCONNECTED: int = int::min_value;
+static DISCONNECTED: int = int::MIN;
 static MAX_STEALS: int = 1 << 20;
 
 pub struct Packet<T> {

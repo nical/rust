@@ -465,13 +465,13 @@ mod test {
         let (p2, _c2) = Chan::<int>::new();
         let (p3, c3) = Chan::<()>::new();
 
-        do spawn {
+        spawn(proc() {
             p3.recv();
             c1.clone();
-            assert!(p3.try_recv().is_none());
+            assert_eq!(p3.try_recv(), Empty);
             c1.send(2);
             p3.recv();
-        }
+        });
 
         c3.send(());
         select!(
