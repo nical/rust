@@ -1085,6 +1085,260 @@ impl<T : Iterator<char>> Parser<T> {
     }
 }
 
+// used by streamin parser to keep track of what to expect next
+type Expected = u8;
+static ExpectValue  : Expected = 1;
+static ExpectName   : Expected = 2;
+static ExpectComa   : Expected = 4;
+static ExpectEnd    : Expected = 8;
+static ExpectEOS    : Expected = 16;
+static ExpectNothing: Expected = 0;
+
+#[deriving(Eq)]
+pub enum JsonEvent {
+    BeginObject,
+    EndObject,
+    BeginList,
+    EndList,
+    BooleanValue(bool),
+    NumberValue(f64),
+    StringValue(~str),
+    NullValue,
+    EndWithError(Error),
+    End,
+}
+
+impl ToStr for JsonEvent {
+    fn to_str(&self) -> ~str {
+        match *self {
+          BeginObject => ~"BeginObject",
+          EndObject => ~"EndObject",
+          BeginList => ~"BeginList",
+          EndList => ~"EndList",
+          BooleanValue(b) => if b {~"true"} else {~"false"},
+          NumberValue(n) => n.to_str(),
+          StringValue(ref s) => s.clone(),
+          NullValue => ~"null",
+          EndWithError(ref Error) => ~"Error: " + Error.msg.clone(),
+          End => ~"End",
+        }
+    }
+}
+
+#[deriving(Eq, Clone)]
+pub enum Namespace {
+    Key(~str),
+    Index(uint),
+}
+
+impl ToStr for Namespace {
+    fn to_str(&self) -> ~str {
+        match *self {
+            Index(i) => ~"["+ i.to_str()+ "]",
+            Key(ref k) => k.clone(),
+        }
+    }
+}
+
+pub struct StreamingParser<T> {
+    priv p : Parser<T>,
+    priv stack: ~[Namespace],
+    priv expect: Expected,
+    priv start_list: bool,
+    priv start_obj: bool,
+}
+
+impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
+    fn next(&mut self) -> Option<JsonEvent> {
+        self.p.parse_whitespace();
+        if self.expect == ExpectNothing {
+            return None;
+        }
+        if self.start_list {
+            self.stack.push(Index(0));
+            self.start_list = false;
+        }
+        match self.p.ch {
+            ',' => {
+                if self.expect & ExpectComa != 0 {
+                    if self.stack.len() == 0 {
+                        return self.error(~"unexpected `,` at root level");
+                    }
+                    match self.stack[self.stack.len()-1] {
+                      Key(_) => {
+                        self.stack.pop();
+                        self.expect = ExpectName|ExpectEnd;
+                      }
+                      Index(ref mut i) => {
+                        *i += 1;
+                        self.expect = ExpectValue|ExpectEnd;
+                      }
+                    }
+                    self.p.bump();
+                } else {
+                    return self.error(~"unexpected `,`");
+                }
+            }
+            '}' => {
+                if self.expect & ExpectEnd != 0 {
+                    if !self.start_obj {
+                        self.stack.pop();
+                    }
+                    if self.stack.len() > 0 {
+                        self.expect = ExpectComa|ExpectEnd;
+                    } else {
+                        self.expect = ExpectEOS;
+                    }
+                    self.p.bump();
+                    return Some(EndObject);
+                   } else {
+                    return self.error(~"unexpected `}`");
+                }
+            }
+            ']' => {
+                if self.expect & ExpectEnd != 0 {
+                    // pop the index
+                    self.stack.pop();
+                    if self.stack.len() > 0 {
+                        self.expect = ExpectComa|ExpectEnd;
+                    } else {
+                        self.expect = ExpectEOS;
+                    }
+                    self.p.bump();
+                    return Some(EndList);
+                } else {
+                    return self.error(~"unexpected `]`");
+                }
+            }
+            _ => {}
+        }
+        self.p.parse_whitespace();
+        if self.expect & ExpectEOS != 0 {
+            if self.p.eof() {
+                self.expect = ExpectNothing;
+                return Some(End);
+            }
+        }
+        if self.expect&ExpectValue != 0 {
+            match self.parse_value() {
+              Ok(v) => {
+                return Some(v);
+              },
+              Err(e) => {
+                self.expect = ExpectNothing;
+                return Some(EndWithError(e));
+              }
+            }
+        }
+        if self.expect&ExpectName != 0 {
+            match self.p.parse_str() {
+              Ok(s) => {
+                self.p.parse_whitespace();
+                if self.p.ch != ':' {
+                    return self.error(~"expected `:`");
+                }
+                self.stack.push(Key(s));
+                self.p.bump();
+                self.p.parse_whitespace();
+                match self.parse_value() {
+                  Ok(v) => { return Some(v); }
+                  Err(e) => { return Some(EndWithError(e)); }
+                }
+              },
+              Err(e) => {
+                self.expect = ExpectNothing;
+                return Some(EndWithError(e));
+              }
+            }
+        }
+        if (self.stack.len() == 0) {
+            return self.error(~"trailing character");
+        } else {
+            return self.error(~"invalid syntax");
+        }
+    }
+}
+
+impl<T: Iterator<char>> StreamingParser<T> {
+    pub fn new(rdr: T) -> StreamingParser<T> {
+        StreamingParser {
+            p: Parser::new(rdr),
+            stack: ~[],
+            expect: ExpectValue,
+            start_list: false,
+            start_obj: false,
+        }
+    }
+
+    fn parse_value(&mut self) -> Result<JsonEvent, Error> {
+        self.p.parse_whitespace();
+        if self.p.eof() { return self.p.error(~"EOF while parsing value"); }
+        self.start_obj = false;
+        match self.p.ch {
+          'n' => {
+            self.expect = ExpectComa|ExpectEnd;
+            return self.p.parse_ident("ull", NullValue);
+          }
+          't' => {
+            self.expect = ExpectComa|ExpectEnd;
+            return self.p.parse_ident("rue", BooleanValue(true));
+          }
+          'f' => {
+            self.expect = ExpectComa|ExpectEnd;
+            return self.p.parse_ident("alse", BooleanValue(false));
+          }
+          '0' .. '9' | '-' =>
+            match self.p.parse_number() {
+              Ok(f) => {
+                self.expect = ExpectComa|ExpectEnd;
+                Ok(NumberValue(f))
+              }
+              Err(e) => {
+                self.expect = ExpectNothing;
+                return Err(e);
+              }
+            },
+          '"' =>
+            match self.p.parse_str() {
+              Ok(s) => {
+                self.expect = ExpectComa|ExpectEnd;
+                Ok(StringValue(s))
+              }
+              Err(e) => {
+                self.expect = ExpectNothing;
+                return Err(e);
+              }
+            },
+          '[' => {
+              self.expect = ExpectValue|ExpectEnd;
+              self.start_list = true;
+              self.p.bump();
+              Ok(BeginList)
+            }
+          '{' => {
+              self.expect = ExpectName|ExpectEnd;
+              self.start_obj = true;
+              self.p.bump();
+              Ok(BeginObject)
+            }
+          _ => {
+                self.expect = ExpectNothing;
+                self.p.error(~"invalid syntax")
+            }
+        }
+    }
+
+    fn error(&mut self, msg: ~str) -> Option<JsonEvent> {
+        self.expect = ExpectNothing;
+        Some(EndWithError(Error { line: self.p.line, col: self.p.col, msg: msg }))
+    }
+
+    pub fn stack<'l>(&'l self) -> &'l [Namespace] {
+        return self.stack.slice(0, self.stack.len());
+    }
+}
+
+
 /// Decodes a json value from an `&mut io::Reader`
 pub fn from_reader(rdr: &mut io::Reader) -> Result<Json, Error> {
     let contents = match rdr.read_to_end() {
@@ -2279,5 +2533,109 @@ mod tests {
                                 "list but found null");
         check_err::<DecodeEnum>("{\"variant\": \"C\", \"fields\": []}",
                                 "unknown variant name");
+    }
+    #[test]
+    fn test_streaming_parser() {
+        let s = "{ \"foo\":\"bar\", \"array\" : [0, 1, 2,3 ,4,5], \"idents\":[null,true,false]}";
+        let mut parser = StreamingParser::new(s.chars());
+        let mut expected_result: ~[(JsonEvent, ~[Namespace])] = ~[
+            (BeginObject,             ~[]),
+              (StringValue(~"bar"),   ~[Key(~"foo")]),
+              (BeginList,             ~[Key(~"array")]),
+                (NumberValue(0.0),    ~[Key(~"array"), Index(0)]),
+                (NumberValue(1.0),    ~[Key(~"array"), Index(1)]),
+                (NumberValue(2.0),    ~[Key(~"array"), Index(2)]),
+                (NumberValue(3.0),    ~[Key(~"array"), Index(3)]),
+                (NumberValue(4.0),    ~[Key(~"array"), Index(4)]),
+                (NumberValue(5.0),    ~[Key(~"array"), Index(5)]),
+              (EndList,               ~[Key(~"array")]),
+              (BeginList,             ~[Key(~"idents")]),
+                (NullValue,           ~[Key(~"idents"), Index(0)]),
+                (BooleanValue(true),  ~[Key(~"idents"), Index(1)]),
+                (BooleanValue(false), ~[Key(~"idents"), Index(2)]),
+              (EndList,               ~[Key(~"idents")]),
+            (EndObject,               ~[]),
+            (End,                     ~[]),
+        ];
+        loop {
+            let evt = match parser.next() {
+                Some(e) => e,
+                None => { break; }
+            };
+            let (expected_evt, expected_stack) = expected_result.shift();
+            assert_eq!((evt, parser.stack()),
+                (expected_evt, expected_stack.as_slice()));
+        }
+    }
+    #[test]
+    fn test_read_list_streaming() {
+        println("test_read_list_streaming");
+        assert_eq!(last_event("["),
+            EndWithError(Error {line: 1u, col: 2u, msg: ~"EOF while parsing value"}));
+        assert_eq!(from_str("["),
+            Err(Error {line: 1u, col: 2u, msg: ~"EOF while parsing value"}));
+        assert_eq!(from_str("[1"),
+            Err(Error {line: 1u, col: 3u, msg: ~"EOF while parsing list"}));
+        assert_eq!(from_str("[1,"),
+            Err(Error {line: 1u, col: 4u, msg: ~"EOF while parsing value"}));
+        assert_eq!(from_str("[1,]"),
+            Err(Error {line: 1u, col: 4u, msg: ~"invalid syntax"}));
+        assert_eq!(from_str("[6 7]"),
+            Err(Error {line: 1u, col: 4u, msg: ~"expected `,` or `]`"}));
+
+        assert_eq!(from_str("[]"), Ok(List(~[])));
+        assert_eq!(from_str("[ ]"), Ok(List(~[])));
+        assert_eq!(from_str("[true]"), Ok(List(~[Boolean(true)])));
+        assert_eq!(from_str("[ false ]"), Ok(List(~[Boolean(false)])));
+        assert_eq!(from_str("[null]"), Ok(List(~[Null])));
+        assert_eq!(from_str("[3, 1]"),
+                     Ok(List(~[Number(3.0), Number(1.0)])));
+        assert_eq!(from_str("\n[3, 2]\n"),
+                     Ok(List(~[Number(3.0), Number(2.0)])));
+        assert_eq!(from_str("[2, [4, 1]]"),
+               Ok(List(~[Number(2.0), List(~[Number(4.0), Number(1.0)])])));
+    }
+    #[test]
+    fn test_trailing_characters_streaming() {
+        println("test_trailing_characters_streaming");
+        println("1");
+        assert_eq!(last_event("nulla"),
+            EndWithError(Error {line: 1u, col: 5u, msg: ~"trailing character"}));
+        println("2");
+        assert_eq!(last_event("truea"),
+            EndWithError(Error {line: 1u, col: 5u, msg: ~"trailing character"}));
+        println("3");
+        assert_eq!(last_event("falsea"),
+            EndWithError(Error {line: 1u, col: 6u, msg: ~"trailing character"}));
+        println("4");
+        assert_eq!(last_event("1a"),
+            EndWithError(Error {line: 1u, col: 2u, msg: ~"trailing character"}));
+        println("5");
+        assert_eq!(last_event("[]a"),
+            EndWithError(Error {line: 1u, col: 3u, msg: ~"trailing character"}));
+        println("6");
+        assert_eq!(last_event("{}a"),
+            EndWithError(Error {line: 1u, col: 3u, msg: ~"trailing character"}));
+        println("7");
+    }
+    #[test]
+    fn test_read_identifiers_streaming() {
+        println("test_read_identifiers_streaming");
+        assert_eq!(last_event("n"),
+            EndWithError(Error {line: 1u, col: 2u, msg: ~"invalid syntax"}));
+        assert_eq!(last_event("nul"),
+            EndWithError(Error {line: 1u, col: 4u, msg: ~"invalid syntax"}));
+        assert_eq!(last_event("t"),
+            EndWithError(Error {line: 1u, col: 2u, msg: ~"invalid syntax"}));
+        assert_eq!(last_event("truz"),
+            EndWithError(Error {line: 1u, col: 4u, msg: ~"invalid syntax"}));
+        assert_eq!(last_event("f"),
+            EndWithError(Error {line: 1u, col: 2u, msg: ~"invalid syntax"}));
+        assert_eq!(last_event("faz"),
+            EndWithError(Error {line: 1u, col: 3u, msg: ~"invalid syntax"}));
+
+        assert_eq!(StreamingParser::new("null".chars()).next(), Some(NullValue));
+        assert_eq!(StreamingParser::new("true".chars()).next(), Some(BooleanValue(true)));
+        assert_eq!(StreamingParser::new("false".chars()).next(), Some(BooleanValue(false)));
     }
 }
