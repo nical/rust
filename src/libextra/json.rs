@@ -783,7 +783,10 @@ impl<T : Iterator<char>> Parser<T> {
           'n' => self.parse_ident("ull", Null),
           't' => self.parse_ident("rue", Boolean(true)),
           'f' => self.parse_ident("alse", Boolean(false)),
-          '0' .. '9' | '-' => self.parse_number(),
+          '0' .. '9' | '-' => match self.parse_number() {
+              Ok(f) => Ok(Number(f)),
+              Err(e) => Err(e),
+            },
           '"' =>
             match self.parse_str() {
               Ok(s) => Ok(String(s)),
@@ -803,15 +806,23 @@ impl<T : Iterator<char>> Parser<T> {
     }
 
     fn parse_ident(&mut self, ident: &str, value: Json) -> Result<Json, Error> {
-        if ident.chars().all(|c| c == self.next_char()) {
-            self.bump();
+        if self.parse_ident_internal(ident) {
             Ok(value)
         } else {
             self.error(~"invalid syntax")
         }
     }
 
-    fn parse_number(&mut self) -> Result<Json, Error> {
+    fn parse_ident_internal(&mut self, ident: &str) -> bool {
+        if ident.chars().all(|c| c == self.next_char()) {
+            self.bump();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn parse_number(&mut self) -> Result<f64, Error> {
         let mut neg = 1.0;
 
         if self.ch == '-' {
@@ -838,7 +849,7 @@ impl<T : Iterator<char>> Parser<T> {
             }
         }
 
-        Ok(Number(neg * res))
+        Ok(neg * res)
     }
 
     fn parse_integer(&mut self) -> Result<f64, Error> {
@@ -1251,7 +1262,7 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
               }
             }
         }
-        if (self.stack.len() == 0) {
+        if self.stack.len() == 0 {
             return self.error(~"trailing character");
         } else {
             return self.error(~"invalid syntax");
@@ -1277,15 +1288,15 @@ impl<T: Iterator<char>> StreamingParser<T> {
         match self.p.ch {
           'n' => {
             self.expect = ExpectComa|ExpectEnd;
-            return self.p.parse_ident("ull", NullValue);
+            return self.parse_ident("ull", NullValue);
           }
           't' => {
             self.expect = ExpectComa|ExpectEnd;
-            return self.p.parse_ident("rue", BooleanValue(true));
+            return self.parse_ident("rue", BooleanValue(true));
           }
           'f' => {
             self.expect = ExpectComa|ExpectEnd;
-            return self.p.parse_ident("alse", BooleanValue(false));
+            return self.parse_ident("alse", BooleanValue(false));
           }
           '0' .. '9' | '-' =>
             match self.p.parse_number() {
@@ -1325,6 +1336,15 @@ impl<T: Iterator<char>> StreamingParser<T> {
                 self.expect = ExpectNothing;
                 self.p.error(~"invalid syntax")
             }
+        }
+    }
+
+    fn parse_ident(&mut self, ident: &str, value: JsonEvent) -> Result<JsonEvent, Error> {
+        if self.p.parse_ident_internal(ident) {
+            Ok(value)
+        } else {
+            self.expect = ExpectNothing;
+            Err(Error { line: self.p.line, col: self.p.col, msg: ~"invalid syntax" })
         }
     }
 
@@ -2562,26 +2582,36 @@ mod tests {
                 Some(e) => e,
                 None => { break; }
             };
-            let (expected_evt, expected_stack) = expected_result.shift();
+            let (expected_evt, expected_stack) = expected_result.shift().unwrap();
             assert_eq!((evt, parser.stack()),
                 (expected_evt, expected_stack.as_slice()));
         }
     }
+    fn last_event(src: &str) -> JsonEvent {
+        let mut parser = StreamingParser::new(src.chars());
+        let mut evt = End;
+        loop {
+            evt = match parser.next() {
+                Some(e) => e,
+                None => return evt,
+            }
+        }
+    }
     #[test]
     fn test_read_list_streaming() {
-        println("test_read_list_streaming");
+        println!("test_read_list_streaming");
         assert_eq!(last_event("["),
             EndWithError(Error {line: 1u, col: 2u, msg: ~"EOF while parsing value"}));
         assert_eq!(from_str("["),
-            Err(Error {line: 1u, col: 2u, msg: ~"EOF while parsing value"}));
+                   Err(Error {line: 1u, col: 2u, msg: ~"EOF while parsing value"}));
         assert_eq!(from_str("[1"),
-            Err(Error {line: 1u, col: 3u, msg: ~"EOF while parsing list"}));
+                   Err(Error {line: 1u, col: 3u, msg: ~"EOF while parsing list"}));
         assert_eq!(from_str("[1,"),
-            Err(Error {line: 1u, col: 4u, msg: ~"EOF while parsing value"}));
+                   Err(Error {line: 1u, col: 4u, msg: ~"EOF while parsing value"}));
         assert_eq!(from_str("[1,]"),
-            Err(Error {line: 1u, col: 4u, msg: ~"invalid syntax"}));
+                   Err(Error {line: 1u, col: 4u, msg: ~"invalid syntax"}));
         assert_eq!(from_str("[6 7]"),
-            Err(Error {line: 1u, col: 4u, msg: ~"expected `,` or `]`"}));
+                   Err(Error {line: 1u, col: 4u, msg: ~"expected `,` or `]`"}));
 
         assert_eq!(from_str("[]"), Ok(List(~[])));
         assert_eq!(from_str("[ ]"), Ok(List(~[])));
@@ -2589,50 +2619,42 @@ mod tests {
         assert_eq!(from_str("[ false ]"), Ok(List(~[Boolean(false)])));
         assert_eq!(from_str("[null]"), Ok(List(~[Null])));
         assert_eq!(from_str("[3, 1]"),
-                     Ok(List(~[Number(3.0), Number(1.0)])));
+                   Ok(List(~[Number(3.0), Number(1.0)])));
         assert_eq!(from_str("\n[3, 2]\n"),
-                     Ok(List(~[Number(3.0), Number(2.0)])));
+                   Ok(List(~[Number(3.0), Number(2.0)])));
         assert_eq!(from_str("[2, [4, 1]]"),
-               Ok(List(~[Number(2.0), List(~[Number(4.0), Number(1.0)])])));
+                   Ok(List(~[Number(2.0), List(~[Number(4.0), Number(1.0)])])));
     }
     #[test]
     fn test_trailing_characters_streaming() {
-        println("test_trailing_characters_streaming");
-        println("1");
         assert_eq!(last_event("nulla"),
-            EndWithError(Error {line: 1u, col: 5u, msg: ~"trailing character"}));
-        println("2");
+                   EndWithError(Error {line: 1u, col: 5u, msg: ~"trailing character"}));
         assert_eq!(last_event("truea"),
-            EndWithError(Error {line: 1u, col: 5u, msg: ~"trailing character"}));
-        println("3");
+                   EndWithError(Error {line: 1u, col: 5u, msg: ~"trailing character"}));
         assert_eq!(last_event("falsea"),
-            EndWithError(Error {line: 1u, col: 6u, msg: ~"trailing character"}));
-        println("4");
+                   EndWithError(Error {line: 1u, col: 6u, msg: ~"trailing character"}));
         assert_eq!(last_event("1a"),
-            EndWithError(Error {line: 1u, col: 2u, msg: ~"trailing character"}));
-        println("5");
+                   EndWithError(Error {line: 1u, col: 2u, msg: ~"trailing character"}));
         assert_eq!(last_event("[]a"),
-            EndWithError(Error {line: 1u, col: 3u, msg: ~"trailing character"}));
-        println("6");
+                   EndWithError(Error {line: 1u, col: 3u, msg: ~"trailing character"}));
         assert_eq!(last_event("{}a"),
-            EndWithError(Error {line: 1u, col: 3u, msg: ~"trailing character"}));
-        println("7");
+                   EndWithError(Error {line: 1u, col: 3u, msg: ~"trailing character"}));
     }
     #[test]
     fn test_read_identifiers_streaming() {
-        println("test_read_identifiers_streaming");
+        println!("test_read_identifiers_streaming");
         assert_eq!(last_event("n"),
-            EndWithError(Error {line: 1u, col: 2u, msg: ~"invalid syntax"}));
+                   EndWithError(Error {line: 1u, col: 2u, msg: ~"invalid syntax"}));
         assert_eq!(last_event("nul"),
-            EndWithError(Error {line: 1u, col: 4u, msg: ~"invalid syntax"}));
+                   EndWithError(Error {line: 1u, col: 4u, msg: ~"invalid syntax"}));
         assert_eq!(last_event("t"),
-            EndWithError(Error {line: 1u, col: 2u, msg: ~"invalid syntax"}));
+                   EndWithError(Error {line: 1u, col: 2u, msg: ~"invalid syntax"}));
         assert_eq!(last_event("truz"),
-            EndWithError(Error {line: 1u, col: 4u, msg: ~"invalid syntax"}));
+                   EndWithError(Error {line: 1u, col: 4u, msg: ~"invalid syntax"}));
         assert_eq!(last_event("f"),
-            EndWithError(Error {line: 1u, col: 2u, msg: ~"invalid syntax"}));
+                   EndWithError(Error {line: 1u, col: 2u, msg: ~"invalid syntax"}));
         assert_eq!(last_event("faz"),
-            EndWithError(Error {line: 1u, col: 3u, msg: ~"invalid syntax"}));
+                   EndWithError(Error {line: 1u, col: 3u, msg: ~"invalid syntax"}));
 
         assert_eq!(StreamingParser::new("null".chars()).next(), Some(NullValue));
         assert_eq!(StreamingParser::new("true".chars()).next(), Some(BooleanValue(true)));
