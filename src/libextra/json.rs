@@ -1138,7 +1138,7 @@ impl ToStr for JsonEvent {
 
 #[deriving(Eq, Clone)]
 pub enum Namespace {
-    Key(~str),
+    Name(~str),
     Index(uint),
 }
 
@@ -1146,7 +1146,7 @@ impl ToStr for Namespace {
     fn to_str(&self) -> ~str {
         match *self {
             Index(i) => ~"["+ i.to_str()+ "]",
-            Key(ref k) => k.clone(),
+            Name(ref k) => k.clone(),
         }
     }
 }
@@ -1176,7 +1176,7 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
                         return self.error(~"unexpected `,` at root level");
                     }
                     match self.stack[self.stack.len()-1] {
-                      Key(_) => {
+                      Name(_) => {
                         self.stack.pop();
                         self.expect = ExpectName|ExpectEnd;
                       }
@@ -1248,7 +1248,7 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
                 if self.p.ch != ':' {
                     return self.error(~"expected `:`");
                 }
-                self.stack.push(Key(s));
+                self.stack.push(Name(s));
                 self.p.bump();
                 self.p.parse_whitespace();
                 match self.parse_value() {
@@ -2554,29 +2554,9 @@ mod tests {
         check_err::<DecodeEnum>("{\"variant\": \"C\", \"fields\": []}",
                                 "unknown variant name");
     }
-    #[test]
-    fn test_streaming_parser() {
-        let s = "{ \"foo\":\"bar\", \"array\" : [0, 1, 2,3 ,4,5], \"idents\":[null,true,false]}";
-        let mut parser = StreamingParser::new(s.chars());
-        let mut expected_result: ~[(JsonEvent, ~[Namespace])] = ~[
-            (BeginObject,             ~[]),
-              (StringValue(~"bar"),   ~[Key(~"foo")]),
-              (BeginList,             ~[Key(~"array")]),
-                (NumberValue(0.0),    ~[Key(~"array"), Index(0)]),
-                (NumberValue(1.0),    ~[Key(~"array"), Index(1)]),
-                (NumberValue(2.0),    ~[Key(~"array"), Index(2)]),
-                (NumberValue(3.0),    ~[Key(~"array"), Index(3)]),
-                (NumberValue(4.0),    ~[Key(~"array"), Index(4)]),
-                (NumberValue(5.0),    ~[Key(~"array"), Index(5)]),
-              (EndList,               ~[Key(~"array")]),
-              (BeginList,             ~[Key(~"idents")]),
-                (NullValue,           ~[Key(~"idents"), Index(0)]),
-                (BooleanValue(true),  ~[Key(~"idents"), Index(1)]),
-                (BooleanValue(false), ~[Key(~"idents"), Index(2)]),
-              (EndList,               ~[Key(~"idents")]),
-            (EndObject,               ~[]),
-            (End,                     ~[]),
-        ];
+    fn assert_stream_equal(src: &str, expected: ~[(JsonEvent, ~[Namespace])]) {
+        let mut expected_result = expected;
+        let mut parser = StreamingParser::new(src.chars());
         loop {
             let evt = match parser.next() {
                 Some(e) => e,
@@ -2586,6 +2566,31 @@ mod tests {
             assert_eq!((evt, parser.stack()),
                 (expected_evt, expected_stack.as_slice()));
         }
+    }
+    #[test]
+    fn test_streaming_parser() {
+        assert_stream_equal(
+            "{ \"foo\":\"bar\", \"array\" : [0, 1, 2,3 ,4,5], \"idents\":[null,true,false]}",
+            ~[
+                (BeginObject,             ~[]),
+                  (StringValue(~"bar"),   ~[Name(~"foo")]),
+                  (BeginList,             ~[Name(~"array")]),
+                    (NumberValue(0.0),    ~[Name(~"array"), Index(0)]),
+                    (NumberValue(1.0),    ~[Name(~"array"), Index(1)]),
+                    (NumberValue(2.0),    ~[Name(~"array"), Index(2)]),
+                    (NumberValue(3.0),    ~[Name(~"array"), Index(3)]),
+                    (NumberValue(4.0),    ~[Name(~"array"), Index(4)]),
+                    (NumberValue(5.0),    ~[Name(~"array"), Index(5)]),
+                  (EndList,               ~[Name(~"array")]),
+                  (BeginList,             ~[Name(~"idents")]),
+                    (NullValue,           ~[Name(~"idents"), Index(0)]),
+                    (BooleanValue(true),  ~[Name(~"idents"), Index(1)]),
+                    (BooleanValue(false), ~[Name(~"idents"), Index(2)]),
+                  (EndList,               ~[Name(~"idents")]),
+                (EndObject,               ~[]),
+                (End,                     ~[]),
+            ]
+        );
     }
     fn last_event(src: &str) -> JsonEvent {
         let mut parser = StreamingParser::new(src.chars());
@@ -2598,10 +2603,115 @@ mod tests {
         }
     }
     #[test]
+    fn test_read_object_streaming() {
+        assert_eq!(last_event("{ "),
+            EndWithError(Error {line: 1u, col: 3u, msg: ~"EOF while parsing object"}));
+        assert_eq!(last_event("{1"),
+            EndWithError(Error {line: 1u, col: 2u, msg: ~"key must be a string"}));
+        assert_eq!(last_event("{ \"a\""),
+            EndWithError(Error {line: 1u, col: 6u, msg: ~"EOF while parsing object"}));
+        assert_eq!(last_event("{\"a\""),
+            EndWithError(Error {line: 1u, col: 5u, msg: ~"EOF while parsing object"}));
+        assert_eq!(last_event("{\"a\" "),
+            EndWithError(Error {line: 1u, col: 6u, msg: ~"EOF while parsing object"}));
+
+        assert_eq!(last_event("{\"a\" 1"),
+            EndWithError(Error {line: 1u, col: 6u, msg: ~"expected `:`"}));
+        assert_eq!(last_event("{\"a\":"),
+            EndWithError(Error {line: 1u, col: 6u, msg: ~"EOF while parsing value"}));
+        assert_eq!(last_event("{\"a\":1"),
+            EndWithError(Error {line: 1u, col: 7u, msg: ~"EOF while parsing object"}));
+        assert_eq!(last_event("{\"a\":1 1"),
+            EndWithError(Error {line: 1u, col: 8u, msg: ~"expected `,` or `}`"}));
+        assert_eq!(last_event("{\"a\":1,"),
+            EndWithError(Error {line: 1u, col: 8u, msg: ~"EOF while parsing object"}));
+
+        assert_stream_equal(
+            "{}",
+            ~[(BeginObject, ~[]), (EndObject, ~[]), (End, ~[]),]
+        );
+        assert_stream_equal(
+            "{\"a\": 3}",
+            ~[
+                (BeginObject,        ~[]),
+                  (NumberValue(3.0), ~[Name(~"a")]),
+                (EndObject,          ~[]),
+                (End,                ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "{ \"a\": null, \"b\" : true }",
+            ~[
+                (BeginObject,           ~[]),
+                  (NullValue,           ~[Name(~"a")]),
+                  (BooleanValue(true),  ~[Name(~"b")]),
+                (EndObject,             ~[]),
+                (End,                   ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "{ \"a\": null, \"b\" : true }",
+            ~[
+                (BeginObject,           ~[]),
+                  (NumberValue(1.0),    ~[Name(~"a")]),
+                  (BeginList,           ~[Name(~"b")]),
+                    (BooleanValue(true),~[Name(~"b"), Index(0)]),
+                  (EndList,             ~[Name(~"b")]),
+                (EndObject,             ~[]),
+                (End,                   ~[]),
+            ]
+        );
+        assert_stream_equal(
+            ~"{" +
+                "\"a\": 1.0, " +
+                "\"b\": [" +
+                    "true," +
+                    "\"foo\\nbar\", " +
+                    "{ \"c\": {\"d\": null} } " +
+                "]" +
+            "}",
+            ~[
+                (BeginObject,                   ~[]),
+                  (NumberValue(1.0),            ~[Name(~"a")]),
+                  (BeginList,                   ~[Name(~"b")]),
+                    (BooleanValue(true),        ~[Name(~"b"), Index(0)]),
+                    (StringValue(~"foo\nbar"),  ~[Name(~"b"), Index(1)]),
+                    (BeginObject,               ~[Name(~"b"), Index(2)]),
+                      (BeginObject,             ~[Name(~"b"), Index(2), Name(~"c")]),
+                        (NullValue,             ~[Name(~"b"), Index(2), Name(~"c"), Name(~"d")]),
+                      (EndObject,               ~[Name(~"b"), Index(2), Name(~"c")]),
+                    (EndObject,                 ~[Name(~"b"), Index(2)]),
+                  (EndList,                     ~[Name(~"b")]),
+                (EndObject,                     ~[]),
+                (End,                           ~[]),
+            ]
+        );
+
+        assert_eq!(from_str(
+                      ~"{" +
+                          "\"a\": 1.0, " +
+                          "\"b\": [" +
+                              "true," +
+                              "\"foo\\nbar\", " +
+                              "{ \"c\": {\"d\": null} } " +
+                          "]" +
+                      "}").unwrap(),
+                  mk_object([
+                      (~"a", Number(1.0)),
+                      (~"b", List(~[
+                          Boolean(true),
+                          String(~"foo\nbar"),
+                          mk_object([
+                              (~"c", mk_object([(~"d", Null)]))
+                          ])
+                      ]))
+                  ]));
+    }
+    #[test]
     fn test_read_list_streaming() {
         println!("test_read_list_streaming");
         assert_eq!(last_event("["),
-            EndWithError(Error {line: 1u, col: 2u, msg: ~"EOF while parsing value"}));
+                   EndWithError(Error {line: 1u, col: 2u, msg: ~"EOF while parsing value"}));
         assert_eq!(from_str("["),
                    Err(Error {line: 1u, col: 2u, msg: ~"EOF while parsing value"}));
         assert_eq!(from_str("[1"),
