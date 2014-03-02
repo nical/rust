@@ -1123,41 +1123,11 @@ pub enum JsonEvent {
     End,
 }
 
-/*
-impl ToStr for JsonEvent {
-    fn to_str(&self) -> ~str {
-        match *self {
-          BeginObject => ~"BeginObject",
-          EndObject => ~"EndObject",
-          BeginList => ~"BeginList",
-          EndList => ~"EndList",
-          BooleanValue(b) => if b {~"true"} else {~"false"},
-          NumberValue(n) => n.to_str(),
-          StringValue(ref s) => s.clone(),
-          NullValue => ~"null",
-          EndWithError(ref Error) => ~"Error: " + Error.msg.clone(),
-          End => ~"End",
-        }
-    }
-}
-*/
-
 #[deriving(Eq, Clone, Show)]
 pub enum Namespace {
     Name(~str),
     Index(uint),
 }
-
-/*
-impl ToStr for Namespace {
-    fn to_str(&self) -> ~str {
-        match *self {
-            Index(i) => ~"["+ i.to_str()+ "]",
-            Name(ref k) => k.clone(),
-        }
-    }
-}
-*/
 
 pub struct StreamingParser<T> {
     priv p : Parser<T>,
@@ -1250,24 +1220,38 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
             }
         }
         if self.expect&ExpectName != 0 {
-            match self.p.parse_str() {
-              Ok(s) => {
-                self.p.parse_whitespace();
-                if self.p.ch_or_null() != ':' {
-                    return self.error(~"expected `:`");
+            if self.p.ch_is('\"') {
+                match self.p.parse_str() {
+                  Ok(s) => {
+                    self.p.parse_whitespace();
+                    if self.p.eof() {
+                        return self.error(~"EOF while expecting `:`");
+                    } else if self.p.ch_or_null() != ':' {
+                        return self.error(~"expected `:`");
+                    }
+                    self.stack.push(Name(s));
+                    self.p.bump();
+                    self.p.parse_whitespace();
+                    match self.parse_value() {
+                      Ok(v) => { return Some(v); }
+                      Err(e) => { return Some(EndWithError(e)); }
+                    }
+                  },
+                  Err(e) => {
+                    self.expect = ExpectNothing;
+                    return Some(EndWithError(e));
+                  }
                 }
-                self.stack.push(Name(s));
-                self.p.bump();
-                self.p.parse_whitespace();
-                match self.parse_value() {
-                  Ok(v) => { return Some(v); }
-                  Err(e) => { return Some(EndWithError(e)); }
-                }
-              },
-              Err(e) => {
-                self.expect = ExpectNothing;
-                return Some(EndWithError(e));
-              }
+            } else if self.p.eof() {
+                return self.error(~"EOF while parsing object");
+            } else {
+                return self.error(~"key must be a string");
+            }
+        }
+        if self.p.eof() {
+            return match self.stack[self.stack.len()-1] {
+              Name(_) => self.error(~"EOF while parsing object"),
+              Index(_) => self.error(~"EOF while parsing list"),
             }
         }
         if self.stack.len() == 0 {
@@ -2618,20 +2602,20 @@ mod tests {
         assert_eq!(last_event("{1"),
             EndWithError(Error {line: 1u, col: 2u, msg: ~"key must be a string"}));
         assert_eq!(last_event("{ \"a\""),
-            EndWithError(Error {line: 1u, col: 6u, msg: ~"EOF while parsing object"}));
+            EndWithError(Error {line: 1u, col: 6u, msg: ~"EOF while expecting `:`"}));
         assert_eq!(last_event("{\"a\""),
-            EndWithError(Error {line: 1u, col: 5u, msg: ~"EOF while parsing object"}));
+            EndWithError(Error {line: 1u, col: 5u, msg: ~"EOF while expecting `:`"}));
         assert_eq!(last_event("{\"a\" "),
-            EndWithError(Error {line: 1u, col: 6u, msg: ~"EOF while parsing object"}));
+            EndWithError(Error {line: 1u, col: 6u, msg: ~"EOF while expecting `:`"}));
 
         assert_eq!(last_event("{\"a\" 1"),
             EndWithError(Error {line: 1u, col: 6u, msg: ~"expected `:`"}));
         assert_eq!(last_event("{\"a\":"),
-            EndWithError(Error {line: 1u, col: 6u, msg: ~"EOF while parsing value"}));
+            EndWithError(Error {line: 1u, col: 6u, msg: ~"EOF while parsing object"}));
         assert_eq!(last_event("{\"a\":1"),
             EndWithError(Error {line: 1u, col: 7u, msg: ~"EOF while parsing object"}));
         assert_eq!(last_event("{\"a\":1 1"),
-            EndWithError(Error {line: 1u, col: 8u, msg: ~"expected `,` or `}`"}));
+            EndWithError(Error {line: 1u, col: 8u, msg: ~"invalid syntax"}));
         assert_eq!(last_event("{\"a\":1,"),
             EndWithError(Error {line: 1u, col: 8u, msg: ~"EOF while parsing object"}));
 
@@ -2659,7 +2643,7 @@ mod tests {
             ]
         );
         assert_stream_equal(
-            "{ \"a\": null, \"b\" : true }",
+            "{\"a\" : 1.0 ,\"b\": [ true ]}",
             ~[
                 (BeginObject,           ~[]),
                   (NumberValue(1.0),    ~[Name(~"a")]),
