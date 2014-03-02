@@ -13,6 +13,8 @@
 //! Currently these aren't particularly useful, there only exists bindings
 //! enough so that pipes can be created to child processes.
 
+#[allow(missing_doc)];
+
 use prelude::*;
 use io::IoResult;
 use libc;
@@ -46,8 +48,15 @@ impl PipeStream {
         })
     }
 
+    #[doc(hidden)]
     pub fn new(inner: ~RtioPipe) -> PipeStream {
         PipeStream { obj: inner }
+    }
+}
+
+impl Clone for PipeStream {
+    fn clone(&self) -> PipeStream {
+        PipeStream { obj: self.obj.clone() }
     }
 }
 

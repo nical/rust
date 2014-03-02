@@ -21,12 +21,14 @@
 //! extension traits (`*Ext`) for the full details.
 
 use cast::transmute;
+use fmt;
 use option::{Option, Some, None};
 use result::{Result, Ok, Err};
-use to_str::ToStr;
-use unstable::intrinsics::TypeId;
-use unstable::intrinsics;
-use util::Void;
+use intrinsics::TypeId;
+use intrinsics;
+
+/// A type with no inhabitants
+pub enum Void { }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Any trait
@@ -148,12 +150,16 @@ impl AnyOwnExt for ~Any {
 // Trait implementations
 ///////////////////////////////////////////////////////////////////////////////
 
-impl ToStr for ~Any {
-    fn to_str(&self) -> ~str { ~"~Any" }
+impl fmt::Show for ~Any {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.pad("~Any")
+    }
 }
 
-impl<'a> ToStr for &'a Any {
-    fn to_str(&self) -> ~str { ~"&Any" }
+impl<'a> fmt::Show for &'a Any {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.pad("&Any")
+    }
 }
 
 #[cfg(test)]
@@ -161,7 +167,7 @@ mod tests {
     use prelude::*;
     use super::*;
 
-    #[deriving(Eq)]
+    #[deriving(Eq, Show)]
     struct Test;
 
     static TEST: &'static str = "Test";
@@ -169,15 +175,6 @@ mod tests {
     #[test]
     fn any_as_void_ptr() {
         let (a, b, c) = (~5u as ~Any, ~TEST as ~Any, ~Test as ~Any);
-        let a_r: &Any = a;
-        let b_r: &Any = b;
-        let c_r: &Any = c;
-
-        assert_eq!(a.as_void_ptr(), a_r.as_void_ptr());
-        assert_eq!(b.as_void_ptr(), b_r.as_void_ptr());
-        assert_eq!(c.as_void_ptr(), c_r.as_void_ptr());
-
-        let (a, b, c) = (@5u as @Any, @TEST as @Any, @Test as @Any);
         let a_r: &Any = a;
         let b_r: &Any = b;
         let c_r: &Any = c;
@@ -304,23 +301,6 @@ mod tests {
     }
 
     #[test]
-    fn any_managed() {
-        let (a, b, c) = (@5u as @Any, @TEST as @Any, @Test as @Any);
-
-        assert!(a.is::<uint>());
-        assert!(!b.is::<uint>());
-        assert!(!c.is::<uint>());
-
-        assert!(!a.is::<&'static str>());
-        assert!(b.is::<&'static str>());
-        assert!(!c.is::<&'static str>());
-
-        assert!(!a.is::<Test>());
-        assert!(!b.is::<Test>());
-        assert!(c.is::<Test>());
-    }
-
-    #[test]
     fn any_as_ref() {
         let a = &5u as &Any;
 
@@ -400,5 +380,18 @@ mod tests {
 
         assert!(a.move::<~Test>().is_err());
         assert!(b.move::<~uint>().is_err());
+    }
+
+    #[test]
+    fn test_show() {
+        let a = ~8u as ~Any;
+        let b = ~Test as ~Any;
+        assert_eq!(format!("{}", a), ~"~Any");
+        assert_eq!(format!("{}", b), ~"~Any");
+
+        let a = &8u as &Any;
+        let b = &Test as &Any;
+        assert_eq!(format!("{}", a), ~"&Any");
+        assert_eq!(format!("{}", b), ~"&Any");
     }
 }

@@ -97,7 +97,7 @@ pub struct Stealer<T> {
 }
 
 /// When stealing some data, this is an enumeration of the possible outcomes.
-#[deriving(Eq)]
+#[deriving(Eq, Show)]
 pub enum Stolen<T> {
     /// The deque was empty at the time of stealing
     Empty,
@@ -363,7 +363,7 @@ impl<T: Send> Buffer<T> {
     // very unsafe method which the caller needs to treat specially in case a
     // race is lost.
     unsafe fn get(&self, i: int) -> T {
-        ptr::read_ptr(self.storage.offset(i & self.mask()))
+        ptr::read(self.storage.offset(i & self.mask()))
     }
 
     // Unsafe because this unsafely overwrites possibly uninitialized or

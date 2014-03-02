@@ -22,15 +22,12 @@ use codemap::{Span, respan};
 use parse::parser::Parser;
 use parse::token;
 
-use std::to_bytes;
-
 /// The specific types of unsupported syntax
-#[deriving(Eq)]
+#[deriving(Eq, Hash)]
 pub enum ObsoleteSyntax {
     ObsoleteSwap,
     ObsoleteUnsafeBlock,
     ObsoleteBareFnType,
-    ObsoleteNamedExternModule,
     ObsoleteMultipleLocalDecl,
     ObsoleteUnsafeExternFn,
     ObsoleteTraitFuncVisibility,
@@ -42,17 +39,9 @@ pub enum ObsoleteSyntax {
     ObsoleteBoxedClosure,
     ObsoleteClosureType,
     ObsoleteMultipleImport,
-    ObsoleteExternModAttributesInParens,
     ObsoleteManagedPattern,
     ObsoleteManagedString,
     ObsoleteManagedVec,
-}
-
-impl to_bytes::IterBytes for ObsoleteSyntax {
-    #[inline]
-    fn iter_bytes(&self, lsb0: bool, f: to_bytes::Cb) -> bool {
-        (*self as uint).iter_bytes(lsb0, f)
-    }
 }
 
 pub trait ParserObsoleteMethods {
@@ -76,7 +65,7 @@ impl ParserObsoleteMethods for Parser {
         let (kind_str, desc) = match kind {
             ObsoleteSwap => (
                 "swap",
-                "Use std::util::{swap, replace} instead"
+                "use std::mem::{swap, replace} instead"
             ),
             ObsoleteUnsafeBlock => (
                 "non-standalone unsafe block",
@@ -85,11 +74,6 @@ impl ParserObsoleteMethods for Parser {
             ObsoleteBareFnType => (
                 "bare function type",
                 "use `|A| -> B` or `extern fn(A) -> B` instead"
-            ),
-            ObsoleteNamedExternModule => (
-                "named external module",
-                "instead of `extern mod foo { ... }`, write `mod foo { \
-                 extern { ... } }`"
             ),
             ObsoleteMultipleLocalDecl => (
                 "declaration of multiple locals at once",
@@ -141,11 +125,6 @@ impl ParserObsoleteMethods for Parser {
                 "multiple imports",
                 "only one import is allowed per `use` statement"
             ),
-            ObsoleteExternModAttributesInParens => (
-                "`extern mod` with linkage attribute list",
-                "use `extern mod foo = \"bar\";` instead of \
-                `extern mod foo (name = \"bar\")`"
-            ),
             ObsoleteManagedPattern => (
                 "managed pointer pattern",
                 "use a nested `match` expression instead of a managed box \
@@ -187,8 +166,7 @@ impl ParserObsoleteMethods for Parser {
     fn is_obsolete_ident(&mut self, ident: &str) -> bool {
         match self.token {
             token::IDENT(sid, _) => {
-                let interned_string = token::get_ident(sid.name);
-                interned_string.equiv(&ident)
+                token::get_ident(sid).equiv(&ident)
             }
             _ => false
         }

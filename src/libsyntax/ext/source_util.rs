@@ -16,7 +16,6 @@ use ext::base::*;
 use ext::base;
 use ext::build::AstBuilder;
 use parse;
-use parse::token::get_ident_interner;
 use parse::token;
 use print::pprust;
 
@@ -64,7 +63,7 @@ pub fn expand_file(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
 
 pub fn expand_stringify(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
     -> base::MacResult {
-    let s = pprust::tts_to_str(tts, get_ident_interner());
+    let s = pprust::tts_to_str(tts);
     base::MRExpr(cx.expr_str(sp, token::intern_and_get_ident(s)))
 }
 
@@ -72,10 +71,7 @@ pub fn expand_mod(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
     -> base::MacResult {
     base::check_zero_tts(cx, sp, tts, "module_path!");
     let string = cx.mod_path()
-                   .map(|x| {
-                        let interned_str = token::get_ident(x.name);
-                        interned_str.get().to_str()
-                    })
+                   .map(|x| token::get_ident(*x).get().to_str())
                    .connect("::");
     base::MRExpr(cx.expr_str(sp, token::intern_and_get_ident(string)))
 }
@@ -87,7 +83,7 @@ pub fn expand_include(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
     -> base::MacResult {
     let file = match get_single_str_from_tts(cx, sp, tts, "include!") {
         Some(f) => f,
-        None => return MacResult::dummy_expr(),
+        None => return MacResult::dummy_expr(sp),
     };
     // The file will be added to the code map by the parser
     let mut p =
@@ -105,13 +101,13 @@ pub fn expand_include_str(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
     -> base::MacResult {
     let file = match get_single_str_from_tts(cx, sp, tts, "include_str!") {
         Some(f) => f,
-        None => return MacResult::dummy_expr()
+        None => return MacResult::dummy_expr(sp)
     };
     let file = res_rel_file(cx, sp, &Path::new(file));
     let bytes = match File::open(&file).read_to_end() {
         Err(e) => {
             cx.span_err(sp, format!("couldn't read {}: {}", file.display(), e));
-            return MacResult::dummy_expr();
+            return MacResult::dummy_expr(sp);
         }
         Ok(bytes) => bytes,
     };
@@ -127,7 +123,7 @@ pub fn expand_include_str(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
         }
         None => {
             cx.span_err(sp, format!("{} wasn't a utf-8 file", file.display()));
-            return MacResult::dummy_expr();
+            return MacResult::dummy_expr(sp);
         }
     }
 }
@@ -137,13 +133,13 @@ pub fn expand_include_bin(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
 {
     let file = match get_single_str_from_tts(cx, sp, tts, "include_bin!") {
         Some(f) => f,
-        None => return MacResult::dummy_expr()
+        None => return MacResult::dummy_expr(sp)
     };
     let file = res_rel_file(cx, sp, &Path::new(file));
     match File::open(&file).read_to_end() {
         Err(e) => {
             cx.span_err(sp, format!("couldn't read {}: {}", file.display(), e));
-            return MacResult::dummy_expr();
+            return MacResult::dummy_expr(sp);
         }
         Ok(bytes) => {
             base::MRExpr(cx.expr_lit(sp, ast::LitBinary(Rc::new(bytes))))

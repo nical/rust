@@ -44,7 +44,6 @@ Several modules in `core` are clients of `rt`:
 * `std::local_data` - The interface to local data.
 * `std::gc` - The garbage collector.
 * `std::unstable::lang` - Miscellaneous lang items, some of which rely on `std::rt`.
-* `std::condition` - Uses local data.
 * `std::cleanup` - Local heap destruction.
 * `std::io` - In the future `std::io` will use an `rt` implementation.
 * `std::logging`
@@ -74,6 +73,7 @@ pub use self::unwind::{begin_unwind, begin_unwind_raw, begin_unwind_fmt};
 // FIXME: these probably shouldn't be public...
 #[doc(hidden)]
 pub mod shouldnt_be_public {
+    #[cfg(not(test))]
     pub use super::local_ptr::native::maybe_tls_key;
     #[cfg(not(windows), not(target_os = "android"))]
     pub use super::local_ptr::compiled::RT_TLS_PTR;
@@ -127,6 +127,9 @@ pub mod args;
 
 // Support for running procedures when a program has exited.
 mod at_exit_imp;
+
+// Stack overflow protection
+pub mod stack;
 
 /// The default error code of the rust runtime if the main task fails instead
 /// of exiting cleanly.

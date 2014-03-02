@@ -1,4 +1,4 @@
-// Copyright 2012-2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,10 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#[allow(non_camel_case_types)];
+
 //! Code that is useful in various trans modules.
 
-
-use driver::session;
 use driver::session::Session;
 use lib::llvm::{ValueRef, BasicBlockRef, BuilderRef};
 use lib::llvm::{True, False, Bool};
@@ -32,17 +32,15 @@ use util::ppaux::Repr;
 
 use arena::TypedArena;
 use std::c_str::ToCStr;
-use std::cast::transmute;
-use std::cast;
 use std::cell::{Cell, RefCell};
-use std::hashmap::HashMap;
+use collections::HashMap;
 use std::libc::{c_uint, c_longlong, c_ulonglong, c_char};
-use syntax::ast::{Ident};
-use syntax::ast_map::{Path, PathElem, PathPrettyName};
+use syntax::ast::Ident;
+use syntax::ast;
+use syntax::ast_map::{PathElem, PathName};
 use syntax::codemap::Span;
 use syntax::parse::token::InternedString;
 use syntax::parse::token;
-use syntax::{ast, ast_map};
 
 pub use middle::trans::context::CrateContext;
 
@@ -102,10 +100,8 @@ pub fn return_type_is_void(ccx: &CrateContext, ty: ty::t) -> bool {
     ty::type_is_nil(ty) || ty::type_is_bot(ty) || ty::type_is_empty(ccx.tcx, ty)
 }
 
-pub fn gensym_name(name: &str) -> (Ident, PathElem) {
-    let name = token::gensym(name);
-    let ident = Ident::new(name);
-    (ident, PathPrettyName(ident, name as u64))
+pub fn gensym_name(name: &str) -> PathElem {
+    PathName(token::gensym(name))
 }
 
 pub struct tydesc_info {
@@ -114,7 +110,6 @@ pub struct tydesc_info {
     size: ValueRef,
     align: ValueRef,
     name: ValueRef,
-    drop_glue: Cell<Option<ValueRef>>,
     visit_glue: Cell<Option<ValueRef>>,
 }
 
@@ -278,7 +273,6 @@ pub struct FunctionContext<'a> {
     // The source span and nesting context where this function comes from, for
     // error reporting and symbol generation.
     span: Option<Span>,
-    path: Path,
 
     // The arena that blocks are allocated from.
     block_arena: &'a TypedArena<Block<'a>>,
@@ -447,12 +441,11 @@ impl<'a> Block<'a> {
     pub fn sess(&self) -> Session { self.fcx.ccx.sess }
 
     pub fn ident(&self, ident: Ident) -> ~str {
-        let string = token::get_ident(ident.name);
-        string.get().to_str()
+        token::get_ident(ident).get().to_str()
     }
 
     pub fn node_id_to_str(&self, id: ast::NodeId) -> ~str {
-        ast_map::node_id_to_str(self.tcx().items, id, self.sess().intr())
+        self.tcx().map.node_to_str(id)
     }
 
     pub fn expr_to_str(&self, e: &ast::Expr) -> ~str {
@@ -473,7 +466,7 @@ impl<'a> Block<'a> {
             Some(&v) => v,
             None => {
                 self.tcx().sess.bug(format!(
-                    "No def associated with node id {:?}", nid));
+                    "no def associated with node id {:?}", nid));
             }
         }
     }
@@ -519,19 +512,6 @@ pub fn val_ty(v: ValueRef) -> Type {
     unsafe {
         Type::from_ref(llvm::LLVMTypeOf(v))
     }
-}
-
-// Let T be the content of a box @T.  tuplify_box_ty(t) returns the
-// representation of @T as a tuple (i.e., the ty::t version of what T_box()
-// returns).
-pub fn tuplify_box_ty(tcx: ty::ctxt, t: ty::t) -> ty::t {
-    let ptr = ty::mk_ptr(
-        tcx,
-        ty::mt {ty: ty::mk_i8(), mutbl: ast::MutImmutable}
-    );
-    return ty::mk_tup(tcx, ~[ty::mk_uint(), ty::mk_type(tcx),
-                         ptr, ptr,
-                         t]);
 }
 
 // LLVM constant constructors.
@@ -688,7 +668,7 @@ pub fn C_array(ty: Type, elts: &[ValueRef]) -> ValueRef {
 
 pub fn C_bytes(bytes: &[u8]) -> ValueRef {
     unsafe {
-        let ptr = cast::transmute(bytes.as_ptr());
+        let ptr = bytes.as_ptr() as *c_char;
         return llvm::LLVMConstStringInContext(base::task_llcx(), ptr, bytes.len() as c_uint, True);
     }
 }
@@ -742,7 +722,7 @@ pub fn is_null(val: ValueRef) -> bool {
 }
 
 // Used to identify cached monomorphized functions and vtables
-#[deriving(Eq,IterBytes)]
+#[deriving(Eq, Hash)]
 pub enum mono_param_id {
     mono_precise(ty::t, Option<@~[mono_id]>),
     mono_any,
@@ -752,7 +732,7 @@ pub enum mono_param_id {
               datum::RvalueMode),
 }
 
-#[deriving(Eq,IterBytes)]
+#[deriving(Eq, Hash)]
 pub enum MonoDataClass {
     MonoBits,    // Anything not treated differently from arbitrary integer data
     MonoNonNull, // Non-null pointers (used for optional-pointer optimization)
@@ -774,8 +754,7 @@ pub fn mono_data_classify(t: ty::t) -> MonoDataClass {
     }
 }
 
-
-#[deriving(Eq,IterBytes)]
+#[deriving(Eq, Hash)]
 pub struct mono_id_ {
     def: ast::DefId,
     params: ~[mono_param_id]
@@ -797,25 +776,6 @@ pub fn align_to(cx: &Block, off: ValueRef, align: ValueRef) -> ValueRef {
     let mask = build::Sub(cx, align, C_int(cx.ccx(), 1));
     let bumped = build::Add(cx, off, mask);
     return build::And(cx, bumped, build::Not(cx, mask));
-}
-
-pub fn path_str(sess: session::Session, p: &[PathElem]) -> ~str {
-    let mut r = ~"";
-    let mut first = true;
-    for e in p.iter() {
-        match *e {
-            ast_map::PathName(s) | ast_map::PathMod(s) |
-            ast_map::PathPrettyName(s, _) => {
-                if first {
-                    first = false
-                } else {
-                    r.push_str("::")
-                }
-                r.push_str(sess.str_of(s));
-            }
-        }
-    }
-    r
 }
 
 pub fn monomorphize_type(bcx: &Block, t: ty::t) -> ty::t {
@@ -847,13 +807,17 @@ pub fn expr_ty_adjusted(bcx: &Block, ex: &ast::Expr) -> ty::t {
     monomorphize_type(bcx, t)
 }
 
-pub fn node_id_type_params(bcx: &Block, id: ast::NodeId) -> ~[ty::t] {
+pub fn node_id_type_params(bcx: &Block, id: ast::NodeId, is_method: bool) -> ~[ty::t] {
     let tcx = bcx.tcx();
-    let params = ty::node_id_to_type_params(tcx, id);
+    let params = if is_method {
+        bcx.ccx().maps.method_map.borrow().get().get(&id).substs.tps.clone()
+    } else {
+        ty::node_id_to_type_params(tcx, id)
+    };
 
     if !params.iter().all(|t| !ty::type_needs_infer(*t)) {
         bcx.sess().bug(
-            format!("Type parameters for node {} include inference types: {}",
+            format!("type parameters for node {} include inference types: {}",
                  id, params.map(|t| bcx.ty_to_str(*t)).connect(",")));
     }
 

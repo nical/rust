@@ -16,12 +16,13 @@
 // However the extra library is designed to be optional (for code that must run on constrained
 //  environments like embedded devices or special environments like kernel code) so it must
 // be explicitly linked in.
-extern mod extra;
+extern crate extra;
 
 // Extern mod controls linkage. Use controls the visibility of names to modules that are
 // already linked in. Using WriterUtil allows us to use the write_line method.
 use std::str;
 use std::vec;
+use std::fmt;
 
 // Represents a position on a canvas.
 struct Point {
@@ -40,8 +41,6 @@ struct Rect {
     top_left: Point,
     size: Size,
 }
-
-// TODO: operators
 
 // Contains the information needed to do shape rendering via ASCII art.
 struct AsciiArt {
@@ -96,13 +95,13 @@ impl AsciiArt {
 
 // Allows AsciiArt to be converted to a string using the libcore ToStr trait.
 // Note that the %s fmt! specifier will not call this automatically.
-impl ToStr for AsciiArt {
-    fn to_str(&self) -> ~str {
+impl fmt::Show for AsciiArt {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Convert each line into a string.
         let lines = self.lines.map(|line| str::from_chars(*line));
 
         // Concatenate the lines together using a new-line.
-        lines.connect("\n")
+        write!(f.buf, "{}", lines.connect("\n"))
     }
 }
 

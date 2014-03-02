@@ -28,20 +28,32 @@
 
 #[allow(missing_doc)];
 
+#[cfg(target_os = "macos")]
+#[cfg(windows)]
+use iter::range;
+
 use clone::Clone;
 use container::Container;
-#[cfg(target_os = "macos")]
-use iter::range;
 use libc;
 use libc::{c_char, c_void, c_int};
-use option::{Some, None};
+use option::{Some, None, Option};
 use os;
-use prelude::*;
+use ops::Drop;
+use result::{Err, Ok, Result};
 use ptr;
 use str;
+use str::{Str, StrSlice};
 use fmt;
-use unstable::finally::Finally;
 use sync::atomics::{AtomicInt, INIT_ATOMIC_INT, SeqCst};
+use path::{Path, GenericPath};
+use iter::Iterator;
+use vec::{Vector, CloneableVector, ImmutableVector, MutableVector, OwnedVector};
+use ptr::RawPtr;
+
+#[cfg(unix)]
+use c_str::ToCStr;
+#[cfg(windows)]
+use str::OwnedStr;
 
 /// Delegates to the libc close() function, returning the same return value.
 pub fn close(fd: int) -> int {
@@ -76,7 +88,8 @@ pub fn getcwd() -> Path {
             fail!();
         }
     }
-    Path::new(str::from_utf16(buf))
+    Path::new(str::from_utf16(str::truncate_utf16_at_nul(buf))
+              .expect("GetCurrentDirectoryW returned invalid UTF-16"))
 }
 
 #[cfg(windows)]
@@ -100,19 +113,26 @@ pub mod win32 {
             let mut done = false;
             while !done {
                 let mut buf = vec::from_elem(n as uint, 0u16);
-                let k = f(buf.as_mut_ptr(), TMPBUF_SZ as DWORD);
+                let k = f(buf.as_mut_ptr(), n);
                 if k == (0 as DWORD) {
                     done = true;
                 } else if k == n &&
                           libc::GetLastError() ==
                           libc::ERROR_INSUFFICIENT_BUFFER as DWORD {
-                    n *= (2 as DWORD);
+                    n *= 2 as DWORD;
+                } else if k >= n {
+                    n = k;
                 } else {
                     done = true;
                 }
                 if k != 0 && done {
                     let sub = buf.slice(0, k as uint);
-                    res = option::Some(str::from_utf16(sub));
+                    // We want to explicitly catch the case when the
+                    // closure returned invalid UTF-16, rather than
+                    // set `res` to None and continue.
+                    let s = str::from_utf16(sub)
+                        .expect("fill_utf16_buf_and_decode: closure created invalid UTF-16");
+                    res = option::Some(s)
                 }
             }
             return res;
@@ -132,25 +152,35 @@ Accessing environment variables is not generally threadsafe.
 Serialize access through a global lock.
 */
 fn with_env_lock<T>(f: || -> T) -> T {
-    use unstable::mutex::{Mutex, MUTEX_INIT};
-    use unstable::finally::Finally;
+    use unstable::mutex::{StaticNativeMutex, NATIVE_MUTEX_INIT};
 
-    static mut lock: Mutex = MUTEX_INIT;
+    static mut lock: StaticNativeMutex = NATIVE_MUTEX_INIT;
 
     unsafe {
-        return (|| {
-            lock.lock();
-            f()
-        }).finally(|| lock.unlock());
+        let _guard = lock.lock();
+        f()
     }
 }
 
 /// Returns a vector of (variable, value) pairs for all the environment
 /// variables of the current process.
+///
+/// Invalid UTF-8 bytes are replaced with \uFFFD. See `str::from_utf8_lossy()`
+/// for details.
 pub fn env() -> ~[(~str,~str)] {
+    env_as_bytes().move_iter().map(|(k,v)| {
+        let k = str::from_utf8_lossy(k).into_owned();
+        let v = str::from_utf8_lossy(v).into_owned();
+        (k,v)
+    }).collect()
+}
+
+/// Returns a vector of (variable, value) byte-vector pairs for all the
+/// environment variables of the current process.
+pub fn env_as_bytes() -> ~[(~[u8],~[u8])] {
     unsafe {
         #[cfg(windows)]
-        unsafe fn get_env_pairs() -> ~[~str] {
+        unsafe fn get_env_pairs() -> ~[~[u8]] {
             use c_str;
             use str::StrSlice;
 
@@ -165,13 +195,15 @@ pub fn env() -> ~[(~str,~str)] {
             }
             let mut result = ~[];
             c_str::from_c_multistring(ch as *c_char, None, |cstr| {
-                result.push(cstr.as_str().unwrap().to_owned());
+                result.push(cstr.as_bytes_no_nul().to_owned());
             });
             FreeEnvironmentStringsA(ch);
             result
         }
         #[cfg(unix)]
-        unsafe fn get_env_pairs() -> ~[~str] {
+        unsafe fn get_env_pairs() -> ~[~[u8]] {
+            use c_str::CString;
+
             extern {
                 fn rust_env_pairs() -> **c_char;
             }
@@ -182,20 +214,19 @@ pub fn env() -> ~[(~str,~str)] {
             }
             let mut result = ~[];
             ptr::array_each(environ, |e| {
-                let env_pair = str::raw::from_c_str(e);
-                debug!("get_env_pairs: {}", env_pair);
+                let env_pair = CString::new(e, false).as_bytes_no_nul().to_owned();
                 result.push(env_pair);
             });
             result
         }
 
-        fn env_convert(input: ~[~str]) -> ~[(~str, ~str)] {
+        fn env_convert(input: ~[~[u8]]) -> ~[(~[u8], ~[u8])] {
             let mut pairs = ~[];
             for p in input.iter() {
-                let vs: ~[&str] = p.splitn('=', 1).collect();
-                debug!("splitting: len: {}", vs.len());
-                assert_eq!(vs.len(), 2);
-                pairs.push((vs[0].to_owned(), vs[1].to_owned()));
+                let vs: ~[&[u8]] = p.splitn(1, |b| *b == '=' as u8).collect();
+                let key = vs[0].to_owned();
+                let val = if vs.len() < 2 { ~[] } else { vs[1].to_owned() };
+                pairs.push((key, val));
             }
             pairs
         }
@@ -209,14 +240,34 @@ pub fn env() -> ~[(~str,~str)] {
 #[cfg(unix)]
 /// Fetches the environment variable `n` from the current process, returning
 /// None if the variable isn't set.
+///
+/// Any invalid UTF-8 bytes in the value are replaced by \uFFFD. See
+/// `str::from_utf8_lossy()` for details.
+///
+/// # Failure
+///
+/// Fails if `n` has any interior NULs.
 pub fn getenv(n: &str) -> Option<~str> {
+    getenv_as_bytes(n).map(|v| str::from_utf8_lossy(v).into_owned())
+}
+
+#[cfg(unix)]
+/// Fetches the environment variable `n` byte vector from the current process,
+/// returning None if the variable isn't set.
+///
+/// # Failure
+///
+/// Fails if `n` has any interior NULs.
+pub fn getenv_as_bytes(n: &str) -> Option<~[u8]> {
+    use c_str::CString;
+
     unsafe {
         with_env_lock(|| {
             let s = n.with_c_str(|buf| libc::getenv(buf));
             if s.is_null() {
                 None
             } else {
-                Some(str::raw::from_c_str(s))
+                Some(CString::new(s, false).as_bytes_no_nul().to_owned())
             }
         })
     }
@@ -238,10 +289,21 @@ pub fn getenv(n: &str) -> Option<~str> {
     }
 }
 
+#[cfg(windows)]
+/// Fetches the environment variable `n` byte vector from the current process,
+/// returning None if the variable isn't set.
+pub fn getenv_as_bytes(n: &str) -> Option<~[u8]> {
+    getenv(n).map(|s| s.into_bytes())
+}
+
 
 #[cfg(unix)]
 /// Sets the environment variable `n` to the value `v` for the currently running
 /// process
+///
+/// # Failure
+///
+/// Fails if `n` or `v` have any interior NULs.
 pub fn setenv(n: &str, v: &str) {
     unsafe {
         with_env_lock(|| {
@@ -272,6 +334,10 @@ pub fn setenv(n: &str, v: &str) {
 }
 
 /// Remove a variable from the environment entirely
+///
+/// # Failure
+///
+/// Fails (on unix) if `n` has any interior NULs.
 pub fn unsetenv(n: &str) {
     #[cfg(unix)]
     fn _unsetenv(n: &str) {
@@ -396,6 +462,8 @@ pub fn self_exe_name() -> Option<Path> {
 
     #[cfg(windows)]
     fn load_self() -> Option<~[u8]> {
+        use str::OwnedStr;
+
         unsafe {
             use os::win32::fill_utf16_buf_and_decode;
             fill_utf16_buf_and_decode(|buf, sz| {
@@ -679,7 +747,8 @@ pub fn last_os_error() -> ~str {
                 fail!("[{}] FormatMessage failure", errno());
             }
 
-            str::from_utf16(buf)
+            str::from_utf16(str::truncate_utf16_at_nul(buf))
+                .expect("FormatMessageW returned invalid UTF-16")
         }
     }
 
@@ -709,10 +778,12 @@ pub fn get_exit_status() -> int {
 }
 
 #[cfg(target_os = "macos")]
-unsafe fn load_argc_and_argv(argc: int, argv: **c_char) -> ~[~str] {
+unsafe fn load_argc_and_argv(argc: int, argv: **c_char) -> ~[~[u8]] {
+    use c_str::CString;
+
     let mut args = ~[];
     for i in range(0u, argc as uint) {
-        args.push(str::raw::from_c_str(*argv.offset(i as int)));
+        args.push(CString::new(*argv.offset(i as int), false).as_bytes_no_nul().to_owned())
     }
     args
 }
@@ -723,7 +794,7 @@ unsafe fn load_argc_and_argv(argc: int, argv: **c_char) -> ~[~str] {
  * Returns a list of the command line arguments.
  */
 #[cfg(target_os = "macos")]
-fn real_args() -> ~[~str] {
+fn real_args_as_bytes() -> ~[~[u8]] {
     unsafe {
         let (argc, argv) = (*_NSGetArgc() as int,
                             *_NSGetArgv() as **c_char);
@@ -734,13 +805,18 @@ fn real_args() -> ~[~str] {
 #[cfg(target_os = "linux")]
 #[cfg(target_os = "android")]
 #[cfg(target_os = "freebsd")]
-fn real_args() -> ~[~str] {
+fn real_args_as_bytes() -> ~[~[u8]] {
     use rt;
 
     match rt::args::clone() {
         Some(args) => args,
         None => fail!("process arguments not initialized")
     }
+}
+
+#[cfg(not(windows))]
+fn real_args() -> ~[~str] {
+    real_args_as_bytes().move_iter().map(|v| str::from_utf8_lossy(v).into_owned()).collect()
 }
 
 #[cfg(windows)]
@@ -761,8 +837,10 @@ fn real_args() -> ~[~str] {
             while *ptr.offset(len as int) != 0 { len += 1; }
 
             // Push it onto the list.
-            args.push(vec::raw::buf_as_slice(ptr, len,
-                                             str::from_utf16));
+            let opt_s = vec::raw::buf_as_slice(ptr, len, |buf| {
+                    str::from_utf16(str::truncate_utf16_at_nul(buf))
+                });
+            args.push(opt_s.expect("CommandLineToArgvW returned invalid UTF-16"));
         }
     }
 
@@ -771,6 +849,11 @@ fn real_args() -> ~[~str] {
     }
 
     return args;
+}
+
+#[cfg(windows)]
+fn real_args_as_bytes() -> ~[~[u8]] {
+    real_args().move_iter().map(|s| s.into_bytes()).collect()
 }
 
 type LPCWSTR = *u16;
@@ -790,8 +873,17 @@ extern "system" {
 
 /// Returns the arguments which this program was started with (normally passed
 /// via the command line).
+///
+/// The arguments are interpreted as utf-8, with invalid bytes replaced with \uFFFD.
+/// See `str::from_utf8_lossy` for details.
 pub fn args() -> ~[~str] {
     real_args()
+}
+
+/// Returns the arguments which this program was started with (normally passed
+/// via the command line) as byte vectors.
+pub fn args_as_bytes() -> ~[~[u8]] {
+    real_args_as_bytes()
 }
 
 #[cfg(target_os = "macos")]
@@ -929,8 +1021,8 @@ pub enum MapError {
 }
 
 impl fmt::Show for MapError {
-    fn fmt(val: &MapError, out: &mut fmt::Formatter) -> fmt::Result {
-        let str = match *val {
+    fn fmt(&self, out: &mut fmt::Formatter) -> fmt::Result {
+        let str = match *self {
             ErrFdNotAvail => "fd not available for reading or writing",
             ErrInvalidFd => "Invalid fd",
             ErrUnaligned => {
@@ -967,6 +1059,7 @@ impl MemoryMap {
     /// `ErrZeroLength`.
     pub fn new(min_len: uint, options: &[MapOption]) -> Result<MemoryMap, MapError> {
         use libc::off_t;
+        use cmp::Equiv;
 
         if min_len == 0 {
             return Err(ErrZeroLength)
@@ -1404,6 +1497,16 @@ mod tests {
     }
 
     #[test]
+    fn test_env_set_get_huge() {
+        let n = make_rand_name();
+        let s = "x".repeat(10000);
+        setenv(n, s);
+        assert_eq!(getenv(n), Some(s));
+        unsetenv(n);
+        assert_eq!(getenv(n), None);
+    }
+
+    #[test]
     fn test_env_setenv() {
         let n = make_rand_name();
 
@@ -1432,7 +1535,7 @@ mod tests {
         let oldhome = getenv("HOME");
 
         setenv("HOME", "/home/MountainView");
-        assert_eq!(os::homedir(), Some(Path::new("/home/MountainView")));
+        assert!(os::homedir() == Some(Path::new("/home/MountainView")));
 
         setenv("HOME", "");
         assert!(os::homedir().is_none());
@@ -1453,16 +1556,16 @@ mod tests {
         assert!(os::homedir().is_none());
 
         setenv("HOME", "/home/MountainView");
-        assert_eq!(os::homedir(), Some(Path::new("/home/MountainView")));
+        assert!(os::homedir() == Some(Path::new("/home/MountainView")));
 
         setenv("HOME", "");
 
         setenv("USERPROFILE", "/home/MountainView");
-        assert_eq!(os::homedir(), Some(Path::new("/home/MountainView")));
+        assert!(os::homedir() == Some(Path::new("/home/MountainView")));
 
         setenv("HOME", "/home/MountainView");
         setenv("USERPROFILE", "/home/PaloAlto");
-        assert_eq!(os::homedir(), Some(Path::new("/home/MountainView")));
+        assert!(os::homedir() == Some(Path::new("/home/MountainView")));
 
         for s in oldhome.iter() { setenv("HOME", *s) }
         for s in olduserprofile.iter() { setenv("USERPROFILE", *s) }

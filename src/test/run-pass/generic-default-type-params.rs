@@ -8,10 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast #[feature] doesn't work with check-fast
+// ignore-fast #[feature] doesn't work with check-fast
 #[feature(default_type_params)];
-
-#[allow(default_type_param_usage)];
 
 struct Foo<A = (int, char)> {
     a: A
@@ -52,10 +50,10 @@ fn default_foo(x: Foo) {
     assert_eq!(x.baz(), (1, 'a'));
 }
 
-#[deriving(Eq)]
+#[deriving(Eq, Show)]
 struct BazHelper<T>(T);
 
-#[deriving(Eq)]
+#[deriving(Eq, Show)]
 // Ensure that we can use previous type parameters in defaults.
 struct Baz<T, U = BazHelper<T>, V = Option<U>>(T, U, V);
 

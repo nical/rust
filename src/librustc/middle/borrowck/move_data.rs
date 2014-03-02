@@ -16,8 +16,8 @@ comments in the section "Moves and initialization" and in `doc.rs`.
 */
 
 use std::cell::RefCell;
-use std::hashmap::{HashMap, HashSet};
 use std::uint;
+use collections::{HashMap, HashSet};
 use middle::borrowck::*;
 use middle::dataflow::DataFlowContext;
 use middle::dataflow::DataFlowOperator;
@@ -494,7 +494,7 @@ impl MoveData {
                         dfcx_assign.add_kill(kill_id, assignment_index);
                     }
                     LpExtend(..) => {
-                        tcx.sess.bug("Var assignment for non var path");
+                        tcx.sess.bug("var assignment for non var path");
                     }
                 }
             }
@@ -565,7 +565,7 @@ impl MoveData {
 impl FlowedMoveData {
     pub fn new(move_data: MoveData,
                tcx: ty::ctxt,
-               method_map: typeck::method_map,
+               method_map: typeck::MethodMap,
                id_range: ast_util::IdRange,
                body: &ast::Block)
                -> FlowedMoveData {
@@ -722,11 +722,6 @@ impl DataFlowOperator for MoveDataFlowOperator {
     fn join(&self, succ: uint, pred: uint) -> uint {
         succ | pred // moves from both preds are in scope
     }
-
-    #[inline]
-    fn walk_closures(&self) -> bool {
-        true
-    }
 }
 
 impl DataFlowOperator for AssignDataFlowOperator {
@@ -738,10 +733,5 @@ impl DataFlowOperator for AssignDataFlowOperator {
     #[inline]
     fn join(&self, succ: uint, pred: uint) -> uint {
         succ | pred // moves from both preds are in scope
-    }
-
-    #[inline]
-    fn walk_closures(&self) -> bool {
-        true
     }
 }

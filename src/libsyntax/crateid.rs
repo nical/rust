@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::fmt;
+
 /// CrateIds identify crates and include the crate name and optionally a path
 /// and version. In the full form, they look like relative URLs. Example:
 /// `github.com/mozilla/rust#std:1.0` would be a package ID with a path of
@@ -15,6 +17,9 @@
 /// `1.0`. If no crate name is given after the hash, the name is inferred to
 /// be the last component of the path. If no version is given, it is inferred
 /// to be `0.0`.
+
+use std::from_str::FromStr;
+
 #[deriving(Clone, Eq)]
 pub struct CrateId {
     /// A path which represents the codes origin. By convention this is the
@@ -26,16 +31,17 @@ pub struct CrateId {
     version: Option<~str>,
 }
 
-impl ToStr for CrateId {
-    fn to_str(&self) -> ~str {
+impl fmt::Show for CrateId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f.buf, "{}", self.path));
         let version = match self.version {
             None => "0.0",
             Some(ref version) => version.as_slice(),
         };
         if self.path == self.name || self.path.ends_with(format!("/{}", self.name)) {
-            format!("{}\\#{}", self.path, version)
+            write!(f.buf, "\\#{}", version)
         } else {
-            format!("{}\\#{}:{}", self.path, self.name, version)
+            write!(f.buf, "\\#{}:{}", self.name, version)
         }
     }
 }
@@ -100,6 +106,15 @@ impl CrateId {
 
     pub fn short_name_with_version(&self) -> ~str {
         format!("{}-{}", self.name, self.version_or_default())
+    }
+
+    pub fn matches(&self, other: &CrateId) -> bool {
+        // FIXME: why does this not match on `path`?
+        if self.name != other.name { return false }
+        match (&self.version, &other.version) {
+            (&Some(ref v1), &Some(ref v2)) => v1 == v2,
+            _ => true,
+        }
     }
 }
 

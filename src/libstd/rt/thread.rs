@@ -41,7 +41,7 @@ static DEFAULT_STACK_SIZE: uint = 1024 * 1024;
 // and invoke it.
 #[no_split_stack]
 extern fn thread_start(main: *libc::c_void) -> imp::rust_thread_return {
-    use unstable::stack;
+    use rt::stack;
     unsafe {
         stack::record_stack_bounds(0, uint::MAX);
         let f: ~proc() = cast::transmute(main);
@@ -150,7 +150,7 @@ mod imp {
     use libc::types::os::arch::extra::{LPSECURITY_ATTRIBUTES, SIZE_T, BOOL,
                                        LPVOID, DWORD, LPDWORD, HANDLE};
     use ptr;
-    use unstable::stack::RED_ZONE;
+    use rt::stack::RED_ZONE;
 
     pub type rust_thread = HANDLE;
     pub type rust_thread_return = DWORD;
@@ -205,17 +205,17 @@ mod imp {
     use cmp;
     use libc::consts::os::posix01::{PTHREAD_CREATE_JOINABLE, PTHREAD_STACK_MIN};
     use libc;
+    use mem;
     use os;
     use ptr;
-    use unstable::intrinsics;
-    use unstable::stack::RED_ZONE;
+    use rt::stack::RED_ZONE;
 
     pub type rust_thread = libc::pthread_t;
     pub type rust_thread_return = *u8;
 
     pub unsafe fn create(stack: uint, p: ~proc()) -> rust_thread {
-        let mut native: libc::pthread_t = intrinsics::uninit();
-        let mut attr: libc::pthread_attr_t = intrinsics::uninit();
+        let mut native: libc::pthread_t = mem::uninit();
+        let mut attr: libc::pthread_attr_t = mem::uninit();
         assert_eq!(pthread_attr_init(&mut attr), 0);
         assert_eq!(pthread_attr_setdetachstate(&mut attr,
                                                PTHREAD_CREATE_JOINABLE), 0);

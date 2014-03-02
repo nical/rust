@@ -49,29 +49,40 @@
 # automatically generated for all stage/host/target combinations.
 ################################################################################
 
-TARGET_CRATES := std extra green rustuv native flate arena glob term semver uuid
-HOST_CRATES := syntax rustc rustdoc
+TARGET_CRATES := std extra green rustuv native flate arena glob term semver \
+                 uuid serialize sync getopts collections num test time
+HOST_CRATES := syntax rustc rustdoc fourcc
 CRATES := $(TARGET_CRATES) $(HOST_CRATES)
 TOOLS := compiletest rustdoc rustc
 
-DEPS_std := native:rustrt
-DEPS_extra := std term
-DEPS_green := std
+DEPS_std := native:rustrt native:compiler-rt
+DEPS_extra := std term sync serialize getopts collections time
+DEPS_green := std native:context_switch
 DEPS_rustuv := std native:uv native:uv_support
 DEPS_native := std
-DEPS_syntax := std extra term
-DEPS_rustc := syntax native:rustllvm flate arena
-DEPS_rustdoc := rustc native:sundown
-DEPS_flate := std native:miniz
-DEPS_arena := std extra
+DEPS_syntax := std term serialize collections
+DEPS_rustc := syntax native:rustllvm flate arena serialize sync getopts \
+              collections time extra
+DEPS_rustdoc := rustc native:sundown serialize sync getopts collections \
+                test time
+DEPS_flate := std extra native:miniz
+DEPS_arena := std collections
 DEPS_glob := std
-DEPS_term := std
+DEPS_serialize := std collections
+DEPS_term := std collections
 DEPS_semver := std
-DEPS_uuid := std extra
+DEPS_uuid := std serialize
+DEPS_sync := std
+DEPS_getopts := std
+DEPS_collections := std
+DEPS_fourcc := syntax std
+DEPS_num := std
+DEPS_test := std extra collections getopts serialize term
+DEPS_time := std serialize
 
-TOOL_DEPS_compiletest := extra green rustuv
-TOOL_DEPS_rustdoc := rustdoc green rustuv
-TOOL_DEPS_rustc := rustc green rustuv
+TOOL_DEPS_compiletest := test green rustuv getopts
+TOOL_DEPS_rustdoc := rustdoc native
+TOOL_DEPS_rustc := rustc native
 TOOL_SOURCE_compiletest := $(S)src/compiletest/compiletest.rs
 TOOL_SOURCE_rustdoc := $(S)src/driver/driver.rs
 TOOL_SOURCE_rustc := $(S)src/driver/driver.rs
@@ -100,7 +111,7 @@ $(foreach crate,$(CRATES),$(eval $(call RUST_CRATE,$(crate))))
 #
 # $(1) is the crate to generate variables for
 define RUST_TOOL
-TOOL_INPUTS_$(1) := $$(wildcard $$(addprefix $(S)$$(dir $$(TOOL_SOURCE_$(1))), \
+TOOL_INPUTS_$(1) := $$(wildcard $$(addprefix $$(dir $$(TOOL_SOURCE_$(1))), \
 				*.rs */*.rs */*/*.rs */*/*/*.rs))
 endef
 

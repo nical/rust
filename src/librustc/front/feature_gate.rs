@@ -30,6 +30,8 @@ use syntax::parse::token;
 
 use driver::session::Session;
 
+use std::cell::Cell;
+
 /// This is a list of all known features since the beginning of time. This list
 /// can never shrink, it may only be expanded (in order to prevent old programs
 /// from failing to compile). The status of each feature may change, however.
@@ -49,6 +51,7 @@ static KNOWN_FEATURES: &'static [(&'static str, Status)] = &[
     ("trace_macros", Active),
     ("simd", Active),
     ("default_type_params", Active),
+    ("quote", Active),
 
     // These are used to test this portion of the compiler, they don't actually
     // mean anything
@@ -66,6 +69,19 @@ enum Status {
 
     /// This language feature has since been Accepted (it was once Active)
     Accepted,
+}
+
+/// A set of features to be used by later passes.
+pub struct Features {
+    default_type_params: Cell<bool>
+}
+
+impl Features {
+    pub fn new() -> Features {
+        Features {
+            default_type_params: Cell::new(false)
+        }
+    }
 }
 
 struct Context {
@@ -98,10 +114,7 @@ impl Context {
 
 impl Visitor<()> for Context {
     fn visit_ident(&mut self, sp: Span, id: ast::Ident, _: ()) {
-        let string = token::get_ident(id.name);
-        let s = string.get();
-
-        if !s.is_ascii() {
+        if !token::get_ident(id).get().is_ascii() {
             self.gate_feature("non_ascii_idents", sp,
                               "non-ascii idents are not fully supported.");
         }
@@ -189,24 +202,38 @@ impl Visitor<()> for Context {
 
     fn visit_mac(&mut self, macro: &ast::Mac, _: ()) {
         let ast::MacInvocTT(ref path, _, _) = macro.node;
+        let id = path.segments.last().unwrap().identifier;
+        let quotes = ["quote_tokens", "quote_expr", "quote_ty",
+                      "quote_item", "quote_pat", "quote_stmt"];
+        let msg = " is not stable enough for use and are subject to change";
 
-        if path.segments.last().unwrap().identifier == self.sess.ident_of("macro_rules") {
+
+        if id == token::str_to_ident("macro_rules") {
             self.gate_feature("macro_rules", path.span, "macro definitions are \
                 not stable enough for use and are subject to change");
         }
 
-        else if path.segments.last().unwrap().identifier == self.sess.ident_of("asm") {
+        else if id == token::str_to_ident("asm") {
             self.gate_feature("asm", path.span, "inline assembly is not \
                 stable enough for use and is subject to change");
         }
 
-        else if path.segments.last().unwrap().identifier == self.sess.ident_of("log_syntax") {
+        else if id == token::str_to_ident("log_syntax") {
             self.gate_feature("log_syntax", path.span, "`log_syntax!` is not \
                 stable enough for use and is subject to change");
         }
-        else if path.segments.last().unwrap().identifier == self.sess.ident_of("trace_macros") {
+
+        else if id == token::str_to_ident("trace_macros") {
             self.gate_feature("trace_macros", path.span, "`trace_macros` is not \
                 stable enough for use and is subject to change");
+        }
+
+        else {
+            for &quote in quotes.iter() {
+                if id == token::str_to_ident(quote) {
+                  self.gate_feature("quote", path.span, quote + msg);
+                }
+            }
         }
     }
 
@@ -228,7 +255,7 @@ impl Visitor<()> for Context {
 
     fn visit_expr(&mut self, e: &ast::Expr, _: ()) {
         match e.node {
-            ast::ExprUnary(_, ast::UnBox, _) => {
+            ast::ExprUnary(ast::UnBox, _) => {
                 self.gate_box(e.span);
             }
             _ => {}
@@ -251,13 +278,13 @@ impl Visitor<()> for Context {
     }
 }
 
-pub fn check_crate(sess: Session, crate: &ast::Crate) {
+pub fn check_crate(sess: Session, krate: &ast::Crate) {
     let mut cx = Context {
         features: ~[],
         sess: sess,
     };
 
-    for attr in crate.attrs.iter() {
+    for attr in krate.attrs.iter() {
         if !attr.name().equiv(&("feature")) {
             continue
         }
@@ -300,7 +327,9 @@ pub fn check_crate(sess: Session, crate: &ast::Crate) {
         }
     }
 
-    visit::walk_crate(&mut cx, crate, ());
+    visit::walk_crate(&mut cx, krate, ());
 
     sess.abort_if_errors();
+
+    sess.features.default_type_params.set(cx.has_feature("default_type_params"));
 }

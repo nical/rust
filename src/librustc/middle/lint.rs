@@ -33,6 +33,8 @@
 //! modify the Context visitor appropriately. If you're adding lints from the
 //! Context itself, span_lint should be used instead of add_lint.
 
+#[allow(non_camel_case_types)];
+
 use driver::session;
 use metadata::csearch;
 use middle::dead::DEAD_CODE_LINT_STR;
@@ -47,7 +49,7 @@ use std::to_str::ToStr;
 use util::ppaux::{ty_to_str};
 
 use std::cmp;
-use std::hashmap::HashMap;
+use collections::HashMap;
 use std::i16;
 use std::i32;
 use std::i64;
@@ -56,7 +58,7 @@ use std::u16;
 use std::u32;
 use std::u64;
 use std::u8;
-use extra::smallintmap::SmallIntMap;
+use collections::SmallIntMap;
 use syntax::ast_map;
 use syntax::ast_util::IdVisitingOperation;
 use syntax::attr::{AttrMetaMethods, AttributeMethods};
@@ -86,7 +88,6 @@ pub enum Lint {
     AttributeUsage,
     UnknownFeatures,
     UnknownCrateType,
-    DefaultTypeParamUsage,
 
     ManagedHeapMemory,
     OwnedHeapMemory,
@@ -97,6 +98,7 @@ pub enum Lint {
     UnusedMut,
     UnnecessaryAllocation,
     DeadCode,
+    VisiblePrivateTypes,
     UnnecessaryTypecast,
 
     MissingDoc,
@@ -189,7 +191,7 @@ static lint_table: &'static [(&'static str, LintSpec)] = &[
      LintSpec {
         lint: NonCamelCaseTypes,
         desc: "types, variants and traits should have camel case names",
-        default: allow
+        default: warn
      }),
 
     ("non_uppercase_statics",
@@ -311,6 +313,12 @@ static lint_table: &'static [(&'static str, LintSpec)] = &[
         desc: "detect piece of code that will never be used",
         default: warn
     }),
+    ("visible_private_types",
+     LintSpec {
+        lint: VisiblePrivateTypes,
+        desc: "detect use of private types in exported type signatures",
+        default: warn
+    }),
 
     ("missing_doc",
      LintSpec {
@@ -380,14 +388,7 @@ static lint_table: &'static [(&'static str, LintSpec)] = &[
         lint: UnusedResult,
         desc: "unused result of an expression in a statement",
         default: allow,
-    }),
-
-     ("default_type_param_usage",
-     LintSpec {
-         lint: DefaultTypeParamUsage,
-         desc: "prevents explicitly setting a type parameter with a default",
-         default: deny,
-     }),
+    })
 ];
 
 /*
@@ -411,7 +412,7 @@ struct Context<'a> {
     tcx: ty::ctxt,
     // maps from an expression id that corresponds to a method call to the
     // details of the method to be invoked
-    method_map: typeck::method_map,
+    method_map: typeck::MethodMap,
     // Items exported by the crate; used by the missing_doc lint.
     exported_items: &'a privacy::ExportedItems,
     // The id of the current `ast::StructDef` being walked.
@@ -660,8 +661,7 @@ impl<'a> AstConv for Context<'a>{
     }
 
     fn ty_infer(&self, _span: Span) -> ty::t {
-        let infcx: @infer::InferCtxt = infer::new_infer_ctxt(self.tcx);
-        infcx.next_ty_var()
+        infer::new_infer_ctxt(self.tcx).next_ty_var()
     }
 }
 
@@ -669,8 +669,7 @@ impl<'a> AstConv for Context<'a>{
 fn check_unused_casts(cx: &Context, e: &ast::Expr) {
     return match e.node {
         ast::ExprCast(expr, ty) => {
-            let infcx: @infer::InferCtxt = infer::new_infer_ctxt(cx.tcx);
-            let t_t = ast_ty_to_ty(cx, &infcx, ty);
+            let t_t = ast_ty_to_ty(cx, &infer::new_infer_ctxt(cx.tcx), ty);
             if  ty::get(ty::expr_ty(cx.tcx, expr)).sty == ty::get(t_t).sty {
                 cx.span_lint(UnnecessaryTypecast, ty.span,
                              "unnecessary type cast");
@@ -682,7 +681,7 @@ fn check_unused_casts(cx: &Context, e: &ast::Expr) {
 
 fn check_type_limits(cx: &Context, e: &ast::Expr) {
     return match e.node {
-        ast::ExprBinary(_, binop, l, r) => {
+        ast::ExprBinary(binop, l, r) => {
             if is_comparison(binop) && !check_limits(cx.tcx, binop, l, r) {
                 cx.span_lint(TypeLimits, e.span,
                              "comparison is useless due to type limits");
@@ -887,8 +886,7 @@ fn check_heap_type(cx: &Context, span: Span, ty: ty::t) {
         let mut n_uniq = 0;
         ty::fold_ty(cx.tcx, ty, |t| {
             match ty::get(t).sty {
-                ty::ty_box(_) |
-                ty::ty_trait(_, _, ty::BoxTraitStore, _, _) => {
+                ty::ty_box(_) => {
                     n_box += 1;
                 }
                 ty::ty_uniq(_) | ty::ty_str(ty::vstore_uniq) |
@@ -1070,8 +1068,8 @@ fn check_unused_result(cx: &Context, s: &ast::Stmt) {
         ty::ty_struct(did, _) |
         ty::ty_enum(did, _) => {
             if ast_util::is_local(did) {
-                match cx.tcx.items.get(did.node) {
-                    ast_map::NodeItem(it, _) => {
+                match cx.tcx.map.get(did.node) {
+                    ast_map::NodeItem(it) => {
                         if attr::contains_name(it.attrs, "must_use") {
                             cx.span_lint(UnusedMustUse, s.span,
                                          "unused result which must be used");
@@ -1098,23 +1096,22 @@ fn check_unused_result(cx: &Context, s: &ast::Stmt) {
 }
 
 fn check_item_non_camel_case_types(cx: &Context, it: &ast::Item) {
-    fn is_camel_case(cx: ty::ctxt, ident: ast::Ident) -> bool {
-        let ident = cx.sess.str_of(ident);
-        assert!(!ident.is_empty());
-        let ident = ident.trim_chars(&'_');
+    fn is_camel_case(ident: ast::Ident) -> bool {
+        let ident = token::get_ident(ident);
+        assert!(!ident.get().is_empty());
+        let ident = ident.get().trim_chars(&'_');
 
         // start with a non-lowercase letter rather than non-uppercase
         // ones (some scripts don't have a concept of upper/lowercase)
-        !ident.char_at(0).is_lowercase() &&
-            !ident.contains_char('_')
+        !ident.char_at(0).is_lowercase() && !ident.contains_char('_')
     }
 
     fn check_case(cx: &Context, sort: &str, ident: ast::Ident, span: Span) {
-        if !is_camel_case(cx.tcx, ident) {
+        if !is_camel_case(ident) {
             cx.span_lint(
                 NonCamelCaseTypes, span,
                 format!("{} `{}` should have a camel case identifier",
-                    sort, cx.tcx.sess.str_of(ident)));
+                    sort, token::get_ident(ident)));
         }
     }
 
@@ -1139,11 +1136,11 @@ fn check_item_non_uppercase_statics(cx: &Context, it: &ast::Item) {
     match it.node {
         // only check static constants
         ast::ItemStatic(_, ast::MutImmutable, _) => {
-            let s = cx.tcx.sess.str_of(it.ident);
+            let s = token::get_ident(it.ident);
             // check for lowercase letters rather than non-uppercase
             // ones (some scripts don't have a concept of
             // upper/lowercase)
-            if s.chars().any(|c| c.is_lowercase()) {
+            if s.get().chars().any(|c| c.is_lowercase()) {
                 cx.span_lint(NonUppercaseStatics, it.span,
                              "static constant should have an uppercase identifier");
             }
@@ -1159,8 +1156,8 @@ fn check_pat_non_uppercase_statics(cx: &Context, p: &ast::Pat) {
         (&ast::PatIdent(_, ref path, _), Some(&ast::DefStatic(_, false))) => {
             // last identifier alone is right choice for this lint.
             let ident = path.segments.last().unwrap().identifier;
-            let s = cx.tcx.sess.str_of(ident);
-            if s.chars().any(|c| c.is_lowercase()) {
+            let s = token::get_ident(ident);
+            if s.get().chars().any(|c| c.is_lowercase()) {
                 cx.span_lint(NonUppercasePatternStatics, path.span,
                              "static constant in pattern should be all caps");
             }
@@ -1169,15 +1166,7 @@ fn check_pat_non_uppercase_statics(cx: &Context, p: &ast::Pat) {
     }
 }
 
-fn check_unnecessary_parens(cx: &Context, e: &ast::Expr) {
-    let (value, msg) = match e.node {
-        ast::ExprIf(cond, _, _) => (cond, "`if` condition"),
-        ast::ExprWhile(cond, _) => (cond, "`while` condition"),
-        ast::ExprMatch(head, _) => (head, "`match` head expression"),
-        ast::ExprRet(Some(value)) => (value, "`return` value"),
-        _ => return
-    };
-
+fn check_unnecessary_parens_core(cx: &Context, value: &ast::Expr, msg: &str) {
     match value.node {
         ast::ExprParen(_) => {
             cx.span_lint(UnnecessaryParens, value.span,
@@ -1185,6 +1174,33 @@ fn check_unnecessary_parens(cx: &Context, e: &ast::Expr) {
         }
         _ => {}
     }
+}
+
+fn check_unnecessary_parens_expr(cx: &Context, e: &ast::Expr) {
+    let (value, msg) = match e.node {
+        ast::ExprIf(cond, _, _) => (cond, "`if` condition"),
+        ast::ExprWhile(cond, _) => (cond, "`while` condition"),
+        ast::ExprMatch(head, _) => (head, "`match` head expression"),
+        ast::ExprRet(Some(value)) => (value, "`return` value"),
+        ast::ExprAssign(_, value) => (value, "assigned value"),
+        ast::ExprAssignOp(_, _, value) => (value, "assigned value"),
+        _ => return
+    };
+    check_unnecessary_parens_core(cx, value, msg);
+}
+
+fn check_unnecessary_parens_stmt(cx: &Context, s: &ast::Stmt) {
+    let (value, msg) = match s.node {
+        ast::StmtDecl(decl, _) => match decl.node {
+            ast::DeclLocal(local) => match local.init {
+                Some(value) => (value, "assigned value"),
+                None => return
+            },
+            _ => return
+        },
+        _ => return
+    };
+    check_unnecessary_parens_core(cx, value, msg);
 }
 
 fn check_unused_unsafe(cx: &Context, e: &ast::Expr) {
@@ -1217,15 +1233,13 @@ fn check_unused_mut_pat(cx: &Context, p: &ast::Pat) {
         ast::PatIdent(ast::BindByValue(ast::MutMutable),
                       ref path, _) if pat_util::pat_is_binding(cx.tcx.def_map, p)=> {
             // `let mut _a = 1;` doesn't need a warning.
-            let initial_underscore = match path.segments {
-                [ast::PathSegment { identifier: id, .. }] => {
-                    cx.tcx.sess.str_of(id).starts_with("_")
-                }
-                _ => {
-                    cx.tcx.sess.span_bug(p.span,
-                                         "mutable binding that doesn't \
-                                         consist of exactly one segment");
-                }
+            let initial_underscore = if path.segments.len() == 1 {
+                token::get_ident(path.segments[0].identifier).get()
+                                                             .starts_with("_")
+            } else {
+                cx.tcx.sess.span_bug(p.span,
+                                     "mutable binding that doesn't consist \
+                                      of exactly one segment")
             };
 
             let used_mut_nodes = cx.tcx.used_mut_nodes.borrow();
@@ -1256,8 +1270,8 @@ fn check_unnecessary_allocation(cx: &Context, e: &ast::Expr) {
                 _ => return
             }
         }
-        ast::ExprUnary(_, ast::UnUniq, _) |
-        ast::ExprUnary(_, ast::UnBox, _) => BoxAllocation,
+        ast::ExprUnary(ast::UnUniq, _) |
+        ast::ExprUnary(ast::UnBox, _) => BoxAllocation,
 
         _ => return
     };
@@ -1344,7 +1358,7 @@ fn check_missing_doc_item(cx: &Context, it: &ast::Item) {
 
 fn check_missing_doc_method(cx: &Context, m: &ast::Method) {
     let did = ast::DefId {
-        crate: ast::LOCAL_CRATE,
+        krate: ast::LOCAL_CRATE,
         node: m.id
     };
 
@@ -1404,11 +1418,10 @@ fn check_stability(cx: &Context, e: &ast::Expr) {
             }
         }
         ast::ExprMethodCall(..) => {
-            let method_map = cx.method_map.borrow();
-            match method_map.get().find(&e.id) {
-                Some(&typeck::method_map_entry { origin, .. }) => {
-                    match origin {
-                        typeck::method_static(def_id) => {
+            match cx.method_map.borrow().get().find(&e.id) {
+                Some(method) => {
+                    match method.origin {
+                        typeck::MethodStatic(def_id) => {
                             // If this implements a trait method, get def_id
                             // of the method inside trait definition.
                             // Otherwise, use the current def_id (which refers
@@ -1416,12 +1429,12 @@ fn check_stability(cx: &Context, e: &ast::Expr) {
                             ty::trait_method_of_method(
                                 cx.tcx, def_id).unwrap_or(def_id)
                         }
-                        typeck::method_param(typeck::method_param {
+                        typeck::MethodParam(typeck::MethodParam {
                             trait_id: trait_id,
                             method_num: index,
                             ..
                         })
-                        | typeck::method_object(typeck::method_object {
+                        | typeck::MethodObject(typeck::MethodObject {
                             trait_id: trait_id,
                             method_num: index,
                             ..
@@ -1436,24 +1449,18 @@ fn check_stability(cx: &Context, e: &ast::Expr) {
 
     let stability = if ast_util::is_local(id) {
         // this crate
-        match cx.tcx.items.find(id.node) {
-            Some(ast_node) => {
-                let s = ast_node.with_attrs(|attrs| {
-                    attrs.map(|a| {
-                        attr::find_stability(a.iter().map(|a| a.meta()))
-                    })
-                });
-                match s {
-                    Some(s) => s,
+        let s = cx.tcx.map.with_attrs(id.node, |attrs| {
+            attrs.map(|a| {
+                attr::find_stability(a.iter().map(|a| a.meta()))
+            })
+        });
+        match s {
+            Some(s) => s,
 
-                    // no possibility of having attributes
-                    // (e.g. it's a local variable), so just
-                    // ignore it.
-                    None => return
-                }
-            }
-            _ => cx.tcx.sess.span_bug(e.span,
-                                      format!("handle_def: {:?} not found", id))
+            // no possibility of having attributes
+            // (e.g. it's a local variable), so just
+            // ignore it.
+            None => return
         }
     } else {
         // cross-crate
@@ -1530,7 +1537,7 @@ impl<'a> Visitor<()> for Context<'a> {
 
     fn visit_expr(&mut self, e: &ast::Expr, _: ()) {
         match e.node {
-            ast::ExprUnary(_, ast::UnNeg, expr) => {
+            ast::ExprUnary(ast::UnNeg, expr) => {
                 // propagate negation, if the negation itself isn't negated
                 if self.negated_expr_id != e.id {
                     self.negated_expr_id = expr.id;
@@ -1544,7 +1551,7 @@ impl<'a> Visitor<()> for Context<'a> {
 
         check_while_true_expr(self, e);
         check_stability(self, e);
-        check_unnecessary_parens(self, e);
+        check_unnecessary_parens_expr(self, e);
         check_unused_unsafe(self, e);
         check_unsafe_block(self, e);
         check_unnecessary_allocation(self, e);
@@ -1559,6 +1566,7 @@ impl<'a> Visitor<()> for Context<'a> {
     fn visit_stmt(&mut self, s: &ast::Stmt, _: ()) {
         check_path_statement(self, s);
         check_unused_result(self, s);
+        check_unnecessary_parens_stmt(self, s);
 
         visit::walk_stmt(self, s, ());
     }
@@ -1644,9 +1652,9 @@ impl<'a> IdVisitingOperation for Context<'a> {
 }
 
 pub fn check_crate(tcx: ty::ctxt,
-                   method_map: typeck::method_map,
+                   method_map: typeck::MethodMap,
                    exported_items: &privacy::ExportedItems,
-                   crate: &ast::Crate) {
+                   krate: &ast::Crate) {
     let mut cx = Context {
         dict: @get_lint_dict(),
         cur: SmallIntMap::new(),
@@ -1667,19 +1675,19 @@ pub fn check_crate(tcx: ty::ctxt,
     for &(lint, level) in tcx.sess.opts.lint_opts.iter() {
         cx.set_level(lint, level, CommandLine);
     }
-    cx.with_lint_attrs(crate.attrs, |cx| {
+    cx.with_lint_attrs(krate.attrs, |cx| {
         cx.visit_id(ast::CRATE_NODE_ID);
         cx.visit_ids(|v| {
             v.visited_outermost = true;
-            visit::walk_crate(v, crate, ());
+            visit::walk_crate(v, krate, ());
         });
 
-        check_crate_attrs_usage(cx, crate.attrs);
+        check_crate_attrs_usage(cx, krate.attrs);
         // since the root module isn't visited as an item (because it isn't an item), warn for it
         // here.
-        check_missing_doc_attrs(cx, None, crate.attrs, crate.span, "crate");
+        check_missing_doc_attrs(cx, None, krate.attrs, krate.span, "crate");
 
-        visit::walk_crate(cx, crate, ());
+        visit::walk_crate(cx, krate, ());
     });
 
     // If we missed any lints added to the session, then there's a bug somewhere
@@ -1688,11 +1696,7 @@ pub fn check_crate(tcx: ty::ctxt,
     for (id, v) in lints.get().iter() {
         for &(lint, span, ref msg) in v.iter() {
             tcx.sess.span_bug(span, format!("unprocessed lint {:?} at {}: {}",
-                                            lint,
-                                            ast_map::node_id_to_str(tcx.items,
-                                                *id,
-                                                token::get_ident_interner()),
-                                            *msg))
+                                            lint, tcx.map.node_to_str(*id), *msg))
         }
     }
 

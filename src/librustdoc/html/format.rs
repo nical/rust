@@ -48,55 +48,55 @@ impl PuritySpace {
 }
 
 impl fmt::Show for clean::Generics {
-    fn fmt(g: &clean::Generics, f: &mut fmt::Formatter) -> fmt::Result {
-        if g.lifetimes.len() == 0 && g.type_params.len() == 0 { return Ok(()) }
-        if_ok!(f.buf.write("&lt;".as_bytes()));
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.lifetimes.len() == 0 && self.type_params.len() == 0 { return Ok(()) }
+        try!(f.buf.write("&lt;".as_bytes()));
 
-        for (i, life) in g.lifetimes.iter().enumerate() {
+        for (i, life) in self.lifetimes.iter().enumerate() {
             if i > 0 {
-                if_ok!(f.buf.write(", ".as_bytes()));
+                try!(f.buf.write(", ".as_bytes()));
             }
-            if_ok!(write!(f.buf, "{}", *life));
+            try!(write!(f.buf, "{}", *life));
         }
 
-        if g.type_params.len() > 0 {
-            if g.lifetimes.len() > 0 {
-                if_ok!(f.buf.write(", ".as_bytes()));
+        if self.type_params.len() > 0 {
+            if self.lifetimes.len() > 0 {
+                try!(f.buf.write(", ".as_bytes()));
             }
 
-            for (i, tp) in g.type_params.iter().enumerate() {
+            for (i, tp) in self.type_params.iter().enumerate() {
                 if i > 0 {
-                    if_ok!(f.buf.write(", ".as_bytes()))
+                    try!(f.buf.write(", ".as_bytes()))
                 }
-                if_ok!(f.buf.write(tp.name.as_bytes()));
+                try!(f.buf.write(tp.name.as_bytes()));
 
                 if tp.bounds.len() > 0 {
-                    if_ok!(f.buf.write(": ".as_bytes()));
+                    try!(f.buf.write(": ".as_bytes()));
                     for (i, bound) in tp.bounds.iter().enumerate() {
                         if i > 0 {
-                            if_ok!(f.buf.write(" + ".as_bytes()));
+                            try!(f.buf.write(" + ".as_bytes()));
                         }
-                        if_ok!(write!(f.buf, "{}", *bound));
+                        try!(write!(f.buf, "{}", *bound));
                     }
                 }
             }
         }
-        if_ok!(f.buf.write("&gt;".as_bytes()));
+        try!(f.buf.write("&gt;".as_bytes()));
         Ok(())
     }
 }
 
 impl fmt::Show for clean::Lifetime {
-    fn fmt(l: &clean::Lifetime, f: &mut fmt::Formatter) -> fmt::Result {
-        if_ok!(f.buf.write("'".as_bytes()));
-        if_ok!(f.buf.write(l.get_ref().as_bytes()));
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(f.buf.write("'".as_bytes()));
+        try!(f.buf.write(self.get_ref().as_bytes()));
         Ok(())
     }
 }
 
 impl fmt::Show for clean::TyParamBound {
-    fn fmt(bound: &clean::TyParamBound, f: &mut fmt::Formatter) -> fmt::Result {
-        match *bound {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
             clean::RegionBound => {
                 f.buf.write("'static".as_bytes())
             }
@@ -108,34 +108,34 @@ impl fmt::Show for clean::TyParamBound {
 }
 
 impl fmt::Show for clean::Path {
-    fn fmt(path: &clean::Path, f: &mut fmt::Formatter) -> fmt::Result {
-        if path.global {
-            if_ok!(f.buf.write("::".as_bytes()))
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.global {
+            try!(f.buf.write("::".as_bytes()))
         }
-        for (i, seg) in path.segments.iter().enumerate() {
+        for (i, seg) in self.segments.iter().enumerate() {
             if i > 0 {
-                if_ok!(f.buf.write("::".as_bytes()))
+                try!(f.buf.write("::".as_bytes()))
             }
-            if_ok!(f.buf.write(seg.name.as_bytes()));
+            try!(f.buf.write(seg.name.as_bytes()));
 
             if seg.lifetimes.len() > 0 || seg.types.len() > 0 {
-                if_ok!(f.buf.write("&lt;".as_bytes()));
+                try!(f.buf.write("&lt;".as_bytes()));
                 let mut comma = false;
                 for lifetime in seg.lifetimes.iter() {
                     if comma {
-                        if_ok!(f.buf.write(", ".as_bytes()));
+                        try!(f.buf.write(", ".as_bytes()));
                     }
                     comma = true;
-                    if_ok!(write!(f.buf, "{}", *lifetime));
+                    try!(write!(f.buf, "{}", *lifetime));
                 }
                 for ty in seg.types.iter() {
                     if comma {
-                        if_ok!(f.buf.write(", ".as_bytes()));
+                        try!(f.buf.write(", ".as_bytes()));
                     }
                     comma = true;
-                    if_ok!(write!(f.buf, "{}", *ty));
+                    try!(write!(f.buf, "{}", *ty));
                 }
-                if_ok!(f.buf.write("&gt;".as_bytes()));
+                try!(f.buf.write("&gt;".as_bytes()));
             }
         }
         Ok(())
@@ -160,10 +160,10 @@ fn resolved_path(w: &mut io::Writer, id: ast::NodeId, p: &clean::Path,
 /// will invoke `path` with proper linking-style arguments.
 fn external_path(w: &mut io::Writer, p: &clean::Path, print_all: bool,
                  fqn: &[~str], kind: clean::TypeKind,
-                 crate: ast::CrateNum) -> fmt::Result {
+                 krate: ast::CrateNum) -> fmt::Result {
     path(w, p, print_all,
         |cache, loc| {
-            match *cache.extern_locations.get(&crate) {
+            match *cache.extern_locations.get(&krate) {
                 render::Remote(ref s) => Some(s.clone()),
                 render::Local => Some("../".repeat(loc.len())),
                 render::Unknown => None,
@@ -222,11 +222,11 @@ fn path(w: &mut io::Writer, path: &clean::Path, print_all: bool,
                         let mut root = root;
                         for seg in path.segments.slice_to(amt).iter() {
                             if "super" == seg.name || "self" == seg.name {
-                                if_ok!(write!(w, "{}::", seg.name));
+                                try!(write!(w, "{}::", seg.name));
                             } else {
                                 root.push_str(seg.name);
                                 root.push_str("/");
-                                if_ok!(write!(w, "<a class='mod'
+                                try!(write!(w, "<a class='mod'
                                                     href='{}index.html'>{}</a>::",
                                               root,
                                               seg.name));
@@ -235,7 +235,7 @@ fn path(w: &mut io::Writer, path: &clean::Path, print_all: bool,
                     }
                     None => {
                         for seg in path.segments.slice_to(amt).iter() {
-                            if_ok!(write!(w, "{}::", seg.name));
+                            try!(write!(w, "{}::", seg.name));
                         }
                     }
                 }
@@ -263,15 +263,15 @@ fn path(w: &mut io::Writer, path: &clean::Path, print_all: bool,
                         }
                     }
 
-                    if_ok!(write!(w, "<a class='{}' href='{}' title='{}'>{}</a>",
+                    try!(write!(w, "<a class='{}' href='{}' title='{}'>{}</a>",
                                   shortty, url, fqp.connect("::"), last.name));
                 }
 
                 _ => {
-                    if_ok!(write!(w, "{}", last.name));
+                    try!(write!(w, "{}", last.name));
                 }
             }
-            if_ok!(write!(w, "{}", generics));
+            try!(write!(w, "{}", generics));
             Ok(())
         })
     })
@@ -282,14 +282,14 @@ fn typarams(w: &mut io::Writer,
             typarams: &Option<~[clean::TyParamBound]>) -> fmt::Result {
     match *typarams {
         Some(ref params) => {
-            if_ok!(write!(w, "&lt;"));
+            try!(write!(w, "&lt;"));
             for (i, param) in params.iter().enumerate() {
                 if i > 0 {
-                    if_ok!(write!(w, ", "));
+                    try!(write!(w, ", "));
                 }
-                if_ok!(write!(w, "{}", *param));
+                try!(write!(w, "{}", *param));
             }
-            if_ok!(write!(w, "&gt;"));
+            try!(write!(w, "&gt;"));
             Ok(())
         }
         None => Ok(())
@@ -297,8 +297,8 @@ fn typarams(w: &mut io::Writer,
 }
 
 impl fmt::Show for clean::Type {
-    fn fmt(g: &clean::Type, f: &mut fmt::Formatter) -> fmt::Result {
-        match *g {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
             clean::TyParamBinder(id) | clean::Generic(id) => {
                 local_data::get(cache_key, |cache| {
                     let m = cache.unwrap().get();
@@ -306,13 +306,13 @@ impl fmt::Show for clean::Type {
                 })
             }
             clean::ResolvedPath{id, typarams: ref tp, path: ref path} => {
-                if_ok!(resolved_path(f.buf, id, path, false));
+                try!(resolved_path(f.buf, id, path, false));
                 typarams(f.buf, tp)
             }
             clean::ExternalPath{path: ref path, typarams: ref tp,
-                                fqn: ref fqn, kind, crate} => {
-                if_ok!(external_path(f.buf, path, false, fqn.as_slice(), kind,
-                                     crate))
+                                fqn: ref fqn, kind, krate} => {
+                try!(external_path(f.buf, path, false, fqn.as_slice(), kind,
+                                     krate))
                 typarams(f.buf, tp)
             }
             clean::Self(..) => f.buf.write("Self".as_bytes()),
@@ -364,12 +364,12 @@ impl fmt::Show for clean::Type {
                        decl.decl)
             }
             clean::Tuple(ref typs) => {
-                if_ok!(f.buf.write("(".as_bytes()));
+                try!(f.buf.write("(".as_bytes()));
                 for (i, typ) in typs.iter().enumerate() {
                     if i > 0 {
-                        if_ok!(f.buf.write(", ".as_bytes()))
+                        try!(f.buf.write(", ".as_bytes()))
                     }
-                    if_ok!(write!(f.buf, "{}", *typ));
+                    try!(write!(f.buf, "{}", *typ));
                 }
                 f.buf.write(")".as_bytes())
             }
@@ -404,38 +404,36 @@ impl fmt::Show for clean::Type {
     }
 }
 
-impl fmt::Show for clean::FnDecl {
-    fn fmt(d: &clean::FnDecl, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f.buf, "({args}){arrow, select, yes{ -&gt; {ret}} other{}}",
-               args = d.inputs,
-               arrow = match d.output { clean::Unit => "no", _ => "yes" },
-               ret = d.output)
+impl fmt::Show for clean::Arguments {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (i, input) in self.values.iter().enumerate() {
+            if i > 0 { try!(write!(f.buf, ", ")); }
+            if input.name.len() > 0 {
+                try!(write!(f.buf, "{}: ", input.name));
+            }
+            try!(write!(f.buf, "{}", input.type_));
+        }
+        Ok(())
     }
 }
 
-impl fmt::Show for ~[clean::Argument] {
-    fn fmt(inputs: &~[clean::Argument], f: &mut fmt::Formatter) -> fmt::Result {
-        let mut args = ~"";
-        for (i, input) in inputs.iter().enumerate() {
-            if i > 0 { args.push_str(", "); }
-            if input.name.len() > 0 {
-                args.push_str(format!("{}: ", input.name));
-            }
-            args.push_str(format!("{}", input.type_));
-        }
-        f.buf.write(args.as_bytes())
+impl fmt::Show for clean::FnDecl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f.buf, "({args}){arrow, select, yes{ -&gt; {ret}} other{}}",
+               args = self.inputs,
+               arrow = match self.output { clean::Unit => "no", _ => "yes" },
+               ret = self.output)
     }
 }
 
 impl<'a> fmt::Show for Method<'a> {
-    fn fmt(m: &Method<'a>, f: &mut fmt::Formatter) -> fmt::Result {
-        let Method(selfty, d) = *m;
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let Method(selfty, d) = *self;
         let mut args = ~"";
         match *selfty {
             clean::SelfStatic => {},
             clean::SelfValue => args.push_str("self"),
             clean::SelfOwned => args.push_str("~self"),
-            clean::SelfManaged => args.push_str("@self"),
             clean::SelfBorrowed(Some(ref lt), clean::Immutable) => {
                 args.push_str(format!("&amp;{} self", *lt));
             }
@@ -449,7 +447,7 @@ impl<'a> fmt::Show for Method<'a> {
                 args.push_str("&amp;self");
             }
         }
-        for (i, input) in d.inputs.iter().enumerate() {
+        for (i, input) in d.inputs.values.iter().enumerate() {
             if i > 0 || args.len() > 0 { args.push_str(", "); }
             if input.name.len() > 0 {
                 args.push_str(format!("{}: ", input.name));
@@ -464,8 +462,8 @@ impl<'a> fmt::Show for Method<'a> {
 }
 
 impl fmt::Show for VisSpace {
-    fn fmt(v: &VisSpace, f: &mut fmt::Formatter) -> fmt::Result {
-        match v.get() {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.get() {
             Some(ast::Public) => write!(f.buf, "pub "),
             Some(ast::Private) => write!(f.buf, "priv "),
             Some(ast::Inherited) | None => Ok(())
@@ -474,8 +472,8 @@ impl fmt::Show for VisSpace {
 }
 
 impl fmt::Show for PuritySpace {
-    fn fmt(p: &PuritySpace, f: &mut fmt::Formatter) -> fmt::Result {
-        match p.get() {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.get() {
             ast::UnsafeFn => write!(f.buf, "unsafe "),
             ast::ExternFn => write!(f.buf, "extern "),
             ast::ImpureFn => Ok(())
@@ -484,8 +482,8 @@ impl fmt::Show for PuritySpace {
 }
 
 impl fmt::Show for clean::ViewPath {
-    fn fmt(v: &clean::ViewPath, f: &mut fmt::Formatter) -> fmt::Result {
-        match *v {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
             clean::SimpleImport(ref name, ref src) => {
                 if *name == src.path.segments.last().unwrap().name {
                     write!(f.buf, "use {};", *src)
@@ -497,12 +495,12 @@ impl fmt::Show for clean::ViewPath {
                 write!(f.buf, "use {}::*;", *src)
             }
             clean::ImportList(ref src, ref names) => {
-                if_ok!(write!(f.buf, "use {}::\\{", *src));
+                try!(write!(f.buf, "use {}::\\{", *src));
                 for (i, n) in names.iter().enumerate() {
                     if i > 0 {
-                        if_ok!(write!(f.buf, ", "));
+                        try!(write!(f.buf, ", "));
                     }
-                    if_ok!(write!(f.buf, "{}", *n));
+                    try!(write!(f.buf, "{}", *n));
                 }
                 write!(f.buf, "\\};")
             }
@@ -511,18 +509,18 @@ impl fmt::Show for clean::ViewPath {
 }
 
 impl fmt::Show for clean::ImportSource {
-    fn fmt(v: &clean::ImportSource, f: &mut fmt::Formatter) -> fmt::Result {
-        match v.did {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.did {
             // FIXME: shouldn't be restricted to just local imports
             Some(did) if ast_util::is_local(did) => {
-                resolved_path(f.buf, did.node, &v.path, true)
+                resolved_path(f.buf, did.node, &self.path, true)
             }
             _ => {
-                for (i, seg) in v.path.segments.iter().enumerate() {
+                for (i, seg) in self.path.segments.iter().enumerate() {
                     if i > 0 {
-                        if_ok!(write!(f.buf, "::"))
+                        try!(write!(f.buf, "::"))
                     }
-                    if_ok!(write!(f.buf, "{}", seg.name));
+                    try!(write!(f.buf, "{}", seg.name));
                 }
                 Ok(())
             }
@@ -531,21 +529,21 @@ impl fmt::Show for clean::ImportSource {
 }
 
 impl fmt::Show for clean::ViewListIdent {
-    fn fmt(v: &clean::ViewListIdent, f: &mut fmt::Formatter) -> fmt::Result {
-        match v.source {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.source {
             // FIXME: shouldn't be limited to just local imports
             Some(did) if ast_util::is_local(did) => {
                 let path = clean::Path {
                     global: false,
                     segments: ~[clean::PathSegment {
-                        name: v.name.clone(),
+                        name: self.name.clone(),
                         lifetimes: ~[],
                         types: ~[],
                     }]
                 };
                 resolved_path(f.buf, did.node, &path, false)
             }
-            _ => write!(f.buf, "{}", v.name),
+            _ => write!(f.buf, "{}", self.name),
         }
     }
 }

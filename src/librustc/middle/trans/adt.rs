@@ -432,9 +432,9 @@ fn generic_type_of(cx: &CrateContext, r: &Repr, name: Option<&str>, sizing: bool
                 4 => Type::array(&Type::i32(), align_units),
                 8 if machine::llalign_of_min(cx, Type::i64()) == 8 =>
                                  Type::array(&Type::i64(), align_units),
-                a if a.population_count() == 1 => Type::array(&Type::vector(&Type::i32(), a / 4),
+                a if a.count_ones() == 1 => Type::array(&Type::vector(&Type::i32(), a / 4),
                                                               align_units),
-                _ => fail!("Unsupported enum alignment: {:?}", align)
+                _ => fail!("unsupported enum alignment: {:?}", align)
             };
             assert_eq!(machine::llalign_of_min(cx, pad_ty) as u64, align);
             assert_eq!(align % discr_size, 0);

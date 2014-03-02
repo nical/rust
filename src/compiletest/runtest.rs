@@ -34,7 +34,7 @@ use std::str;
 use std::task;
 use std::vec;
 
-use extra::test::MetricMap;
+use test::MetricMap;
 
 pub fn run(config: config, testfile: ~str) {
 
@@ -245,12 +245,12 @@ actual:\n\
         };
         // FIXME (#9639): This needs to handle non-utf8 paths
         let mut args = ~[~"-",
-                         ~"--no-trans", ~"--lib",
+                         ~"--no-trans", ~"--crate-type=lib",
                          ~"--target=" + target,
                          ~"-L", config.build_base.as_str().unwrap().to_owned(),
                          ~"-L",
                          aux_dir.as_str().unwrap().to_owned()];
-        args.push_all_move(split_maybe_args(&config.rustcflags));
+        args.push_all_move(split_maybe_args(&config.target_rustcflags));
         args.push_all_move(split_maybe_args(&props.compile_flags));
         // FIXME (#9639): This needs to handle non-utf8 paths
         return ProcArgs {prog: config.rustc_path.as_str().unwrap().to_owned(), args: args};
@@ -258,15 +258,12 @@ actual:\n\
 }
 
 fn run_debuginfo_test(config: &config, props: &TestProps, testfile: &Path) {
-
-    // do not optimize debuginfo tests
-    let mut config = match config.rustcflags {
-        Some(ref flags) => config {
-            rustcflags: Some(flags.replace("-O", "")),
-            .. (*config).clone()
-        },
-        None => (*config).clone()
+    let mut config = config {
+        target_rustcflags: cleanup_debug_info_options(&config.target_rustcflags),
+        host_rustcflags: cleanup_debug_info_options(&config.host_rustcflags),
+        .. config.clone()
     };
+
     let config = &mut config;
     let check_lines = &props.check_lines;
     let mut cmds = props.debugger_cmds.connect("\n");
@@ -329,11 +326,11 @@ fn run_debuginfo_test(config: &config, props: &TestProps, testfile: &Path) {
                 break;
             }
 
-            let args = split_maybe_args(&config.rustcflags);
+            let args = split_maybe_args(&config.target_rustcflags);
             let mut tool_path:~str = ~"";
             for arg in args.iter() {
-                if arg.contains("--android-cross-path=") {
-                    tool_path = arg.replace("--android-cross-path=","");
+                if arg.contains("android-cross-path=") {
+                    tool_path = arg.replace("android-cross-path=","");
                     break;
                 }
             }
@@ -363,7 +360,7 @@ fn run_debuginfo_test(config: &config, props: &TestProps, testfile: &Path) {
                                stdout: out,
                                stderr: err,
                                cmdline: cmdline};
-            process.force_destroy().unwrap();
+            process.signal_kill().unwrap();
         }
 
         _=> {
@@ -436,15 +433,27 @@ fn run_debuginfo_test(config: &config, props: &TestProps, testfile: &Path) {
                                   check_lines[i]), &ProcRes);
         }
     }
+
+    fn cleanup_debug_info_options(options: &Option<~str>) -> Option<~str> {
+        if options.is_none() {
+            return None;
+        }
+
+        // Remove options that are either unwanted (-O) or may lead to duplicates due to RUSTFLAGS.
+        let options_to_remove = [~"-O", ~"-g", ~"--debuginfo"];
+        let new_options = split_maybe_args(options).move_iter()
+                                                   .filter(|x| !options_to_remove.contains(x))
+                                                   .to_owned_vec()
+                                                   .connect(" ");
+        Some(new_options)
+    }
 }
 
 fn check_error_patterns(props: &TestProps,
                         testfile: &Path,
                         ProcRes: &ProcRes) {
     if props.error_patterns.is_empty() {
-        testfile.display().with_str(|s| {
-            fatal(~"no error pattern specified in " + s);
-        })
+        fatal(~"no error pattern specified in " + testfile.display().as_maybe_owned().as_slice());
     }
 
     if ProcRes.status.success() {
@@ -454,7 +463,12 @@ fn check_error_patterns(props: &TestProps,
     let mut next_err_idx = 0u;
     let mut next_err_pat = &props.error_patterns[next_err_idx];
     let mut done = false;
-    for line in ProcRes.stderr.lines() {
+    let output_to_check = if props.check_stdout {
+        ProcRes.stdout + ProcRes.stderr
+    } else {
+        ProcRes.stderr.clone()
+    };
+    for line in output_to_check.lines() {
         if line.contains(*next_err_pat) {
             debug!("found error pattern {}", *next_err_pat);
             next_err_idx += 1u;
@@ -659,7 +673,7 @@ fn compile_test_(config: &config, props: &TestProps,
     // FIXME (#9639): This needs to handle non-utf8 paths
     let link_args = ~[~"-L", aux_dir.as_str().unwrap().to_owned()];
     let args = make_compile_args(config, props, link_args + extra_args,
-                                 make_exe_name, testfile);
+                                 |a, b| ThisFile(make_exe_name(a, b)), testfile);
     compose_and_run_compiler(config, props, testfile, args, None)
 }
 
@@ -701,9 +715,17 @@ fn compose_and_run_compiler(
     for rel_ab in props.aux_builds.iter() {
         let abs_ab = config.aux_base.join(rel_ab.as_slice());
         let aux_props = load_props(&abs_ab);
+        let crate_type = if aux_props.no_prefer_dynamic {
+            ~[]
+        } else {
+            ~[~"--crate-type=dylib"]
+        };
         let aux_args =
-            make_compile_args(config, &aux_props, ~[~"--dylib"] + extra_link_args,
-                              |a,b| make_lib_name(a, b, testfile), &abs_ab);
+            make_compile_args(config, &aux_props, crate_type + extra_link_args,
+                              |a,b| {
+                                  let f = make_lib_name(a, b, testfile);
+                                  ThisDirectory(f.dir_path())
+                              }, &abs_ab);
         let auxres = compose_and_run(config, &abs_ab, aux_args, ~[],
                                      config.compile_lib_path, None);
         if !auxres.status.success() {
@@ -741,10 +763,15 @@ fn compose_and_run(config: &config, testfile: &Path,
                           prog, args, procenv, input);
 }
 
+enum TargetLocation {
+    ThisFile(Path),
+    ThisDirectory(Path),
+}
+
 fn make_compile_args(config: &config,
                      props: &TestProps,
                      extras: ~[~str],
-                     xform: |&config, &Path| -> Path,
+                     xform: |&config, &Path| -> TargetLocation,
                      testfile: &Path)
                      -> ProcArgs {
     let xform_file = xform(config, testfile);
@@ -755,11 +782,23 @@ fn make_compile_args(config: &config,
     };
     // FIXME (#9639): This needs to handle non-utf8 paths
     let mut args = ~[testfile.as_str().unwrap().to_owned(),
-                     ~"-o", xform_file.as_str().unwrap().to_owned(),
                      ~"-L", config.build_base.as_str().unwrap().to_owned(),
                      ~"--target=" + target]
         + extras;
-    args.push_all_move(split_maybe_args(&config.rustcflags));
+    if !props.no_prefer_dynamic {
+        args.push(~"-C");
+        args.push(~"prefer-dynamic");
+    }
+    let path = match xform_file {
+        ThisFile(path) => { args.push(~"-o"); path }
+        ThisDirectory(path) => { args.push(~"--out-dir"); path }
+    };
+    args.push(path.as_str().unwrap().to_owned());
+    if props.force_host {
+        args.push_all_move(split_maybe_args(&config.host_rustcflags));
+    } else {
+        args.push_all_move(split_maybe_args(&config.target_rustcflags));
+    }
     args.push_all_move(split_maybe_args(&props.compile_flags));
     return ProcArgs {prog: config.rustc_path.as_str().unwrap().to_owned(), args: args};
 }
@@ -1043,10 +1082,10 @@ fn compile_test_and_save_bitcode(config: &config, props: &TestProps,
     let aux_dir = aux_output_dir_name(config, testfile);
     // FIXME (#9639): This needs to handle non-utf8 paths
     let link_args = ~[~"-L", aux_dir.as_str().unwrap().to_owned()];
-    let llvm_args = ~[~"-c", ~"--lib", ~"--save-temps"];
+    let llvm_args = ~[~"--emit=obj", ~"--crate-type=lib", ~"-C", ~"save-temps"];
     let args = make_compile_args(config, props,
                                  link_args + llvm_args,
-                                 make_o_name, testfile);
+                                 |a, b| ThisFile(make_o_name(a, b)), testfile);
     compose_and_run_compiler(config, props, testfile, args, None)
 }
 

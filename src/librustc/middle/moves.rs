@@ -130,15 +130,15 @@ and so on.
 use middle::pat_util::{pat_bindings};
 use middle::freevars;
 use middle::ty;
-use middle::typeck::method_map;
+use middle::typeck::MethodMap;
 use util::ppaux;
 use util::ppaux::Repr;
 use util::common::indenter;
 use util::ppaux::UserString;
 
 use std::cell::RefCell;
-use std::hashmap::{HashSet, HashMap};
 use std::rc::Rc;
+use collections::{HashSet, HashMap};
 use syntax::ast::*;
 use syntax::ast_util;
 use syntax::visit;
@@ -182,7 +182,7 @@ pub struct MoveMaps {
 #[deriving(Clone)]
 struct VisitContext {
     tcx: ty::ctxt,
-    method_map: method_map,
+    method_map: MethodMap,
     move_maps: MoveMaps
 }
 
@@ -208,8 +208,8 @@ impl visit::Visitor<()> for VisitContext {
 }
 
 pub fn compute_moves(tcx: ty::ctxt,
-                     method_map: method_map,
-                     crate: &Crate) -> MoveMaps
+                     method_map: MethodMap,
+                     krate: &Crate) -> MoveMaps
 {
     let mut visit_cx = VisitContext {
         tcx: tcx,
@@ -221,7 +221,7 @@ pub fn compute_moves(tcx: ty::ctxt,
         }
     };
     let visit_cx = &mut visit_cx;
-    visit::walk_crate(visit_cx, crate, ());
+    visit::walk_crate(visit_cx, krate, ());
     return visit_cx.move_maps;
 }
 
@@ -361,7 +361,7 @@ impl VisitContext {
                 }
             }
 
-            ExprUnary(_, UnDeref, base) => {       // *base
+            ExprUnary(UnDeref, base) => {      // *base
                 if !self.use_overloaded_operator(expr, base, [])
                 {
                     // Moving out of *base moves out of base.
@@ -369,12 +369,12 @@ impl VisitContext {
                 }
             }
 
-            ExprField(base, _, _) => {        // base.f
+            ExprField(base, _, _) => {         // base.f
                 // Moving out of base.f moves out of base.
                 self.use_expr(base, comp_mode);
             }
 
-            ExprIndex(_, lhs, rhs) => {          // lhs[rhs]
+            ExprIndex(lhs, rhs) => {           // lhs[rhs]
                 if !self.use_overloaded_operator(expr, lhs, [rhs])
                 {
                     self.use_expr(lhs, comp_mode);
@@ -382,7 +382,7 @@ impl VisitContext {
                 }
             }
 
-            ExprCall(callee, ref args, _) => {    // callee(args)
+            ExprCall(callee, ref args) => {    // callee(args)
                 // Figure out whether the called function is consumed.
                 let mode = match ty::get(ty::expr_ty(self.tcx, callee)).sty {
                     ty::ty_closure(ref cty) => {
@@ -409,11 +409,11 @@ impl VisitContext {
                     }
                 }
                 self.use_expr(callee, mode);
-                self.use_fn_args(callee.id, *args);
+                self.use_fn_args(*args);
             }
 
-            ExprMethodCall(callee_id, _, _, ref args, _) => { // callee.m(args)
-                self.use_fn_args(callee_id, *args);
+            ExprMethodCall(_, _, ref args) => { // callee.m(args)
+                self.use_fn_args(*args);
             }
 
             ExprStruct(_, ref fields, opt_with) => {
@@ -521,14 +521,14 @@ impl VisitContext {
 
             ExprForLoop(..) => fail!("non-desugared expr_for_loop"),
 
-            ExprUnary(_, _, lhs) => {
+            ExprUnary(_, lhs) => {
                 if !self.use_overloaded_operator(expr, lhs, [])
                 {
                     self.consume_expr(lhs);
                 }
             }
 
-            ExprBinary(_, _, lhs, rhs) => {
+            ExprBinary(_, lhs, rhs) => {
                 if !self.use_overloaded_operator(expr, lhs, [rhs])
                 {
                     self.consume_expr(lhs);
@@ -555,7 +555,7 @@ impl VisitContext {
                 self.consume_expr(base);
             }
 
-            ExprAssignOp(_, _, lhs, rhs) => {
+            ExprAssignOp(_, lhs, rhs) => {
                 // FIXME(#4712) --- Overloaded operators?
                 //
                 // if !self.use_overloaded_operator(expr, DoDerefArgs, lhs, [rhs])
@@ -668,7 +668,6 @@ impl VisitContext {
     }
 
     pub fn use_fn_args(&mut self,
-                       _: NodeId,
                        arg_exprs: &[@Expr]) {
         //! Uses the argument expressions.
         for arg_expr in arg_exprs.iter() {

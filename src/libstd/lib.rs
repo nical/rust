@@ -11,7 +11,7 @@
 //! # The Rust standard library
 //!
 //! The Rust standard library is a group of interrelated modules defining
-//! the core language traits, operations on built-in data types, collections,
+//! the core language traits, operations on built-in data types,
 //! platform abstractions, the task scheduler, runtime support for language
 //! features and other common functionality.
 //!
@@ -30,7 +30,7 @@
 //! `std` is imported at the topmost level of every crate by default, as
 //! if the first line of each crate was
 //!
-//!     extern mod std;
+//!     extern crate std;
 //!
 //! This means that the contents of std can be accessed from any context
 //! with the `std::` path prefix, as in `use std::vec`, `use std::task::spawn`,
@@ -54,6 +54,12 @@
 
 #[feature(macro_rules, globs, asm, managed_boxes, thread_local, link_args, simd)];
 
+// Turn on default type parameters.
+#[feature(default_type_params)];
+// NOTE remove the following two attributes after the next snapshot.
+#[allow(unrecognized_lint)];
+#[allow(default_type_param_usage)];
+
 // Don't link to std. We are std.
 #[no_std];
 
@@ -64,20 +70,20 @@
 // When testing libstd, bring in libuv as the I/O backend so tests can print
 // things and all of the std::io tests have an I/O interface to run on top
 // of
-#[cfg(test)] extern mod rustuv = "rustuv";
-#[cfg(test)] extern mod native = "native";
-#[cfg(test)] extern mod green = "green";
+#[cfg(test)] extern crate rustuv;
+#[cfg(test)] extern crate native;
+#[cfg(test)] extern crate green;
 
 // Make extra accessible for benchmarking
-#[cfg(test)] extern mod extra = "extra";
+#[cfg(test)] extern crate extra = "extra";
 
 // Make std testable by not duplicating lang items. See #2912
-#[cfg(test)] extern mod realstd = "std";
+#[cfg(test)] extern crate realstd = "std";
 #[cfg(test)] pub use kinds = realstd::kinds;
 #[cfg(test)] pub use ops = realstd::ops;
 #[cfg(test)] pub use cmp = realstd::cmp;
 
-mod macros;
+pub mod macros;
 
 mod rtdeps;
 
@@ -117,7 +123,6 @@ pub mod vec_ng;
 pub mod str;
 
 pub mod ascii;
-pub mod send_str;
 
 pub mod ptr;
 pub mod owned;
@@ -140,21 +145,17 @@ pub mod from_str;
 pub mod num;
 pub mod iter;
 pub mod to_str;
-pub mod to_bytes;
 pub mod clone;
 pub mod hash;
 pub mod container;
 pub mod default;
 pub mod any;
 
-
 /* Common data structures */
 
 pub mod option;
 pub mod result;
-pub mod hashmap;
 pub mod cell;
-pub mod trie;
 
 
 /* Tasks and communication */
@@ -174,14 +175,10 @@ pub mod os;
 pub mod io;
 pub mod path;
 pub mod rand;
-pub mod run;
 pub mod cast;
 pub mod fmt;
 pub mod cleanup;
-#[deprecated]
-pub mod condition;
 pub mod logging;
-pub mod util;
 pub mod mem;
 
 
@@ -195,7 +192,10 @@ pub mod reflect;
 // Private APIs
 #[unstable]
 pub mod unstable;
-
+#[experimental]
+pub mod intrinsics;
+#[experimental]
+pub mod raw;
 
 /* For internal use, not exported */
 
@@ -216,8 +216,8 @@ mod std {
     pub use clone;
     pub use cmp;
     pub use comm;
-    pub use condition;
     pub use fmt;
+    pub use hash;
     pub use io;
     pub use kinds;
     pub use local_data;
@@ -226,7 +226,6 @@ mod std {
     pub use os;
     pub use rt;
     pub use str;
-    pub use to_bytes;
     pub use to_str;
     pub use unstable;
 }

@@ -1,4 +1,4 @@
-// Copyright 2012-2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,6 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#[allow(non_camel_case_types)];
 
 use middle::pat_util::{PatIdMap, pat_id_map, pat_is_binding, pat_is_const};
 use middle::ty;
@@ -18,7 +19,7 @@ use middle::typeck::check::{structure_of, valid_range_bounds};
 use middle::typeck::infer;
 use middle::typeck::require_same_types;
 
-use std::hashmap::{HashMap, HashSet};
+use collections::{HashMap, HashSet};
 use syntax::ast;
 use syntax::ast_util;
 use syntax::parse::token;
@@ -308,7 +309,7 @@ pub fn check_struct_pat_fields(pcx: &pat_ctxt,
             Some(&(_, true)) => {
                 tcx.sess.span_err(span,
                     format!("field `{}` bound twice in pattern",
-                            tcx.sess.str_of(field.ident)));
+                            token::get_ident(field.ident)));
             }
             Some(&(index, ref mut used)) => {
                 *used = true;
@@ -321,14 +322,14 @@ pub fn check_struct_pat_fields(pcx: &pat_ctxt,
                 found_fields.insert(index);
             }
             None => {
-                let name = pprust::path_to_str(path, tcx.sess.intr());
+                let name = pprust::path_to_str(path);
                 // Check the pattern anyway, so that attempts to look
                 // up its type won't fail
                 check_pat(pcx, field.pat, ty::mk_err());
                 tcx.sess.span_err(span,
                     format!("struct `{}` does not have a field named `{}`",
                          name,
-                         tcx.sess.str_of(field.ident)));
+                         token::get_ident(field.ident)));
             }
         }
     }
@@ -340,10 +341,9 @@ pub fn check_struct_pat_fields(pcx: &pat_ctxt,
                 continue;
             }
 
-            let string = token::get_ident(field.name);
             tcx.sess.span_err(span,
                               format!("pattern does not mention field `{}`",
-                                      string.get()));
+                                  token::get_name(field.name)));
         }
     }
 }
@@ -366,7 +366,7 @@ pub fn check_struct_pat(pcx: &pat_ctxt, pat_id: ast::NodeId, span: Span,
             // OK.
         }
         Some(&ast::DefStruct(..)) | Some(&ast::DefVariant(..)) => {
-            let name = pprust::path_to_str(path, tcx.sess.intr());
+            let name = pprust::path_to_str(path);
             tcx.sess.span_err(span,
                               format!("mismatched types: expected `{}` but found `{}`",
                                    fcx.infcx().ty_to_str(expected),
@@ -405,7 +405,7 @@ pub fn check_struct_like_enum_variant_pat(pcx: &pat_ctxt,
                                     variant_id, substitutions, etc);
         }
         Some(&ast::DefStruct(..)) | Some(&ast::DefVariant(..)) => {
-            let name = pprust::path_to_str(path, tcx.sess.intr());
+            let name = pprust::path_to_str(path);
             tcx.sess.span_err(span,
                               format!("mismatched types: expected `{}` but \
                                     found `{}`",
@@ -604,7 +604,17 @@ pub fn check_pat(pcx: &pat_ctxt, pat: &ast::Pat, expected: ty::t) {
           ty::ty_vec(mt, vstore) => {
             let region_var = match vstore {
                 ty::vstore_slice(r) => r,
-                ty::vstore_uniq | ty::vstore_fixed(_) => {
+                ty::vstore_uniq => {
+                    fcx.type_error_message(pat.span,
+                                           |_| {
+                                            ~"unique vector patterns are no \
+                                              longer supported"
+                                           },
+                                           expected,
+                                           None);
+                    default_region_var
+                }
+                ty::vstore_fixed(_) => {
                     default_region_var
                 }
             };
@@ -688,8 +698,8 @@ pub fn check_pointer_pat(pcx: &pat_ctxt,
                              e, actual)})},
                 Some(expected),
                 format!("{} pattern", match pointer_kind {
-                    Send => "a ~-box",
-                    Borrowed => "an &-pointer"
+                    Send => "a `~`-box",
+                    Borrowed => "an `&`-pointer"
                 }),
                 None);
             fcx.write_error(pat_id);

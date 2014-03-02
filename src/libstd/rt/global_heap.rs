@@ -10,8 +10,8 @@
 
 use libc::{c_void, size_t, free, malloc, realloc};
 use ptr::{RawPtr, mut_null};
-use unstable::intrinsics::{TyDesc, abort};
-use unstable::raw;
+use intrinsics::abort;
+use raw;
 use mem::size_of;
 
 #[inline]
@@ -76,22 +76,17 @@ pub unsafe fn exchange_malloc(size: uint) -> *u8 {
 #[cfg(not(test))]
 #[lang="closure_exchange_malloc"]
 #[inline]
-pub unsafe fn closure_exchange_malloc_(td: *u8, size: uint) -> *u8 {
-    closure_exchange_malloc(td, size)
+pub unsafe fn closure_exchange_malloc_(drop_glue: fn(*mut u8), size: uint, align: uint) -> *u8 {
+    closure_exchange_malloc(drop_glue, size, align)
 }
 
 #[inline]
-pub unsafe fn closure_exchange_malloc(td: *u8, size: uint) -> *u8 {
-    let td = td as *TyDesc;
-    let size = size;
-
-    assert!(td.is_not_null());
-
-    let total_size = get_box_size(size, (*td).align);
+pub unsafe fn closure_exchange_malloc(drop_glue: fn(*mut u8), size: uint, align: uint) -> *u8 {
+    let total_size = get_box_size(size, align);
     let p = malloc_raw(total_size);
 
     let alloc = p as *mut raw::Box<()>;
-    (*alloc).type_desc = td;
+    (*alloc).drop_glue = drop_glue;
 
     alloc as *u8
 }
@@ -112,19 +107,20 @@ pub unsafe fn exchange_free(ptr: *u8) {
 
 #[cfg(test)]
 mod bench {
-    use extra::test::BenchHarness;
+    extern crate test;
+    use self::test::BenchHarness;
 
     #[bench]
     fn alloc_owned_small(bh: &mut BenchHarness) {
         bh.iter(|| {
-            ~10;
+            ~10
         })
     }
 
     #[bench]
     fn alloc_owned_big(bh: &mut BenchHarness) {
         bh.iter(|| {
-            ~[10, ..1000];
+            ~[10, ..1000]
         })
     }
 }

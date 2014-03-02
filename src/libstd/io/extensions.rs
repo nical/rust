@@ -10,6 +10,8 @@
 
 //! Utility mixins that apply to all Readers and Writers
 
+#[allow(missing_doc)];
+
 // FIXME: Not sure how this should be structured
 // FIXME: Iteration should probably be considered separately
 
@@ -18,6 +20,7 @@ use iter::Iterator;
 use option::Option;
 use io::Reader;
 use vec::{OwnedVector, ImmutableVector};
+use ptr::RawPtr;
 
 /// An iterator that reads a single byte on each iteration,
 /// until `.read_byte()` returns `None`.
@@ -51,7 +54,7 @@ impl<'r, R: Reader> Iterator<u8> for Bytes<'r, R> {
 }
 
 pub fn u64_to_le_bytes<T>(n: u64, size: uint, f: |v: &[u8]| -> T) -> T {
-    use unstable::intrinsics::{to_le16, to_le32, to_le64};
+    use mem::{to_le16, to_le32, to_le64};
     use cast::transmute;
 
     // LLVM fails to properly optimize this when using shifts instead of the to_le* intrinsics
@@ -77,7 +80,7 @@ pub fn u64_to_le_bytes<T>(n: u64, size: uint, f: |v: &[u8]| -> T) -> T {
 }
 
 pub fn u64_to_be_bytes<T>(n: u64, size: uint, f: |v: &[u8]| -> T) -> T {
-    use unstable::intrinsics::{to_be16, to_be32, to_be64};
+    use mem::{to_be16, to_be32, to_be64};
     use cast::transmute;
 
     // LLVM fails to properly optimize this when using shifts instead of the to_be* intrinsics
@@ -104,8 +107,8 @@ pub fn u64_from_be_bytes(data: &[u8],
                          start: uint,
                          size: uint)
                       -> u64 {
-    use ptr::{copy_nonoverlapping_memory, offset, mut_offset};
-    use unstable::intrinsics::from_be64;
+    use ptr::{copy_nonoverlapping_memory};
+    use mem::from_be64;
     use vec::MutableVector;
 
     assert!(size <= 8u);
@@ -116,9 +119,9 @@ pub fn u64_from_be_bytes(data: &[u8],
 
     let mut buf = [0u8, ..8];
     unsafe {
-        let ptr = offset(data.as_ptr(), start as int);
+        let ptr = data.as_ptr().offset(start as int);
         let out = buf.as_mut_ptr();
-        copy_nonoverlapping_memory(mut_offset(out, (8 - size) as int), ptr, size);
+        copy_nonoverlapping_memory(out.offset((8 - size) as int), ptr, size);
         from_be64(*(out as *i64)) as u64
     }
 }
@@ -455,7 +458,8 @@ mod test {
 
 #[cfg(test)]
 mod bench {
-    use extra::test::BenchHarness;
+    extern crate test;
+    use self::test::BenchHarness;
     use container::Container;
 
     macro_rules! u64_from_be_bytes_bench_impl(

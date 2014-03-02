@@ -34,7 +34,7 @@ use middle::trans::type_::Type;
 use std::c_str::ToCStr;
 use std::libc::c_uint;
 use std::vec;
-use syntax::{ast, ast_util, ast_map};
+use syntax::{ast, ast_util};
 
 pub fn const_lit(cx: &CrateContext, e: &ast::Expr, lit: ast::Lit)
     -> ValueRef {
@@ -146,14 +146,14 @@ fn const_deref(cx: &CrateContext, v: ValueRef, t: ty::t, explicit: bool)
                     const_deref_newtype(cx, v, t)
                 }
                 _ => {
-                    cx.sess.bug(format!("Unexpected dereferenceable type {}",
+                    cx.sess.bug(format!("unexpected dereferenceable type {}",
                                      ty_to_str(cx.tcx, t)))
                 }
             };
             (dv, mt.ty)
         }
         None => {
-            cx.sess.bug(format!("Can't dereference const of type {}",
+            cx.sess.bug(format!("can't dereference const of type {}",
                              ty_to_str(cx.tcx, t)))
         }
     }
@@ -170,18 +170,11 @@ pub fn get_const_val(cx: @CrateContext,
             def_id = inline::maybe_instantiate_inline(cx, def_id);
         }
 
-        let opt_item = cx.tcx.items.get(def_id.node);
-
-        match opt_item {
-            ast_map::NodeItem(item, _) => {
-                match item.node {
-                    ast::ItemStatic(_, ast::MutImmutable, _) => {
-                        trans_const(cx, ast::MutImmutable, def_id.node);
-                    }
-                    _ => {}
-                }
+        match cx.tcx.map.expect_item(def_id.node).node {
+            ast::ItemStatic(_, ast::MutImmutable, _) => {
+                trans_const(cx, ast::MutImmutable, def_id.node);
             }
-            _ => cx.tcx.sess.bug("expected a const to be an item")
+            _ => {}
         }
     }
 
@@ -317,7 +310,7 @@ fn const_expr_unadjusted(cx: @CrateContext, e: &ast::Expr,
           ast::ExprLit(lit) => {
               (consts::const_lit(cx, e, (*lit).clone()), true)
           }
-          ast::ExprBinary(_, b, e1, e2) => {
+          ast::ExprBinary(b, e1, e2) => {
             let (te1, _) = const_expr(cx, e1, is_local);
             let (te2, _) = const_expr(cx, e2, is_local);
 
@@ -399,7 +392,7 @@ fn const_expr_unadjusted(cx: @CrateContext, e: &ast::Expr,
               },
             }, true)
           },
-          ast::ExprUnary(_, u, e) => {
+          ast::ExprUnary(u, e) => {
             let (te, _) = const_expr(cx, e, is_local);
             let ty = ty::expr_ty(cx.tcx, e);
             let is_float = ty::type_is_fp(ty);
@@ -436,7 +429,7 @@ fn const_expr_unadjusted(cx: @CrateContext, e: &ast::Expr,
               })
           }
 
-          ast::ExprIndex(_, base, index) => {
+          ast::ExprIndex(base, index) => {
               let bt = ty::expr_ty_adjusted(cx.tcx, base);
               let (bv, inlineable) = const_expr(cx, base, is_local);
               let iv = match const_eval::eval_const_expr(cx.tcx, index) {
@@ -606,7 +599,7 @@ fn const_expr_unadjusted(cx: @CrateContext, e: &ast::Expr,
                 const_eval::const_uint(i) => i as uint,
                 _ => cx.sess.span_bug(count.span, "count must be integral const expression.")
             };
-            let vs = vec::from_elem(n, const_expr(cx, elem, is_local).first());
+            let vs = vec::from_elem(n, const_expr(cx, elem, is_local).val0());
             let v = if vs.iter().any(|vi| val_ty(*vi) != llunitty) {
                 C_struct(vs, false)
             } else {
@@ -654,7 +647,7 @@ fn const_expr_unadjusted(cx: @CrateContext, e: &ast::Expr,
                 }
             }
           }
-          ast::ExprCall(callee, ref args, _) => {
+          ast::ExprCall(callee, ref args) => {
               let tcx = cx.tcx;
               let opt_def = {
                   let def_map = tcx.def_map.borrow();

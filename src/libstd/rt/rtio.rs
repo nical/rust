@@ -10,7 +10,7 @@
 
 use c_str::CString;
 use cast;
-use comm::{SharedChan, Port};
+use comm::{Chan, Port};
 use libc::c_int;
 use libc;
 use ops::Drop;
@@ -41,6 +41,7 @@ pub trait EventLoop {
 
     /// The asynchronous I/O services. Not all event loops may provide one.
     fn io<'a>(&'a mut self) -> Option<&'a mut IoFactory>;
+    fn has_active_io(&self) -> bool;
 }
 
 pub trait RemoteCallback {
@@ -178,10 +179,11 @@ pub trait IoFactory {
     fn timer_init(&mut self) -> Result<~RtioTimer, IoError>;
     fn spawn(&mut self, config: ProcessConfig)
             -> Result<(~RtioProcess, ~[Option<~RtioPipe>]), IoError>;
+    fn kill(&mut self, pid: libc::pid_t, signal: int) -> Result<(), IoError>;
     fn pipe_open(&mut self, fd: c_int) -> Result<~RtioPipe, IoError>;
     fn tty_open(&mut self, fd: c_int, readable: bool)
             -> Result<~RtioTTY, IoError>;
-    fn signal(&mut self, signal: Signum, channel: SharedChan<Signum>)
+    fn signal(&mut self, signal: Signum, channel: Chan<Signum>)
         -> Result<~RtioSignal, IoError>;
 }
 
@@ -203,6 +205,7 @@ pub trait RtioTcpStream : RtioSocket {
     fn nodelay(&mut self) -> Result<(), IoError>;
     fn keepalive(&mut self, delay_in_seconds: uint) -> Result<(), IoError>;
     fn letdie(&mut self) -> Result<(), IoError>;
+    fn clone(&self) -> ~RtioTcpStream;
 }
 
 pub trait RtioSocket {
@@ -224,6 +227,8 @@ pub trait RtioUdpSocket : RtioSocket {
 
     fn hear_broadcasts(&mut self) -> Result<(), IoError>;
     fn ignore_broadcasts(&mut self) -> Result<(), IoError>;
+
+    fn clone(&self) -> ~RtioUdpSocket;
 }
 
 pub trait RtioTimer {
@@ -253,6 +258,7 @@ pub trait RtioProcess {
 pub trait RtioPipe {
     fn read(&mut self, buf: &mut [u8]) -> Result<uint, IoError>;
     fn write(&mut self, buf: &[u8]) -> Result<(), IoError>;
+    fn clone(&self) -> ~RtioPipe;
 }
 
 pub trait RtioUnixListener {

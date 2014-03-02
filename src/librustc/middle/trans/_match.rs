@@ -192,6 +192,7 @@
  *
  */
 
+#[allow(non_camel_case_types)];
 
 use back::abi;
 use lib::llvm::{llvm, ValueRef, BasicBlockRef};
@@ -222,7 +223,7 @@ use util::common::indenter;
 use util::ppaux::{Repr, vec_map_to_str};
 
 use std::cell::Cell;
-use std::hashmap::HashMap;
+use collections::HashMap;
 use std::vec;
 use syntax::ast;
 use syntax::ast::Ident;
@@ -484,7 +485,7 @@ fn assert_is_binding_or_wild(bcx: &Block, p: @ast::Pat) {
     if !pat_is_binding_or_wild(bcx.tcx().def_map, p) {
         bcx.sess().span_bug(
             p.span,
-            format!("Expected an identifier pattern but found p: {}",
+            format!("expected an identifier pattern but found p: {}",
                  p.repr(bcx.tcx())));
     }
 }
@@ -1187,7 +1188,7 @@ impl<'a> DynamicFailureHandler<'a> {
 
         let fcx = self.bcx.fcx;
         let fail_cx = fcx.new_block(false, "case_fallthrough", None);
-        controlflow::trans_fail(fail_cx, Some(self.sp), self.msg.clone());
+        controlflow::trans_fail(fail_cx, self.sp, self.msg.clone());
         self.finished.set(Some(fail_cx.llbb));
         fail_cx.llbb
     }
@@ -1371,7 +1372,7 @@ fn insert_lllocals<'a>(bcx: &'a Block<'a>,
             llmap.get().insert(binding_info.id, datum);
         }
 
-        if bcx.sess().opts.extra_debuginfo {
+        if bcx.sess().opts.debuginfo {
             debuginfo::create_match_binding_metadata(bcx,
                                                      ident,
                                                      binding_info.id,
@@ -1527,7 +1528,7 @@ fn compile_submatch_continue<'r,
         Some(ref rec_fields) => {
             let pat_ty = node_id_type(bcx, pat_id);
             let pat_repr = adt::represent_type(bcx.ccx(), pat_ty);
-            expr::with_field_tys(tcx, pat_ty, None, |discr, field_tys| {
+            expr::with_field_tys(tcx, pat_ty, Some(pat_id), |discr, field_tys| {
                 let rec_vals = rec_fields.map(|field_name| {
                         let ix = ty::field_idx_strict(tcx, field_name.name, field_tys);
                         adt::trans_field_ptr(bcx, pat_repr, val, discr, ix)
@@ -2028,9 +2029,21 @@ pub fn store_arg<'a>(mut bcx: &'a Block<'a>,
         Some(path) => {
             // Generate nicer LLVM for the common case of fn a pattern
             // like `x: T`
-            mk_binding_alloca(
-                bcx, pat.id, path, BindArgument, arg_scope, arg,
-                |arg, bcx, llval, _| arg.store_to(bcx, llval))
+            let arg_ty = node_id_type(bcx, pat.id);
+            if type_of::arg_is_indirect(bcx.ccx(), arg_ty)
+                && !bcx.ccx().sess.opts.debuginfo {
+                // Don't copy an indirect argument to an alloca, the caller
+                // already put it in a temporary alloca and gave it up, unless
+                // we emit extra-debug-info, which requires local allocas :(.
+                let arg_val = arg.add_clean(bcx.fcx, arg_scope);
+                let mut llmap = bcx.fcx.llargs.borrow_mut();
+                llmap.get().insert(pat.id, Datum(arg_val, arg_ty, Lvalue));
+                bcx
+            } else {
+                mk_binding_alloca(
+                    bcx, pat.id, path, BindArgument, arg_scope, arg,
+                    |arg, bcx, llval, _| arg.store_to(bcx, llval))
+            }
         }
 
         None => {
@@ -2195,7 +2208,7 @@ fn bind_irrefutable_pat<'a>(
             let tcx = bcx.tcx();
             let pat_ty = node_id_type(bcx, pat.id);
             let pat_repr = adt::represent_type(bcx.ccx(), pat_ty);
-            expr::with_field_tys(tcx, pat_ty, None, |discr, field_tys| {
+            expr::with_field_tys(tcx, pat_ty, Some(pat.id), |discr, field_tys| {
                 for f in fields.iter() {
                     let ix = ty::field_idx_strict(tcx, f.ident.name, field_tys);
                     let fldptr = adt::trans_field_ptr(bcx, pat_repr, val,

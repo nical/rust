@@ -11,7 +11,6 @@
 #[allow(non_uppercase_pattern_statics)];
 
 use arena::TypedArena;
-use back::abi;
 use lib::llvm::{SequentiallyConsistent, Acquire, Release, Xchg};
 use lib::llvm::{ValueRef, Pointer, Array, Struct};
 use lib;
@@ -19,78 +18,76 @@ use middle::trans::base::*;
 use middle::trans::build::*;
 use middle::trans::common::*;
 use middle::trans::datum::*;
+use middle::trans::glue;
 use middle::trans::type_of::*;
 use middle::trans::type_of;
 use middle::trans::machine;
-use middle::trans::glue;
+use middle::trans::machine::llsize_of;
+use middle::trans::type_::Type;
 use middle::ty;
 use syntax::ast;
 use syntax::ast_map;
+use syntax::parse::token;
 use util::ppaux::ty_to_str;
-use middle::trans::machine::llsize_of;
-use middle::trans::type_::Type;
 
 pub fn get_simple_intrinsic(ccx: @CrateContext, item: &ast::ForeignItem) -> Option<ValueRef> {
-    let nm = ccx.sess.str_of(item.ident);
-    let name = nm.as_slice();
-
-    match name {
-        "sqrtf32" => Some(ccx.intrinsics.get_copy(&("llvm.sqrt.f32"))),
-        "sqrtf64" => Some(ccx.intrinsics.get_copy(&("llvm.sqrt.f64"))),
-        "powif32" => Some(ccx.intrinsics.get_copy(&("llvm.powi.f32"))),
-        "powif64" => Some(ccx.intrinsics.get_copy(&("llvm.powi.f64"))),
-        "sinf32" => Some(ccx.intrinsics.get_copy(&("llvm.sin.f32"))),
-        "sinf64" => Some(ccx.intrinsics.get_copy(&("llvm.sin.f64"))),
-        "cosf32" => Some(ccx.intrinsics.get_copy(&("llvm.cos.f32"))),
-        "cosf64" => Some(ccx.intrinsics.get_copy(&("llvm.cos.f64"))),
-        "powf32" => Some(ccx.intrinsics.get_copy(&("llvm.pow.f32"))),
-        "powf64" => Some(ccx.intrinsics.get_copy(&("llvm.pow.f64"))),
-        "expf32" => Some(ccx.intrinsics.get_copy(&("llvm.exp.f32"))),
-        "expf64" => Some(ccx.intrinsics.get_copy(&("llvm.exp.f64"))),
-        "exp2f32" => Some(ccx.intrinsics.get_copy(&("llvm.exp2.f32"))),
-        "exp2f64" => Some(ccx.intrinsics.get_copy(&("llvm.exp2.f64"))),
-        "logf32" => Some(ccx.intrinsics.get_copy(&("llvm.log.f32"))),
-        "logf64" => Some(ccx.intrinsics.get_copy(&("llvm.log.f64"))),
-        "log10f32" => Some(ccx.intrinsics.get_copy(&("llvm.log10.f32"))),
-        "log10f64" => Some(ccx.intrinsics.get_copy(&("llvm.log10.f64"))),
-        "log2f32" => Some(ccx.intrinsics.get_copy(&("llvm.log2.f32"))),
-        "log2f64" => Some(ccx.intrinsics.get_copy(&("llvm.log2.f64"))),
-        "fmaf32" => Some(ccx.intrinsics.get_copy(&("llvm.fma.f32"))),
-        "fmaf64" => Some(ccx.intrinsics.get_copy(&("llvm.fma.f64"))),
-        "fabsf32" => Some(ccx.intrinsics.get_copy(&("llvm.fabs.f32"))),
-        "fabsf64" => Some(ccx.intrinsics.get_copy(&("llvm.fabs.f64"))),
-        "copysignf32" => Some(ccx.intrinsics.get_copy(&("llvm.copysign.f32"))),
-        "copysignf64" => Some(ccx.intrinsics.get_copy(&("llvm.copysign.f64"))),
-        "floorf32" => Some(ccx.intrinsics.get_copy(&("llvm.floor.f32"))),
-        "floorf64" => Some(ccx.intrinsics.get_copy(&("llvm.floor.f64"))),
-        "ceilf32" => Some(ccx.intrinsics.get_copy(&("llvm.ceil.f32"))),
-        "ceilf64" => Some(ccx.intrinsics.get_copy(&("llvm.ceil.f64"))),
-        "truncf32" => Some(ccx.intrinsics.get_copy(&("llvm.trunc.f32"))),
-        "truncf64" => Some(ccx.intrinsics.get_copy(&("llvm.trunc.f64"))),
-        "rintf32" => Some(ccx.intrinsics.get_copy(&("llvm.rint.f32"))),
-        "rintf64" => Some(ccx.intrinsics.get_copy(&("llvm.rint.f64"))),
-        "nearbyintf32" => Some(ccx.intrinsics.get_copy(&("llvm.nearbyint.f32"))),
-        "nearbyintf64" => Some(ccx.intrinsics.get_copy(&("llvm.nearbyint.f64"))),
-        "roundf32" => Some(ccx.intrinsics.get_copy(&("llvm.round.f32"))),
-        "roundf64" => Some(ccx.intrinsics.get_copy(&("llvm.round.f64"))),
-        "ctpop8" => Some(ccx.intrinsics.get_copy(&("llvm.ctpop.i8"))),
-        "ctpop16" => Some(ccx.intrinsics.get_copy(&("llvm.ctpop.i16"))),
-        "ctpop32" => Some(ccx.intrinsics.get_copy(&("llvm.ctpop.i32"))),
-        "ctpop64" => Some(ccx.intrinsics.get_copy(&("llvm.ctpop.i64"))),
-        "bswap16" => Some(ccx.intrinsics.get_copy(&("llvm.bswap.i16"))),
-        "bswap32" => Some(ccx.intrinsics.get_copy(&("llvm.bswap.i32"))),
-        "bswap64" => Some(ccx.intrinsics.get_copy(&("llvm.bswap.i64"))),
-        _ => None
-    }
+    let name = match token::get_ident(item.ident).get() {
+        "sqrtf32" => "llvm.sqrt.f32",
+        "sqrtf64" => "llvm.sqrt.f64",
+        "powif32" => "llvm.powi.f32",
+        "powif64" => "llvm.powi.f64",
+        "sinf32" => "llvm.sin.f32",
+        "sinf64" => "llvm.sin.f64",
+        "cosf32" => "llvm.cos.f32",
+        "cosf64" => "llvm.cos.f64",
+        "powf32" => "llvm.pow.f32",
+        "powf64" => "llvm.pow.f64",
+        "expf32" => "llvm.exp.f32",
+        "expf64" => "llvm.exp.f64",
+        "exp2f32" => "llvm.exp2.f32",
+        "exp2f64" => "llvm.exp2.f64",
+        "logf32" => "llvm.log.f32",
+        "logf64" => "llvm.log.f64",
+        "log10f32" => "llvm.log10.f32",
+        "log10f64" => "llvm.log10.f64",
+        "log2f32" => "llvm.log2.f32",
+        "log2f64" => "llvm.log2.f64",
+        "fmaf32" => "llvm.fma.f32",
+        "fmaf64" => "llvm.fma.f64",
+        "fabsf32" => "llvm.fabs.f32",
+        "fabsf64" => "llvm.fabs.f64",
+        "copysignf32" => "llvm.copysign.f32",
+        "copysignf64" => "llvm.copysign.f64",
+        "floorf32" => "llvm.floor.f32",
+        "floorf64" => "llvm.floor.f64",
+        "ceilf32" => "llvm.ceil.f32",
+        "ceilf64" => "llvm.ceil.f64",
+        "truncf32" => "llvm.trunc.f32",
+        "truncf64" => "llvm.trunc.f64",
+        "rintf32" => "llvm.rint.f32",
+        "rintf64" => "llvm.rint.f64",
+        "nearbyintf32" => "llvm.nearbyint.f32",
+        "nearbyintf64" => "llvm.nearbyint.f64",
+        "roundf32" => "llvm.round.f32",
+        "roundf64" => "llvm.round.f64",
+        "ctpop8" => "llvm.ctpop.i8",
+        "ctpop16" => "llvm.ctpop.i16",
+        "ctpop32" => "llvm.ctpop.i32",
+        "ctpop64" => "llvm.ctpop.i64",
+        "bswap16" => "llvm.bswap.i16",
+        "bswap32" => "llvm.bswap.i32",
+        "bswap64" => "llvm.bswap.i64",
+        _ => return None
+    };
+    Some(ccx.intrinsics.get_copy(&name))
 }
 
 pub fn trans_intrinsic(ccx: @CrateContext,
                        decl: ValueRef,
                        item: &ast::ForeignItem,
-                       path: ast_map::Path,
                        substs: @param_substs,
                        ref_id: Option<ast::NodeId>) {
-    debug!("trans_intrinsic(item.ident={})", ccx.sess.str_of(item.ident));
+    debug!("trans_intrinsic(item.ident={})", token::get_ident(item.ident));
 
     fn with_overflow_instrinsic(bcx: &Block, name: &'static str, t: ty::t) {
         let first_real_arg = bcx.fcx.arg_pos(0u);
@@ -196,15 +193,8 @@ pub fn trans_intrinsic(ccx: @CrateContext,
     let output_type = ty::ty_fn_ret(ty::node_id_to_type(ccx.tcx, item.id));
 
     let arena = TypedArena::new();
-    let fcx = new_fn_ctxt(ccx,
-                          path,
-                          decl,
-                          item.id,
-                          false,
-                          output_type,
-                          Some(substs),
-                          Some(item.span),
-                          &arena);
+    let fcx = new_fn_ctxt(ccx, decl, item.id, false, output_type,
+                          Some(substs), Some(item.span), &arena);
     init_function(&fcx, true, output_type, Some(substs));
 
     set_always_inline(fcx.llfn);
@@ -212,13 +202,12 @@ pub fn trans_intrinsic(ccx: @CrateContext,
     let mut bcx = fcx.entry_bcx.get().unwrap();
     let first_real_arg = fcx.arg_pos(0u);
 
-    let nm = ccx.sess.str_of(item.ident);
-    let name = nm.as_slice();
+    let name = token::get_ident(item.ident);
 
     // This requires that atomic intrinsics follow a specific naming pattern:
     // "atomic_<operation>[_<ordering>], and no ordering means SeqCst
-    if name.starts_with("atomic_") {
-        let split : ~[&str] = name.split('_').collect();
+    if name.get().starts_with("atomic_") {
+        let split: ~[&str] = name.get().split('_').collect();
         assert!(split.len() >= 2, "Atomic intrinsic not correct format");
         let order = if split.len() == 2 {
             lib::llvm::SequentiallyConsistent
@@ -228,7 +217,7 @@ pub fn trans_intrinsic(ccx: @CrateContext,
                 "acq"     => lib::llvm::Acquire,
                 "rel"     => lib::llvm::Release,
                 "acqrel"  => lib::llvm::AcquireRelease,
-                _ => ccx.sess.fatal("Unknown ordering in atomic intrinsic")
+                _ => ccx.sess.fatal("unknown ordering in atomic intrinsic")
             }
         };
 
@@ -269,7 +258,7 @@ pub fn trans_intrinsic(ccx: @CrateContext,
                     "min"   => lib::llvm::Min,
                     "umax"  => lib::llvm::UMax,
                     "umin"  => lib::llvm::UMin,
-                    _ => ccx.sess.fatal("Unknown atomic operation")
+                    _ => ccx.sess.fatal("unknown atomic operation")
                 };
 
                 let old = AtomicRMW(bcx, atom_op, get_param(decl, first_real_arg),
@@ -283,7 +272,7 @@ pub fn trans_intrinsic(ccx: @CrateContext,
         return;
     }
 
-    match name {
+    match name.get() {
         "abort" => {
             let llfn = bcx.ccx().intrinsics.get_copy(&("llvm.trap"));
             Call(bcx, llfn, [], []);
@@ -326,7 +315,7 @@ pub fn trans_intrinsic(ccx: @CrateContext,
         "get_tydesc" => {
             let tp_ty = substs.tys[0];
             let static_ti = get_tydesc(ccx, tp_ty);
-            glue::lazily_emit_all_tydesc_glue(ccx, static_ti);
+            glue::lazily_emit_visit_glue(ccx, static_ti);
 
             // FIXME (#3730): ideally this shouldn't need a cast,
             // but there's a circularity between translating rust types to llvm
@@ -340,7 +329,7 @@ pub fn trans_intrinsic(ccx: @CrateContext,
             let hash = ty::hash_crate_independent(
                 ccx.tcx,
                 substs.tys[0],
-                ccx.link_meta.crate_hash.clone());
+                &ccx.link_meta.crate_hash);
             // NB: This needs to be kept in lockstep with the TypeId struct in
             //     libstd/unstable/intrinsics.rs
             let val = C_named_struct(type_of::type_of(ccx, output_type), [C_u64(hash)]);
@@ -383,11 +372,9 @@ pub fn trans_intrinsic(ccx: @CrateContext,
             let in_type_size = machine::llbitsize_of_real(ccx, llintype);
             let out_type_size = machine::llbitsize_of_real(ccx, llouttype);
             if in_type_size != out_type_size {
-                let sp = {
-                    match ccx.tcx.items.get(ref_id.unwrap()) {
-                        ast_map::NodeExpr(e) => e.span,
-                        _ => fail!("transmute has non-expr arg"),
-                    }
+                let sp = match ccx.tcx.map.get(ref_id.unwrap()) {
+                    ast_map::NodeExpr(e) => e.span,
+                    _ => fail!("transmute has non-expr arg"),
                 };
                 let pluralize = |n| if 1 == n { "" } else { "s" };
                 ccx.sess.span_fatal(sp,
@@ -459,20 +446,8 @@ pub fn trans_intrinsic(ccx: @CrateContext,
             let td = get_param(decl, first_real_arg);
             let visitor = get_param(decl, first_real_arg + 1u);
             let td = PointerCast(bcx, td, ccx.tydesc_type.ptr_to());
-            glue::call_tydesc_glue_full(bcx, visitor, td,
-                                        abi::tydesc_field_visit_glue, None);
+            glue::call_visit_glue(bcx, visitor, td, None);
             RetVoid(bcx);
-        }
-        "morestack_addr" => {
-            // FIXME This is a hack to grab the address of this particular
-            // native function. There should be a general in-language
-            // way to do this
-            let llfty = type_of_rust_fn(bcx.ccx(), false, [], ty::mk_nil());
-            let morestack_addr = decl_cdecl_fn(bcx.ccx().llmod, "__morestack",
-                                               llfty, ty::mk_nil());
-            let morestack_addr = PointerCast(bcx, morestack_addr,
-                                             Type::nil().ptr_to());
-            Ret(bcx, morestack_addr);
         }
         "offset" => {
             let ptr = get_param(decl, first_real_arg);

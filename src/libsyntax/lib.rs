@@ -27,16 +27,15 @@ This API is completely unstable and subject to change.
       html_root_url = "http://static.rust-lang.org/doc/master")];
 
 #[feature(macro_rules, globs, managed_boxes)];
+#[allow(unknown_features)];// Note: remove it after a snapshot.
+#[feature(quote)];
 
 #[deny(non_camel_case_types)];
+#[allow(visible_private_types)];
 
-extern mod extra;
-extern mod term;
-
-#[cfg(stage0)]
-macro_rules! if_ok (
-    ($e:expr) => (match $e { Ok(e) => e, Err(e) => return Err(e) })
-)
+extern crate serialize;
+extern crate term;
+extern crate collections;
 
 pub mod util {
     pub mod interner;

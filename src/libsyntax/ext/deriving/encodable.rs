@@ -10,19 +10,21 @@
 
 /*!
 
-The compiler code necessary to implement the #[deriving(Encodable)]
-(and Decodable, in decodable.rs) extension.  The idea here is that
-type-defining items may be tagged with #[deriving(Encodable,
-Decodable)].
+The compiler code necessary to implement the `#[deriving(Encodable)]`
+(and `Decodable`, in decodable.rs) extension.  The idea here is that
+type-defining items may be tagged with `#[deriving(Encodable, Decodable)]`.
 
 For example, a type like:
 
-    #[deriving(Encodable, Decodable)]
-    struct Node {id: uint}
+```ignore
+#[deriving(Encodable, Decodable)]
+struct Node { id: uint }
+```
 
 would generate two implementations like:
 
-impl<S:extra::serialize::Encoder> Encodable<S> for Node {
+```ignore
+impl<S:serialize::Encoder> Encodable<S> for Node {
     fn encode(&self, s: &S) {
         s.emit_struct("Node", 1, || {
             s.emit_field("id", 0, || s.emit_uint(self.id))
@@ -39,15 +41,19 @@ impl<D:Decoder> Decodable for node_id {
         })
     }
 }
+```
 
 Other interesting scenarios are whe the item has type parameters or
 references other non-built-in types.  A type definition like:
 
-    #[deriving(Encodable, Decodable)]
-    struct spanned<T> {node: T, span: Span}
+```ignore
+#[deriving(Encodable, Decodable)]
+struct spanned<T> { node: T, span: Span }
+```
 
 would yield functions like:
 
+```ignore
     impl<
         S: Encoder,
         T: Encodable<S>
@@ -73,34 +79,36 @@ would yield functions like:
             })
         }
     }
+```
 */
 
-use ast::{MetaItem, Item, Expr, MutImmutable, MutMutable};
+use ast::{MetaItem, Item, Expr, MutMutable};
 use codemap::Span;
 use ext::base::ExtCtxt;
 use ext::build::AstBuilder;
 use ext::deriving::generic::*;
 use parse::token;
 
-pub fn expand_deriving_encodable(cx: &ExtCtxt,
+pub fn expand_deriving_encodable(cx: &mut ExtCtxt,
                                  span: Span,
                                  mitem: @MetaItem,
-                                 in_items: ~[@Item]) -> ~[@Item] {
+                                 item: @Item,
+                                 push: |@Item|) {
     let trait_def = TraitDef {
-        cx: cx, span: span,
-
-        path: Path::new_(~["extra", "serialize", "Encodable"], None,
+        span: span,
+        attributes: ~[],
+        path: Path::new_(~["serialize", "Encodable"], None,
                          ~[~Literal(Path::new_local("__E"))], true),
         additional_bounds: ~[],
         generics: LifetimeBounds {
             lifetimes: ~[],
-            bounds: ~[("__E", ~[Path::new(~["extra", "serialize", "Encoder"])])],
+            bounds: ~[("__E", ~[Path::new(~["serialize", "Encoder"])])],
         },
         methods: ~[
             MethodDef {
                 name: "encode",
                 generics: LifetimeBounds::empty(),
-                explicit_self: Some(Some(Borrowed(None, MutImmutable))),
+                explicit_self: borrowed_explicit_self(),
                 args: ~[Ptr(~Literal(Path::new_local("__E")),
                             Borrowed(None, MutMutable))],
                 ret_ty: nil_ty(),
@@ -111,10 +119,10 @@ pub fn expand_deriving_encodable(cx: &ExtCtxt,
         ]
     };
 
-    trait_def.expand(mitem, in_items)
+    trait_def.expand(cx, mitem, item, push)
 }
 
-fn encodable_substructure(cx: &ExtCtxt, trait_span: Span,
+fn encodable_substructure(cx: &mut ExtCtxt, trait_span: Span,
                           substr: &Substructure) -> @Expr {
     let encoder = substr.nonself_args[0];
     // throw an underscore in front to suppress unused variable warnings
@@ -133,7 +141,7 @@ fn encodable_substructure(cx: &ExtCtxt, trait_span: Span,
                     ..
                 }) in fields.iter().enumerate() {
                 let name = match name {
-                    Some(id) => token::get_ident(id.name),
+                    Some(id) => token::get_ident(id),
                     None => {
                         token::intern_and_get_ident(format!("_field{}", i))
                     }
@@ -153,8 +161,7 @@ fn encodable_substructure(cx: &ExtCtxt, trait_span: Span,
                                 encoder,
                                 cx.ident_of("emit_struct"),
                                 ~[
-                cx.expr_str(trait_span,
-                            token::get_ident(substr.type_ident.name)),
+                cx.expr_str(trait_span, token::get_ident(substr.type_ident)),
                 cx.expr_uint(trait_span, fields.len()),
                 blk
             ])
@@ -180,8 +187,7 @@ fn encodable_substructure(cx: &ExtCtxt, trait_span: Span,
             }
 
             let blk = cx.lambda_stmts_1(trait_span, stmts, blkarg);
-            let name = cx.expr_str(trait_span,
-                                   token::get_ident(variant.node.name.name));
+            let name = cx.expr_str(trait_span, token::get_ident(variant.node.name));
             let call = cx.expr_method_call(trait_span, blkencoder,
                                            cx.ident_of("emit_enum_variant"),
                                            ~[name,
@@ -193,8 +199,7 @@ fn encodable_substructure(cx: &ExtCtxt, trait_span: Span,
                                           encoder,
                                           cx.ident_of("emit_enum"),
                                           ~[
-                cx.expr_str(trait_span,
-                            token::get_ident(substr.type_ident.name)),
+                cx.expr_str(trait_span, token::get_ident(substr.type_ident)),
                 blk
             ]);
             cx.expr_block(cx.block(trait_span, ~[me], Some(ret)))

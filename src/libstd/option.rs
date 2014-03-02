@@ -42,16 +42,13 @@ use clone::Clone;
 use clone::DeepClone;
 use cmp::{Eq, TotalEq, TotalOrd};
 use default::Default;
-use fmt;
 use iter::{Iterator, DoubleEndedIterator, FromIterator, ExactSize};
 use kinds::Send;
-use str::OwnedStr;
-use to_str::ToStr;
-use util;
+use mem;
 use vec;
 
 /// The option type
-#[deriving(Clone, DeepClone, Eq, Ord, TotalEq, TotalOrd, ToStr)]
+#[deriving(Clone, DeepClone, Eq, Ord, TotalEq, TotalOrd, Show)]
 pub enum Option<T> {
     /// No value
     None,
@@ -285,7 +282,7 @@ impl<T> Option<T> {
     /// Take the value out of the option, leaving a `None` in its place.
     #[inline]
     pub fn take(&mut self) -> Option<T> {
-        util::replace(self, None)
+        mem::replace(self, None)
     }
 
     /// Filters an optional value using a given function.
@@ -380,16 +377,6 @@ impl<T: Default> Option<T> {
 // Trait implementations
 /////////////////////////////////////////////////////////////////////////////
 
-impl<T: fmt::Show> fmt::Show for Option<T> {
-    #[inline]
-    fn fmt(s: &Option<T>, f: &mut fmt::Formatter) -> fmt::Result {
-        match *s {
-            Some(ref t) => write!(f.buf, "Some({})", *t),
-            None        => write!(f.buf, "None")
-        }
-    }
-}
-
 impl<T> Default for Option<T> {
     #[inline]
     fn default() -> Option<T> { None }
@@ -480,7 +467,6 @@ mod tests {
 
     use iter::range;
     use str::StrSlice;
-    use util;
     use kinds::marker;
     use vec::ImmutableVector;
 

@@ -24,13 +24,18 @@
 //! // ... something using html
 //! ```
 
+#[allow(non_camel_case_types)];
+
 use std::cast;
 use std::fmt;
 use std::io;
 use std::libc;
+use std::mem;
 use std::str;
-use std::unstable::intrinsics;
+use std::intrinsics;
 use std::vec;
+
+use html::highlight;
 
 /// A unit struct which has the `fmt::Show` trait implemented. When
 /// formatted, this struct will emit the HTML corresponding to the rendered
@@ -92,6 +97,7 @@ extern {
     fn sd_markdown_free(md: *sd_markdown);
 
     fn bufnew(unit: libc::size_t) -> *buf;
+    fn bufputs(b: *buf, c: *libc::c_char);
     fn bufrelease(b: *buf);
 
 }
@@ -124,7 +130,27 @@ pub fn render(w: &mut io::Writer, s: &str) -> fmt::Result {
                     asize: text.len() as libc::size_t,
                     unit: 0,
                 };
-                (my_opaque.dfltblk)(ob, &buf, lang, opaque);
+                let rendered = if lang.is_null() {
+                    false
+                } else {
+                    vec::raw::buf_as_slice((*lang).data,
+                                           (*lang).size as uint, |rlang| {
+                        let rlang = str::from_utf8(rlang).unwrap();
+                        if rlang.contains("notrust") {
+                            (my_opaque.dfltblk)(ob, &buf, lang, opaque);
+                            true
+                        } else {
+                            false
+                        }
+                    })
+                };
+
+                if !rendered {
+                    let output = highlight::highlight(text, None).to_c_str();
+                    output.with_ref(|r| {
+                        bufputs(ob, r)
+                    })
+                }
             })
         }
     }
@@ -144,7 +170,7 @@ pub fn render(w: &mut io::Writer, s: &str) -> fmt::Result {
             flags: 0,
             link_attributes: None,
         };
-        let mut callbacks: sd_callbacks = intrinsics::init();
+        let mut callbacks: sd_callbacks = mem::init();
 
         sdhtml_renderer(&callbacks, &options, 0);
         let opaque = my_opaque {
@@ -171,21 +197,24 @@ pub fn render(w: &mut io::Writer, s: &str) -> fmt::Result {
 pub fn find_testable_code(doc: &str, tests: &mut ::test::Collector) {
     extern fn block(_ob: *buf, text: *buf, lang: *buf, opaque: *libc::c_void) {
         unsafe {
-            if text.is_null() || lang.is_null() { return }
-            let (test, shouldfail, ignore) =
+            if text.is_null() { return }
+            let (shouldfail, ignore) = if lang.is_null() {
+                (false, false)
+            } else {
                 vec::raw::buf_as_slice((*lang).data,
                                        (*lang).size as uint, |lang| {
                     let s = str::from_utf8(lang).unwrap();
-                    (s.contains("rust"), s.contains("should_fail"),
-                     s.contains("ignore"))
-                });
-            if !test { return }
+                    (s.contains("should_fail"), s.contains("ignore") ||
+                                                s.contains("notrust"))
+                })
+            };
+            if ignore { return }
             vec::raw::buf_as_slice((*text).data, (*text).size as uint, |text| {
                 let tests: &mut ::test::Collector = intrinsics::transmute(opaque);
                 let text = str::from_utf8(text).unwrap();
                 let mut lines = text.lines().map(|l| stripped_filtered_line(l).unwrap_or(l));
                 let text = lines.to_owned_vec().connect("\n");
-                tests.add_test(text, ignore, shouldfail);
+                tests.add_test(text, shouldfail);
             })
         }
     }
@@ -197,7 +226,7 @@ pub fn find_testable_code(doc: &str, tests: &mut ::test::Collector) {
                          MKDEXT_STRIKETHROUGH;
         let callbacks = sd_callbacks {
             blockcode: block,
-            other: intrinsics::init()
+            other: mem::init()
         };
 
         let tests = tests as *mut ::test::Collector as *libc::c_void;
@@ -211,8 +240,8 @@ pub fn find_testable_code(doc: &str, tests: &mut ::test::Collector) {
 }
 
 impl<'a> fmt::Show for Markdown<'a> {
-    fn fmt(md: &Markdown<'a>, fmt: &mut fmt::Formatter) -> fmt::Result {
-        let Markdown(md) = *md;
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        let Markdown(md) = *self;
         // This is actually common enough to special-case
         if md.len() == 0 { return Ok(()) }
         render(fmt.buf, md.as_slice())

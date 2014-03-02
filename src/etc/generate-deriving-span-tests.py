@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# xfail-license
+#
 # Copyright 2013 The Rust Project Developers. See the COPYRIGHT
 # file at the top-level directory of this distribution and at
 # http://rust-lang.org/COPYRIGHT.
@@ -38,7 +38,7 @@ TEMPLATE = """// Copyright {year} The Rust Project Developers. See the COPYRIGHT
 // This file was auto-generated using 'src/etc/generate-keyword-span-tests.py'
 
 #[feature(struct_variant)];
-extern mod extra;
+extern crate extra;
 
 {error_deriving}
 struct Error;
@@ -118,7 +118,9 @@ traits = {
 for (trait, supers, errs) in [('Rand', [], 1),
                               ('Clone', [], 1), ('DeepClone', ['Clone'], 1),
                               ('Eq', [], 2), ('Ord', [], 8),
-                              ('TotalEq', [], 1), ('TotalOrd', ['TotalEq'], 1)]:
+                              ('TotalEq', [], 1), ('TotalOrd', ['TotalEq'], 1),
+                              ('Show', [], 1),
+                              ('Hash', [], 1)]:
     traits[trait] = (ALL, supers, errs)
 
 for (trait, (types, super_traits, error_count)) in traits.items():

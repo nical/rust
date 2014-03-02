@@ -18,8 +18,7 @@ use parse::token;
 use parse::lexer::TokenAndSpan;
 
 use std::cell::{Cell, RefCell};
-use std::hashmap::HashMap;
-use std::option;
+use collections::HashMap;
 
 ///an unzipping of `TokenTree`s
 struct TtFrame {
@@ -49,15 +48,15 @@ pub struct TtReader {
 pub fn new_tt_reader(sp_diag: @SpanHandler,
                      interp: Option<HashMap<Ident, @NamedMatch>>,
                      src: ~[ast::TokenTree])
-                     -> @TtReader {
-    let r = @TtReader {
+                     -> TtReader {
+    let r = TtReader {
         sp_diag: sp_diag,
         stack: RefCell::new(@TtFrame {
             forest: @src,
             idx: Cell::new(0u),
             dotdotdoted: false,
             sep: None,
-            up: option::None
+            up: None
         }),
         interpolations: match interp { /* just a convienience */
             None => RefCell::new(HashMap::new()),
@@ -69,7 +68,7 @@ pub fn new_tt_reader(sp_diag: @SpanHandler,
         cur_tok: RefCell::new(EOF),
         cur_span: RefCell::new(DUMMY_SP),
     };
-    tt_next_token(r); /* get cur_tok and cur_span set up */
+    tt_next_token(&r); /* get cur_tok and cur_span set up */
     return r;
 }
 
@@ -86,8 +85,8 @@ fn dup_tt_frame(f: @TtFrame) -> @TtFrame {
     }
 }
 
-pub fn dup_tt_reader(r: @TtReader) -> @TtReader {
-    @TtReader {
+pub fn dup_tt_reader(r: &TtReader) -> TtReader {
+    TtReader {
         sp_diag: r.sp_diag,
         stack: RefCell::new(dup_tt_frame(r.stack.get())),
         repeat_idx: r.repeat_idx.clone(),
@@ -122,10 +121,9 @@ fn lookup_cur_matched(r: &TtReader, name: Ident) -> @NamedMatch {
     match matched_opt {
         Some(s) => lookup_cur_matched_by_matched(r, s),
         None => {
-            let name_string = token::get_ident(name.name);
             r.sp_diag.span_fatal(r.cur_span.get(),
                                  format!("unknown macro variable `{}`",
-                                         name_string.get()));
+                                         token::get_ident(name)));
         }
     }
 }
@@ -141,16 +139,16 @@ fn lis_merge(lhs: LockstepIterSize, rhs: LockstepIterSize) -> LockstepIterSize {
     match lhs {
         LisUnconstrained => rhs.clone(),
         LisContradiction(_) => lhs.clone(),
-        LisConstraint(l_len, ref l_id) => match rhs {
+        LisConstraint(l_len, l_id) => match rhs {
             LisUnconstrained => lhs.clone(),
             LisContradiction(_) => rhs.clone(),
             LisConstraint(r_len, _) if l_len == r_len => lhs.clone(),
-            LisConstraint(r_len, ref r_id) => {
-                let l_n = token::get_ident(l_id.name);
-                let r_n = token::get_ident(r_id.name);
-                LisContradiction(format!("Inconsistent lockstep iteration: \
+            LisConstraint(r_len, r_id) => {
+                let l_n = token::get_ident(l_id);
+                let r_n = token::get_ident(r_id);
+                LisContradiction(format!("inconsistent lockstep iteration: \
                                           '{}' has {} items, but '{}' has {}",
-                                          l_n.get(), l_len, r_n.get(), r_len))
+                                          l_n, l_len, r_n, r_len))
             }
         }
     }
@@ -240,7 +238,7 @@ pub fn tt_next_token(r: &TtReader) -> TokenAndSpan {
                 idx: Cell::new(0u),
                 dotdotdoted: false,
                 sep: None,
-                up: option::Some(r.stack.get())
+                up: Some(r.stack.get())
             });
             // if this could be 0-length, we'd need to potentially recur here
           }
@@ -314,11 +312,10 @@ pub fn tt_next_token(r: &TtReader) -> TokenAndSpan {
                 return ret_val;
               }
               MatchedSeq(..) => {
-                let string = token::get_ident(ident.name);
                 r.sp_diag.span_fatal(
                     r.cur_span.get(), /* blame the macro writer */
                     format!("variable '{}' is still repeating at this depth",
-                            string.get()));
+                            token::get_ident(ident)));
               }
             }
           }

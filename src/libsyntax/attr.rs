@@ -20,7 +20,7 @@ use parse::token::InternedString;
 use parse::token;
 use crateid::CrateId;
 
-use std::hashmap::HashSet;
+use collections::HashSet;
 
 pub trait AttrMetaMethods {
     // This could be changed to `fn check_name(&self, name: InternedString) ->
@@ -341,7 +341,7 @@ pub struct Stability {
 }
 
 /// The available stability levels.
-#[deriving(Eq,Ord,Clone,ToStr)]
+#[deriving(Eq,Ord,Clone,Show)]
 pub enum StabilityLevel {
     Deprecated,
     Experimental,
@@ -455,7 +455,7 @@ fn int_type_of_word(s: &str) -> Option<IntType> {
     }
 }
 
-#[deriving(Eq)]
+#[deriving(Eq, Show)]
 pub enum ReprAttr {
     ReprAny,
     ReprInt(Span, IntType),
@@ -472,7 +472,7 @@ impl ReprAttr {
     }
 }
 
-#[deriving(Eq)]
+#[deriving(Eq, Show)]
 pub enum IntType {
     SignedInt(ast::IntTy),
     UnsignedInt(ast::UintTy)

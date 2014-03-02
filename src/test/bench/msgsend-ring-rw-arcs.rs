@@ -15,16 +15,16 @@
 
 // This also serves as a pipes test, because Arcs are implemented with pipes.
 
-extern mod extra;
+extern crate sync;
+extern crate time;
 
-use extra::arc;
-use extra::future::Future;
-use extra::time;
+use sync::RWArc;
+use sync::Future;
 use std::os;
 use std::uint;
 
 // A poor man's pipe.
-type pipe = arc::RWArc<~[uint]>;
+type pipe = RWArc<~[uint]>;
 
 fn send(p: &pipe, msg: uint) {
     p.write_cond(|state, cond| {
@@ -42,7 +42,7 @@ fn recv(p: &pipe) -> uint {
 }
 
 fn init() -> (pipe,pipe) {
-    let x = arc::RWArc::new(~[]);
+    let x = RWArc::new(~[]);
     ((&x).clone(), x)
 }
 

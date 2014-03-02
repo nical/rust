@@ -42,7 +42,7 @@ disabled except for `error!` (a log level of 1). Logging is controlled via the
 `RUST_LOG` environment variable. The value of this environment variable is a
 comma-separated list of logging directives. A logging directive is of the form:
 
-```
+```ignore
 path::to::module=log_level
 ```
 
@@ -65,12 +65,12 @@ all modules is set to this value.
 
 Some examples of valid values of `RUST_LOG` are:
 
-```
+```ignore
 hello                // turns on all logging for the 'hello' module
 info                 // turns on all info logging
 hello=debug          // turns on debug logging for 'hello'
 hello=3              // turns on info logging for 'hello'
-hello,std::hashmap   // turns on hello, and std's hashmap logging
+hello,std::option    // turns on hello, and std's option logging
 error,hello=warn     // turn on global error logging and also warn for hello
 ```
 
@@ -99,13 +99,13 @@ use fmt;
 use io::LineBufferedWriter;
 use io;
 use io::Writer;
+use mem::replace;
 use ops::Drop;
 use option::{Some, None, Option};
 use prelude::drop;
 use result::{Ok, Err};
 use rt::local::Local;
 use rt::task::Task;
-use util;
 
 /// Debug log level
 pub static DEBUG: u32 = 4;
@@ -166,14 +166,12 @@ pub fn log(level: u32, args: &fmt::Arguments) {
     };
 
     if logger.is_none() {
-        logger = Some(~DefaultLogger {
-            handle: LineBufferedWriter::new(io::stderr()),
-        } as ~Logger);
+        logger = Some(~DefaultLogger { handle: io::stderr(), } as ~Logger);
     }
     logger.get_mut_ref().log(level, args);
 
     let mut task = Local::borrow(None::<Task>);
-    let prev = util::replace(&mut task.get().logger, logger);
+    let prev = replace(&mut task.get().logger, logger);
     drop(task);
     drop(prev);
 }
@@ -182,5 +180,5 @@ pub fn log(level: u32, args: &fmt::Arguments) {
 /// logger.
 pub fn set_logger(logger: ~Logger) -> Option<~Logger> {
     let mut task = Local::borrow(None::<Task>);
-    util::replace(&mut task.get().logger, Some(logger))
+    replace(&mut task.get().logger, Some(logger))
 }

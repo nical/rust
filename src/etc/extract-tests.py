@@ -1,5 +1,13 @@
-# xfail-license
-# -*- coding: utf-8 -*-
+# Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
+# file at the top-level directory of this distribution and at
+# http://rust-lang.org/COPYRIGHT.
+#
+# Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+# http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+# <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+# option. This file may not be copied, modified, or distributed
+# except according to those terms.
+
 """
 Script for extracting compilable fragments from markdown documentation. See
 prep.js for a description of the format recognized by this tool. Expects
@@ -20,7 +28,7 @@ CODE_BLOCK_DELIM_REGEX = re.compile(r'~~~')
 COMMENT_REGEX = re.compile(r'^# ')
 COMPILER_DIRECTIVE_REGEX = re.compile(r'\#\[(.*)\];')
 ELLIPSES_REGEX = re.compile(r'\.\.\.')
-EXTERN_MOD_REGEX = re.compile(r'\bextern mod extra\b')
+EXTERN_CRATE_REGEX = re.compile(r'\bextern crate extra\b')
 MAIN_FUNCTION_REGEX = re.compile(r'\bfn main\b')
 TAGS_REGEX = re.compile(r'\.([\w-]*)')
 
@@ -41,12 +49,12 @@ OUTPUT_BLOCK_HEADER = '\n'.join((
 
 def add_extern_mod(block):
     if not has_extern_mod(block):
-        # add `extern mod extra;` after compiler directives
+        # add `extern crate extra;` after compiler directives
         directives = []
         while len(block) and is_compiler_directive(block[0]):
             directives.append(block.popleft())
 
-        block.appendleft("\nextern mod extra;\n\n")
+        block.appendleft("\nextern crate extra;\n\n")
         block.extendleft(reversed(directives))
 
     return block
@@ -91,7 +99,7 @@ def extract_code_fragments(dest_dir, lines):
         block.appendleft(OUTPUT_BLOCK_HEADER)
 
         if "ignore" in tags:
-            block.appendleft("//xfail-test\n")
+            block.appendleft("//ignore-test\n")
         elif "should_fail" in tags:
             block.appendleft("//should-fail\n")
 
@@ -104,8 +112,8 @@ def extract_code_fragments(dest_dir, lines):
 
 
 def has_extern_mod(block):
-    """Checks if a code block has the line `extern mod extra`."""
-    find_extern_mod = lambda x: re.search(EXTERN_MOD_REGEX, x)
+    """Checks if a code block has the line `extern crate extra`."""
+    find_extern_mod = lambda x: re.search(EXTERN_CRATE_REGEX, x)
     return any(imap(find_extern_mod, block))
 
 

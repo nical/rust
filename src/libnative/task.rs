@@ -18,12 +18,12 @@ use std::cast;
 use std::rt::env;
 use std::rt::local::Local;
 use std::rt::rtio;
-use std::rt::task::{Task, BlockedTask};
+use std::rt::task::{Task, BlockedTask, SendMessage};
 use std::rt::thread::Thread;
 use std::rt;
 use std::task::TaskOpts;
-use std::unstable::mutex::Mutex;
-use std::unstable::stack;
+use std::unstable::mutex::NativeMutex;
+use std::rt::stack;
 
 use io;
 use task;
@@ -40,7 +40,7 @@ pub fn new(stack_bounds: (uint, uint)) -> ~Task {
 
 fn ops() -> ~Ops {
     ~Ops {
-        lock: unsafe { Mutex::new() },
+        lock: unsafe { NativeMutex::new() },
         awoken: false,
         io: io::IoFactory::new(),
         // these *should* get overwritten
@@ -57,7 +57,6 @@ pub fn spawn(f: proc()) {
 /// inside the task.
 pub fn spawn_opts(opts: TaskOpts, f: proc()) {
     let TaskOpts {
-        watched: _watched,
         notify_chan, name, stack_size,
         logger, stderr, stdout,
     } = opts;
@@ -68,10 +67,7 @@ pub fn spawn_opts(opts: TaskOpts, f: proc()) {
     task.stderr = stderr;
     task.stdout = stdout;
     match notify_chan {
-        Some(chan) => {
-            let on_exit = proc(task_result) { chan.send(task_result) };
-            task.death.on_exit = Some(on_exit);
-        }
+        Some(chan) => { task.death.on_exit = Some(SendMessage(chan)); }
         None => {}
     }
 
@@ -112,7 +108,7 @@ pub fn spawn_opts(opts: TaskOpts, f: proc()) {
 // This structure is the glue between channels and the 1:1 scheduling mode. This
 // structure is allocated once per task.
 struct Ops {
-    lock: Mutex,       // native synchronization
+    lock: NativeMutex,       // native synchronization
     awoken: bool,      // used to prevent spurious wakeups
     io: io::IoFactory, // local I/O factory
 
@@ -190,24 +186,23 @@ impl rt::Runtime for Ops {
         cur_task.put_runtime(self as ~rt::Runtime);
 
         unsafe {
-            let cur_task_dupe = *cast::transmute::<&~Task, &uint>(&cur_task);
+            let cur_task_dupe = &*cur_task as *Task;
             let task = BlockedTask::block(cur_task);
 
             if times == 1 {
-                (*me).lock.lock();
+                let mut guard = (*me).lock.lock();
                 (*me).awoken = false;
                 match f(task) {
                     Ok(()) => {
                         while !(*me).awoken {
-                            (*me).lock.wait();
+                            guard.wait();
                         }
                     }
                     Err(task) => { cast::forget(task.wake()); }
                 }
-                (*me).lock.unlock();
             } else {
                 let mut iter = task.make_selectable(times);
-                (*me).lock.lock();
+                let mut guard = (*me).lock.lock();
                 (*me).awoken = false;
                 let success = iter.all(|task| {
                     match f(task) {
@@ -219,12 +214,11 @@ impl rt::Runtime for Ops {
                     }
                 });
                 while success && !(*me).awoken {
-                    (*me).lock.wait();
+                    guard.wait();
                 }
-                (*me).lock.unlock();
             }
             // re-acquire ownership of the task
-            cur_task = cast::transmute::<uint, ~Task>(cur_task_dupe);
+            cur_task = cast::transmute(cur_task_dupe);
         }
 
         // put the task back in TLS, and everything is as it once was.
@@ -238,10 +232,9 @@ impl rt::Runtime for Ops {
             let me = &mut *self as *mut Ops;
             to_wake.put_runtime(self as ~rt::Runtime);
             cast::forget(to_wake);
-            (*me).lock.lock();
+            let mut guard = (*me).lock.lock();
             (*me).awoken = true;
-            (*me).lock.signal();
-            (*me).lock.unlock();
+            guard.signal();
         }
     }
 
@@ -254,12 +247,6 @@ impl rt::Runtime for Ops {
 
     fn local_io<'a>(&'a mut self) -> Option<rtio::LocalIo<'a>> {
         Some(rtio::LocalIo::new(&mut self.io as &mut rtio::IoFactory))
-    }
-}
-
-impl Drop for Ops {
-    fn drop(&mut self) {
-        unsafe { self.lock.destroy() }
     }
 }
 
@@ -294,7 +281,7 @@ mod tests {
     #[test]
     fn smoke_opts() {
         let mut opts = TaskOpts::new();
-        opts.name = Some(SendStrStatic("test"));
+        opts.name = Some("test".into_maybe_owned());
         opts.stack_size = Some(20 * 4096);
         let (p, c) = Chan::new();
         opts.notify_chan = Some(c);

@@ -8,6 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#[allow(non_camel_case_types)];
 
 use middle::trans::adt;
 use middle::trans::common::*;
@@ -119,8 +120,7 @@ pub fn sizing_type_of(cx: &CrateContext, t: ty::t) -> Type {
         ty::ty_box(..) |
         ty::ty_uniq(..) |
         ty::ty_ptr(..) |
-        ty::ty_rptr(..) |
-        ty::ty_type => Type::i8p(),
+        ty::ty_rptr(..) => Type::i8p(),
 
         ty::ty_str(ty::vstore_slice(..)) |
         ty::ty_vec(_, ty::vstore_slice(..)) => {
@@ -129,7 +129,7 @@ pub fn sizing_type_of(cx: &CrateContext, t: ty::t) -> Type {
 
         ty::ty_bare_fn(..) => Type::i8p(),
         ty::ty_closure(..) => Type::struct_([Type::i8p(), Type::i8p()], false),
-        ty::ty_trait(_, _, store, _, _) => Type::opaque_trait(cx, store),
+        ty::ty_trait(..) => Type::opaque_trait(),
 
         ty::ty_str(ty::vstore_fixed(size)) => Type::array(&Type::i8(), size as u64),
         ty::ty_vec(mt, ty::vstore_fixed(size)) => {
@@ -262,8 +262,7 @@ pub fn type_of(cx: &CrateContext, t: ty::t) -> Type {
           let fn_ty = type_of_fn_from_ty(cx, t).ptr_to();
           Type::struct_([fn_ty, Type::i8p()], false)
       }
-      ty::ty_trait(_, _, store, _, _) => Type::opaque_trait(cx, store),
-      ty::ty_type => cx.tydesc_type.ptr_to(),
+      ty::ty_trait(..) => Type::opaque_trait(),
       ty::ty_tup(..) => {
           let repr = adt::represent_type(cx, t);
           adt::type_of(cx, repr)
@@ -323,10 +322,10 @@ pub fn llvm_type_name(cx: &CrateContext,
     let tstr = ppaux::parameterized(cx.tcx, ty::item_path_str(cx.tcx, did),
                                     &ty::NonerasedRegions(opt_vec::Empty),
                                     tps, did, false);
-    if did.crate == 0 {
+    if did.krate == 0 {
         format!("{}.{}", name, tstr)
     } else {
-        format!("{}.{}[\\#{}]", name, tstr, did.crate)
+        format!("{}.{}[\\#{}]", name, tstr, did.krate)
     }
 }
 

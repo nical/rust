@@ -41,9 +41,11 @@ local_data::get(key_vector, |opt| assert_eq!(*opt.unwrap(), ~[4]));
 // magic.
 
 use cast;
-use prelude::*;
+use option::{None, Option, Some};
+use vec::{ImmutableVector, MutableVector, OwnedVector};
+use iter::{Iterator};
 use rt::task::{Task, LocalStorage};
-use util::replace;
+use mem::replace;
 
 /**
  * Indexes a task-local data slot. This pointer is used for comparison to
@@ -147,7 +149,7 @@ pub fn pop<T: 'static>(key: Key<T>) -> Option<T> {
                     fail!("TLS value cannot be removed because it is currently \
                           borrowed as {}", loan.describe());
                 }
-                // Move the data out of the `entry` slot via util::replace.
+                // Move the data out of the `entry` slot via prelude::replace.
                 // This is guaranteed to succeed because we already matched
                 // on `Some` above.
                 let data = match replace(entry, None) {
@@ -279,7 +281,7 @@ fn get_with<T:'static,
 }
 
 fn abort() -> ! {
-    use std::unstable::intrinsics;
+    use intrinsics;
     unsafe { intrinsics::abort() }
 }
 

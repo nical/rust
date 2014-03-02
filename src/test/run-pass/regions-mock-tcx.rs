@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast `use` standards don't resolve
+// ignore-fast `use` standards don't resolve
 
 // Test a sample usage pattern for regions. Makes use of the
 // following features:
@@ -16,16 +16,18 @@
 // - Multiple lifetime parameters
 // - Arenas
 
-extern mod arena;
+extern crate arena;
+extern crate collections;
 
 use arena::Arena;
-use std::hashmap::HashMap;
+use collections::HashMap;
 use std::cast;
 use std::libc;
 use std::mem;
 
 type Type<'tcx> = &'tcx TypeStructure<'tcx>;
 
+#[deriving(Show)]
 enum TypeStructure<'tcx> {
     TypeInt,
     TypeFunction(Type<'tcx>, Type<'tcx>),
@@ -84,7 +86,7 @@ impl<'tcx,'ast> TypeContext<'tcx, 'ast> {
     }
 }
 
-#[deriving(Eq, IterBytes)]
+#[deriving(Eq, Hash)]
 struct NodeId {
     id: uint
 }

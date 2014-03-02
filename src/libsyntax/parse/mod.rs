@@ -14,7 +14,7 @@
 use ast;
 use codemap::{Span, CodeMap, FileMap};
 use codemap;
-use diagnostic::{SpanHandler, mk_span_handler, mk_handler, Emitter};
+use diagnostic::{SpanHandler, mk_span_handler, default_handler};
 use parse::attr::ParserAttr;
 use parse::parser::Parser;
 
@@ -45,11 +45,11 @@ pub struct ParseSess {
     included_mod_stack: RefCell<~[Path]>,
 }
 
-pub fn new_parse_sess(demitter: Option<@Emitter>) -> @ParseSess {
+pub fn new_parse_sess() -> @ParseSess {
     let cm = @CodeMap::new();
     @ParseSess {
         cm: cm,
-        span_diagnostic: mk_span_handler(mk_handler(demitter), cm),
+        span_diagnostic: mk_span_handler(default_handler(), cm),
         included_mod_stack: RefCell::new(~[]),
     }
 }
@@ -74,7 +74,7 @@ pub fn parse_crate_from_file(
     cfg: ast::CrateConfig,
     sess: @ParseSess
 ) -> ast::Crate {
-    new_parser_from_file(sess, /*bad*/ cfg.clone(), input).parse_crate_mod()
+    new_parser_from_file(sess, cfg, input).parse_crate_mod()
     // why is there no p.abort_if_errors here?
 }
 
@@ -94,7 +94,7 @@ pub fn parse_crate_from_source_str(name: ~str,
                                    sess: @ParseSess)
                                    -> ast::Crate {
     let mut p = new_parser_from_source_str(sess,
-                                           /*bad*/ cfg.clone(),
+                                           cfg,
                                            name,
                                            source);
     maybe_aborted(p.parse_crate_mod(),p)
@@ -106,7 +106,7 @@ pub fn parse_crate_attrs_from_source_str(name: ~str,
                                          sess: @ParseSess)
                                          -> ~[ast::Attribute] {
     let mut p = new_parser_from_source_str(sess,
-                                           /*bad*/ cfg.clone(),
+                                           cfg,
                                            name,
                                            source);
     let (inner, _) = maybe_aborted(p.parse_inner_attrs_and_next(),p);
@@ -261,7 +261,7 @@ pub fn filemap_to_tts(sess: @ParseSess, filemap: @FileMap)
     // parsing tt's probably shouldn't require a parser at all.
     let cfg = ~[];
     let srdr = lexer::new_string_reader(sess.span_diagnostic, filemap);
-    let mut p1 = Parser(sess, cfg, srdr as @lexer::Reader);
+    let mut p1 = Parser(sess, cfg, ~srdr);
     p1.parse_all_token_trees()
 }
 
@@ -270,7 +270,7 @@ pub fn tts_to_parser(sess: @ParseSess,
                      tts: ~[ast::TokenTree],
                      cfg: ast::CrateConfig) -> Parser {
     let trdr = lexer::new_tt_reader(sess.span_diagnostic, None, tts);
-    Parser(sess, cfg, trdr as @lexer::Reader)
+    Parser(sess, cfg, ~trdr)
 }
 
 // abort if necessary
@@ -284,8 +284,7 @@ pub fn maybe_aborted<T>(result: T, mut p: Parser) -> T {
 #[cfg(test)]
 mod test {
     use super::*;
-    use extra::serialize::Encodable;
-    use extra;
+    use serialize::{json, Encodable};
     use std::io;
     use std::io::MemWriter;
     use std::str;
@@ -300,9 +299,9 @@ mod test {
     use util::parser_testing::string_to_stmt;
 
     #[cfg(test)]
-    fn to_json_str<'a, E: Encodable<extra::json::Encoder<'a>>>(val: &E) -> ~str {
+    fn to_json_str<'a, E: Encodable<json::Encoder<'a>>>(val: &E) -> ~str {
         let mut writer = MemWriter::new();
-        let mut encoder = extra::json::Encoder::new(&mut writer as &mut io::Writer);
+        let mut encoder = json::Encoder::new(&mut writer as &mut io::Writer);
         val.encode(&mut encoder);
         str::from_utf8_owned(writer.unwrap()).unwrap()
     }
@@ -313,7 +312,7 @@ mod test {
     }
 
     #[test] fn path_exprs_1() {
-        assert_eq!(string_to_expr(~"a"),
+        assert!(string_to_expr(~"a") ==
                    @ast::Expr{
                     id: ast::DUMMY_NODE_ID,
                     node: ast::ExprPath(ast::Path {
@@ -332,7 +331,7 @@ mod test {
     }
 
     #[test] fn path_exprs_2 () {
-        assert_eq!(string_to_expr(~"::a::b"),
+        assert!(string_to_expr(~"::a::b") ==
                    @ast::Expr {
                     id: ast::DUMMY_NODE_ID,
                     node: ast::ExprPath(ast::Path {
@@ -363,40 +362,48 @@ mod test {
     // check the token-tree-ization of macros
     #[test] fn string_to_tts_macro () {
         let tts = string_to_tts(~"macro_rules! zip (($a)=>($a))");
+        let tts: &[ast::TokenTree] = tts;
         match tts {
             [ast::TTTok(_,_),
              ast::TTTok(_,token::NOT),
              ast::TTTok(_,_),
-             ast::TTDelim(delim_elts)] =>
-                match *delim_elts {
-                [ast::TTTok(_,token::LPAREN),
-                 ast::TTDelim(first_set),
-                 ast::TTTok(_,token::FAT_ARROW),
-                 ast::TTDelim(second_set),
-                 ast::TTTok(_,token::RPAREN)] =>
-                    match *first_set {
+             ast::TTDelim(delim_elts)] => {
+                let delim_elts: &[ast::TokenTree] = *delim_elts;
+                match delim_elts {
                     [ast::TTTok(_,token::LPAREN),
-                     ast::TTTok(_,token::DOLLAR),
-                     ast::TTTok(_,_),
-                     ast::TTTok(_,token::RPAREN)] =>
-                        match *second_set {
-                        [ast::TTTok(_,token::LPAREN),
-                         ast::TTTok(_,token::DOLLAR),
-                         ast::TTTok(_,_),
-                         ast::TTTok(_,token::RPAREN)] =>
-                            assert_eq!("correct","correct"),
-                        _ => assert_eq!("wrong 4","correct")
+                     ast::TTDelim(first_set),
+                     ast::TTTok(_,token::FAT_ARROW),
+                     ast::TTDelim(second_set),
+                     ast::TTTok(_,token::RPAREN)] => {
+                        let first_set: &[ast::TokenTree] = *first_set;
+                        match first_set {
+                            [ast::TTTok(_,token::LPAREN),
+                             ast::TTTok(_,token::DOLLAR),
+                             ast::TTTok(_,_),
+                             ast::TTTok(_,token::RPAREN)] => {
+                                let second_set: &[ast::TokenTree] =
+                                    *second_set;
+                                match second_set {
+                                    [ast::TTTok(_,token::LPAREN),
+                                     ast::TTTok(_,token::DOLLAR),
+                                     ast::TTTok(_,_),
+                                     ast::TTTok(_,token::RPAREN)] => {
+                                        assert_eq!("correct","correct")
+                                    }
+                                    _ => assert_eq!("wrong 4","correct")
+                                }
+                            },
+                            _ => {
+                                error!("failing value 3: {:?}",first_set);
+                                assert_eq!("wrong 3","correct")
+                            }
+                        }
                     },
                     _ => {
-                        error!("failing value 3: {:?}",first_set);
-                        assert_eq!("wrong 3","correct")
+                        error!("failing value 2: {:?}",delim_elts);
+                        assert_eq!("wrong","correct");
                     }
-                },
-                _ => {
-                    error!("failing value 2: {:?}",delim_elts);
-                    assert_eq!("wrong","correct");
                 }
-
             },
             _ => {
                 error!("failing value: {:?}",tts);
@@ -535,7 +542,7 @@ mod test {
     }
 
     #[test] fn ret_expr() {
-        assert_eq!(string_to_expr(~"return d"),
+        assert!(string_to_expr(~"return d") ==
                    @ast::Expr{
                     id: ast::DUMMY_NODE_ID,
                     node:ast::ExprRet(Some(@ast::Expr{
@@ -558,7 +565,7 @@ mod test {
     }
 
     #[test] fn parse_stmt_1 () {
-        assert_eq!(string_to_stmt(~"b;"),
+        assert!(string_to_stmt(~"b;") ==
                    @Spanned{
                        node: ast::StmtExpr(@ast::Expr {
                            id: ast::DUMMY_NODE_ID,
@@ -585,7 +592,7 @@ mod test {
 
     #[test] fn parse_ident_pat () {
         let mut parser = string_to_parser(~"b");
-        assert_eq!(parser.parse_pat(),
+        assert!(parser.parse_pat() ==
                    @ast::Pat{id: ast::DUMMY_NODE_ID,
                              node: ast::PatIdent(
                                 ast::BindByValue(ast::MutImmutable),
@@ -608,7 +615,7 @@ mod test {
     // check the contents of the tt manually:
     #[test] fn parse_fundecl () {
         // this test depends on the intern order of "fn" and "int"
-        assert_eq!(string_to_item(~"fn a (b : int) { b; }"),
+        assert!(string_to_item(~"fn a (b : int) { b; }") ==
                   Some(
                       @ast::Item{ident:str_to_ident("a"),
                             attrs:~[],

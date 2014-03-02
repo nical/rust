@@ -14,20 +14,20 @@ use ast_util;
 use codemap::Span;
 use opt_vec;
 use parse::token;
+use print::pprust;
 use visit::Visitor;
 use visit;
 
 use std::cell::{Cell, RefCell};
-use std::hashmap::HashMap;
+use std::cmp;
+use collections::HashMap;
 use std::u32;
 use std::local_data;
-use std::num;
 
 pub fn path_name_i(idents: &[Ident]) -> ~str {
     // FIXME: Bad copies (#2543 -- same for everything else that says "bad")
     idents.map(|i| {
-        let string = token::get_ident(i.name);
-        string.get().to_str()
+        token::get_ident(*i).get().to_str()
     }).connect("::")
 }
 
@@ -38,10 +38,10 @@ pub fn path_to_ident(path: &Path) -> Ident {
 }
 
 pub fn local_def(id: NodeId) -> DefId {
-    ast::DefId { crate: LOCAL_CRATE, node: id }
+    ast::DefId { krate: LOCAL_CRATE, node: id }
 }
 
-pub fn is_local(did: ast::DefId) -> bool { did.crate == LOCAL_CRATE }
+pub fn is_local(did: ast::DefId) -> bool { did.krate == LOCAL_CRATE }
 
 pub fn stmt_id(s: &Stmt) -> NodeId {
     match s.node {
@@ -79,48 +79,26 @@ pub fn def_id_of_def(d: Def) -> DefId {
     }
 }
 
-pub fn binop_to_str(op: BinOp) -> ~str {
+pub fn binop_to_str(op: BinOp) -> &'static str {
     match op {
-      BiAdd => return ~"+",
-      BiSub => return ~"-",
-      BiMul => return ~"*",
-      BiDiv => return ~"/",
-      BiRem => return ~"%",
-      BiAnd => return ~"&&",
-      BiOr => return ~"||",
-      BiBitXor => return ~"^",
-      BiBitAnd => return ~"&",
-      BiBitOr => return ~"|",
-      BiShl => return ~"<<",
-      BiShr => return ~">>",
-      BiEq => return ~"==",
-      BiLt => return ~"<",
-      BiLe => return ~"<=",
-      BiNe => return ~"!=",
-      BiGe => return ~">=",
-      BiGt => return ~">"
-    }
-}
-
-pub fn binop_to_method_name(op: BinOp) -> Option<~str> {
-    match op {
-      BiAdd => return Some(~"add"),
-      BiSub => return Some(~"sub"),
-      BiMul => return Some(~"mul"),
-      BiDiv => return Some(~"div"),
-      BiRem => return Some(~"rem"),
-      BiBitXor => return Some(~"bitxor"),
-      BiBitAnd => return Some(~"bitand"),
-      BiBitOr => return Some(~"bitor"),
-      BiShl => return Some(~"shl"),
-      BiShr => return Some(~"shr"),
-      BiLt => return Some(~"lt"),
-      BiLe => return Some(~"le"),
-      BiGe => return Some(~"ge"),
-      BiGt => return Some(~"gt"),
-      BiEq => return Some(~"eq"),
-      BiNe => return Some(~"ne"),
-      BiAnd | BiOr => return None
+        BiAdd => "+",
+        BiSub => "-",
+        BiMul => "*",
+        BiDiv => "/",
+        BiRem => "%",
+        BiAnd => "&&",
+        BiOr => "||",
+        BiBitXor => "^",
+        BiBitAnd => "&",
+        BiBitOr => "|",
+        BiShl => "<<",
+        BiShr => ">>",
+        BiEq => "==",
+        BiLt => "<",
+        BiLe => "<=",
+        BiNe => "!=",
+        BiGe => ">=",
+        BiGt => ">"
     }
 }
 
@@ -246,6 +224,23 @@ pub fn unguarded_pat(a: &Arm) -> Option<~[@Pat]> {
     }
 }
 
+/// Generate a "pretty" name for an `impl` from its type and trait.
+/// This is designed so that symbols of `impl`'d methods give some
+/// hint of where they came from, (previously they would all just be
+/// listed as `__extensions__::method_name::hash`, with no indication
+/// of the type).
+pub fn impl_pretty_name(trait_ref: &Option<TraitRef>, ty: &Ty) -> Ident {
+    let mut pretty = pprust::ty_to_str(ty);
+    match *trait_ref {
+        Some(ref trait_ref) => {
+            pretty.push_char('.');
+            pretty.push_str(pprust::path_to_str(&trait_ref.path));
+        }
+        None => {}
+    }
+    token::gensym_ident(pretty)
+}
+
 pub fn public_methods(ms: ~[@Method]) -> ~[@Method] {
     ms.move_iter().filter(|m| {
         match m.vis {
@@ -343,8 +338,8 @@ impl IdRange {
     }
 
     pub fn add(&mut self, id: NodeId) {
-        self.min = num::min(self.min, id);
-        self.max = num::max(self.max, id + 1);
+        self.min = cmp::min(self.min, id);
+        self.max = cmp::max(self.max, id + 1);
     }
 }
 
@@ -455,12 +450,6 @@ impl<'a, O: IdVisitingOperation> Visitor<()> for IdVisitor<'a, O> {
 
 
     fn visit_expr(&mut self, expression: &Expr, env: ()) {
-        {
-            let optional_callee_id = expression.get_callee_id();
-            for callee_id in optional_callee_id.iter() {
-                self.operation.visit_id(*callee_id)
-            }
-        }
         self.operation.visit_id(expression.id);
         visit::walk_expr(self, expression, env)
     }
@@ -947,7 +936,7 @@ mod test {
     use ast::*;
     use super::*;
     use opt_vec;
-    use std::hashmap::HashMap;
+    use collections::HashMap;
 
     fn ident_to_segment(id : &Ident) -> PathSegment {
         PathSegment {identifier:id.clone(),
@@ -990,7 +979,7 @@ mod test {
 
     // because of the SCTable, I now need a tidy way of
     // creating syntax objects. Sigh.
-    #[deriving(Clone, Eq)]
+    #[deriving(Clone, Eq, Show)]
     enum TestSC {
         M(Mrk),
         R(Ident,Name)
@@ -1035,9 +1024,9 @@ mod test {
         assert_eq!(unfold_test_sc(test_sc.clone(),EMPTY_CTXT,&mut t),4);
         {
             let table = t.table.borrow();
-            assert_eq!(table.get()[2],Mark(9,0));
-            assert_eq!(table.get()[3],Rename(id(101,0),14,2));
-            assert_eq!(table.get()[4],Mark(3,3));
+            assert!(table.get()[2] == Mark(9,0));
+            assert!(table.get()[3] == Rename(id(101,0),14,2));
+            assert!(table.get()[4] == Mark(3,3));
         }
         assert_eq!(refold_test_sc(4,&t),test_sc);
     }
@@ -1056,8 +1045,8 @@ mod test {
         assert_eq!(unfold_marks(~[3,7],EMPTY_CTXT,&mut t),3);
         {
             let table = t.table.borrow();
-            assert_eq!(table.get()[2],Mark(7,0));
-            assert_eq!(table.get()[3],Mark(3,2));
+            assert!(table.get()[2] == Mark(7,0));
+            assert!(table.get()[3] == Mark(3,2));
         }
     }
 

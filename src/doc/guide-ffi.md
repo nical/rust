@@ -176,8 +176,8 @@ and `free`:
 ~~~~
 use std::cast;
 use std::libc::{c_void, size_t, malloc, free};
+use std::mem;
 use std::ptr;
-use std::unstable::intrinsics;
 
 // Define a wrapper around the handle returned by the foreign code.
 // Unique<T> has the same semantics as ~T
@@ -195,11 +195,11 @@ impl<T: Send> Unique<T> {
     pub fn new(value: T) -> Unique<T> {
         unsafe {
             let ptr = malloc(std::mem::size_of::<T>() as size_t) as *mut T;
-            assert!(!ptr::is_null(ptr));
+            assert!(!ptr.is_null());
             // `*ptr` is uninitialized, and `*ptr = value` would attempt to destroy it
             // move_val_init moves a value into this memory without
             // attempting to drop the original value.
-            intrinsics::move_val_init(&mut *ptr, value);
+            mem::move_val_init(&mut *ptr, value);
             Unique{ptr: ptr}
         }
     }
@@ -226,10 +226,10 @@ impl<T: Send> Unique<T> {
 impl<T: Send> Drop for Unique<T> {
     fn drop(&mut self) {
         unsafe {
-            let x = intrinsics::uninit(); // dummy value to swap in
+            let x = mem::uninit(); // dummy value to swap in
             // We need to move the object out of the box, so that
             // the destructor is called (at the end of this scope.)
-            ptr::replace_ptr(self.ptr, x);
+            ptr::replace(self.ptr, x);
             free(self.ptr as *mut c_void)
         }
     }
@@ -306,7 +306,7 @@ which would call back to `callback()` in Rust.
 The former example showed how a global function can be called from C code.
 However it is often desired that the callback is targetted to a special
 Rust object. This could be the object that represents the wrapper for the
-respective C object. 
+respective C object.
 
 This can be achieved by passing an unsafe pointer to the object down to the
 C library. The C library can then include the pointer to the Rust object in
@@ -335,7 +335,7 @@ extern {
 fn main() {
     // Create the object that will be referenced in the callback
     let rust_object = ~RustObject{a: 5, ...};
-     
+
     unsafe {
         // Gets a raw pointer to the object
         let target_addr:*RustObject = ptr::to_unsafe_ptr(rust_object);
@@ -380,8 +380,8 @@ Rust is to use channels (in `std::comm`) to forward data from the C thread
 that invoked the callback into a Rust task.
 
 If an asychronous callback targets a special object in the Rust address space
-it is also absolutely necessary that no more callbacks are performed by the 
-C library after the respective Rust object gets destroyed. 
+it is also absolutely necessary that no more callbacks are performed by the
+C library after the respective Rust object gets destroyed.
 This can be achieved by unregistering the callback in the object's
 destructor and designing the library in a way that guarantees that no
 callback will be performed after unregistration.
@@ -520,7 +520,7 @@ conventions. Rust provides a way to tell the compiler which convention to use:
 
 ~~~~
 #[cfg(target_os = "win32", target_arch = "x86")]
-#[link_name = "kernel32"]
+#[link(name = "kernel32")]
 extern "stdcall" {
     fn SetEnvironmentVariableA(n: *u8, v: *u8) -> std::libc::c_int;
 }

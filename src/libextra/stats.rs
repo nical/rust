@@ -11,10 +11,11 @@
 #[allow(missing_doc)];
 
 use std::cmp;
-use std::hashmap;
+use std::hash::Hash;
 use std::io;
+use std::mem;
 use std::num;
-use std::util;
+use collections::hashmap;
 
 // NB: this can probably be rewritten in terms of num::Num
 // to be less f64-specific.
@@ -178,7 +179,7 @@ impl<'a> Stats for &'a [f64] {
             for i in range(0, partials.len()) {
                 let mut y = partials[i];
                 if num::abs(x) < num::abs(y) {
-                    util::swap(&mut x, &mut y);
+                    mem::swap(&mut x, &mut y);
                 }
                 // Rounded `x+y` is stored in `hi` with round-off stored in
                 // `lo`. Together `hi+lo` are exactly equal to `x+y`.
@@ -341,7 +342,7 @@ pub fn write_5_number_summary(w: &mut io::Writer,
 /// As an example, the summary with 5-number-summary `(min=15, q1=17, med=20, q3=24, max=31)` might
 /// display as:
 ///
-/// ~~~~
+/// ~~~~ignore
 ///   10 |        [--****#******----------]          | 40
 /// ~~~~
 
@@ -376,48 +377,48 @@ pub fn write_boxplot(w: &mut io::Writer, s: &Summary,
     let range_width = width_hint - overhead_width;;
     let char_step = range / (range_width as f64);
 
-    if_ok!(write!(w, "{} |", lostr));
+    try!(write!(w, "{} |", lostr));
 
     let mut c = 0;
     let mut v = lo;
 
     while c < range_width && v < s.min {
-        if_ok!(write!(w, " "));
+        try!(write!(w, " "));
         v += char_step;
         c += 1;
     }
-    if_ok!(write!(w, "["));
+    try!(write!(w, "["));
     c += 1;
     while c < range_width && v < q1 {
-        if_ok!(write!(w, "-"));
+        try!(write!(w, "-"));
         v += char_step;
         c += 1;
     }
     while c < range_width && v < q2 {
-        if_ok!(write!(w, "*"));
+        try!(write!(w, "*"));
         v += char_step;
         c += 1;
     }
-    if_ok!(write!(w, r"\#"));
+    try!(write!(w, r"\#"));
     c += 1;
     while c < range_width && v < q3 {
-        if_ok!(write!(w, "*"));
+        try!(write!(w, "*"));
         v += char_step;
         c += 1;
     }
     while c < range_width && v < s.max {
-        if_ok!(write!(w, "-"));
+        try!(write!(w, "-"));
         v += char_step;
         c += 1;
     }
-    if_ok!(write!(w, "]"));
+    try!(write!(w, "]"));
     while c < range_width {
-        if_ok!(write!(w, " "));
+        try!(write!(w, " "));
         v += char_step;
         c += 1;
     }
 
-    if_ok!(write!(w, "| {}", histr));
+    try!(write!(w, "| {}", histr));
     Ok(())
 }
 
@@ -1025,7 +1026,8 @@ mod tests {
 
 #[cfg(test)]
 mod bench {
-    use extra::test::BenchHarness;
+    extern crate test;
+    use self::test::BenchHarness;
     use std::vec;
     use stats::Stats;
 

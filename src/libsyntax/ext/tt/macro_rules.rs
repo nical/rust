@@ -18,10 +18,10 @@ use ext::base;
 use ext::tt::macro_parser::{Success, Error, Failure};
 use ext::tt::macro_parser::{NamedMatch, MatchedSeq, MatchedNonterminal};
 use ext::tt::macro_parser::{parse, parse_or_else};
-use parse::lexer::{new_tt_reader, Reader};
+use parse::lexer::new_tt_reader;
 use parse::parser::Parser;
 use parse::attr::ParserAttr;
-use parse::token::{get_ident_interner, special_idents, gensym_ident};
+use parse::token::{special_idents, gensym_ident};
 use parse::token::{FAT_ARROW, SEMI, NtMatchers, NtTT, EOF};
 use parse::token;
 use print;
@@ -113,11 +113,9 @@ fn generic_extension(cx: &ExtCtxt,
                      rhses: &[@NamedMatch])
                      -> MacResult {
     if cx.trace_macros() {
-        let interned_name = token::get_ident(name.name);
         println!("{}! \\{ {} \\}",
-                 interned_name.get(),
-                 print::pprust::tt_to_str(&TTDelim(@arg.to_owned()),
-                                          get_ident_interner()));
+                 token::get_ident(name),
+                 print::pprust::tt_to_str(&TTDelim(@arg.to_owned())));
     }
 
     // Which arm's failure should we report? (the one furthest along)
@@ -129,8 +127,8 @@ fn generic_extension(cx: &ExtCtxt,
     for (i, lhs) in lhses.iter().enumerate() { // try each arm's matchers
         match **lhs {
           MatchedNonterminal(NtMatchers(ref mtcs)) => {
-            // `none` is because we're not interpolating
-            let arg_rdr = new_tt_reader(s_d, None, arg.to_owned()) as @Reader;
+            // `None` is because we're not interpolating
+            let arg_rdr = new_tt_reader(s_d, None, arg.to_owned());
             match parse(cx.parse_sess(), cx.cfg(), arg_rdr, *mtcs) {
               Success(named_matches) => {
                 let rhs = match *rhses[i] {
@@ -150,12 +148,12 @@ fn generic_extension(cx: &ExtCtxt,
                 // rhs has holes ( `$id` and `$(...)` that need filled)
                 let trncbr = new_tt_reader(s_d, Some(named_matches),
                                            rhs);
-                let p = Parser(cx.parse_sess(), cx.cfg(), trncbr as @Reader);
+                let p = Parser(cx.parse_sess(), cx.cfg(), ~trncbr);
                 // Let the context choose how to interpret the result.
                 // Weird, but useful for X-macros.
-                return MRAny(@ParserAnyMacro {
+                return MRAny(~ParserAnyMacro {
                     parser: RefCell::new(p),
-                } as @AnyMacro)
+                })
               }
               Failure(sp, ref msg) => if sp.lo >= best_fail_spot.lo {
                 best_fail_spot = sp;
@@ -210,7 +208,7 @@ pub fn add_new_extension(cx: &mut ExtCtxt,
                                    arg.clone());
     let argument_map = parse_or_else(cx.parse_sess(),
                                      cx.cfg(),
-                                     arg_reader as @Reader,
+                                     arg_reader,
                                      argument_gram);
 
     // Extract the arguments:
@@ -231,7 +229,7 @@ pub fn add_new_extension(cx: &mut ExtCtxt,
     };
 
     return MRDef(MacroDef {
-        name: token::get_ident(name.name).get().to_str(),
+        name: token::get_ident(name).get().to_str(),
         ext: NormalTT(exp, Some(sp))
     });
 }

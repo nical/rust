@@ -103,7 +103,7 @@ fn trans<'a>(bcx: &'a Block<'a>, expr: &ast::Expr) -> Callee<'a> {
             _ => {
                 bcx.tcx().sess.span_bug(
                     expr.span,
-                    format!("Type of callee is neither bare-fn nor closure: {}",
+                    format!("type of callee is neither bare-fn nor closure: {}",
                          bcx.ty_to_str(datum.ty)));
             }
         }
@@ -118,7 +118,7 @@ fn trans<'a>(bcx: &'a Block<'a>, expr: &ast::Expr) -> Callee<'a> {
         match def {
             ast::DefFn(did, _) |
             ast::DefStaticMethod(did, ast::FromImpl(_), _) => {
-                fn_callee(bcx, trans_fn_ref(bcx, did, ref_expr.id))
+                fn_callee(bcx, trans_fn_ref(bcx, did, ref_expr.id, false))
             }
             ast::DefStaticMethod(impl_did,
                                    ast::FromTrait(trait_did),
@@ -132,10 +132,10 @@ fn trans<'a>(bcx: &'a Block<'a>, expr: &ast::Expr) -> Callee<'a> {
                 assert!(ty::enum_variant_with_id(bcx.tcx(),
                                                       tid,
                                                       vid).args.len() > 0u);
-                fn_callee(bcx, trans_fn_ref(bcx, vid, ref_expr.id))
+                fn_callee(bcx, trans_fn_ref(bcx, vid, ref_expr.id, false))
             }
             ast::DefStruct(def_id) => {
-                fn_callee(bcx, trans_fn_ref(bcx, def_id, ref_expr.id))
+                fn_callee(bcx, trans_fn_ref(bcx, def_id, ref_expr.id, false))
             }
             ast::DefStatic(..) |
             ast::DefArg(..) |
@@ -151,23 +151,15 @@ fn trans<'a>(bcx: &'a Block<'a>, expr: &ast::Expr) -> Callee<'a> {
             ast::DefSelfTy(..) | ast::DefMethod(..) => {
                 bcx.tcx().sess.span_bug(
                     ref_expr.span,
-                    format!("Cannot translate def {:?} \
+                    format!("cannot translate def {:?} \
                           to a callable thing!", def));
             }
         }
     }
 }
 
-pub fn trans_fn_ref_to_callee<'a>(
-                              bcx: &'a Block<'a>,
-                              def_id: ast::DefId,
-                              ref_id: ast::NodeId)
-                              -> Callee<'a> {
-    Callee {bcx: bcx,
-            data: Fn(trans_fn_ref(bcx, def_id, ref_id))}
-}
-
-pub fn trans_fn_ref(bcx: &Block, def_id: ast::DefId, ref_id: ast::NodeId)
+pub fn trans_fn_ref(bcx: &Block, def_id: ast::DefId,
+                    ref_id: ast::NodeId, is_method: bool)
                     -> ValueRef {
     /*!
      *
@@ -177,23 +169,22 @@ pub fn trans_fn_ref(bcx: &Block, def_id: ast::DefId, ref_id: ast::NodeId)
 
     let _icx = push_ctxt("trans_fn_ref");
 
-    let type_params = node_id_type_params(bcx, ref_id);
+    let type_params = node_id_type_params(bcx, ref_id, is_method);
     let vtables = node_vtables(bcx, ref_id);
     debug!("trans_fn_ref(def_id={}, ref_id={:?}, type_params={}, vtables={})",
            def_id.repr(bcx.tcx()), ref_id, type_params.repr(bcx.tcx()),
            vtables.repr(bcx.tcx()));
-    trans_fn_ref_with_vtables(bcx, def_id, ref_id, type_params, vtables)
+    trans_fn_ref_with_vtables(bcx, def_id, ref_id, is_method, type_params, vtables)
 }
 
-pub fn trans_fn_ref_with_vtables_to_callee<'a>(
-                                           bcx: &'a Block<'a>,
+fn trans_fn_ref_with_vtables_to_callee<'a>(bcx: &'a Block<'a>,
                                            def_id: ast::DefId,
                                            ref_id: ast::NodeId,
                                            type_params: &[ty::t],
                                            vtables: Option<typeck::vtable_res>)
                                            -> Callee<'a> {
     Callee {bcx: bcx,
-            data: Fn(trans_fn_ref_with_vtables(bcx, def_id, ref_id,
+            data: Fn(trans_fn_ref_with_vtables(bcx, def_id, ref_id, false,
                                                type_params, vtables))}
 }
 
@@ -243,6 +234,7 @@ pub fn trans_fn_ref_with_vtables(
         bcx: &Block,       //
         def_id: ast::DefId,   // def id of fn
         ref_id: ast::NodeId,  // node id of use of fn; may be zero if N/A
+        is_method: bool,
         type_params: &[ty::t], // values for fn's ty params
         vtables: Option<typeck::vtable_res>) // vtables for the call
      -> ValueRef {
@@ -346,7 +338,7 @@ pub fn trans_fn_ref_with_vtables(
     // Check whether this fn has an inlined copy and, if so, redirect
     // def_id to the local id of the inlined copy.
     let def_id = {
-        if def_id.crate != ast::LOCAL_CRATE {
+        if def_id.krate != ast::LOCAL_CRATE {
             inline::maybe_instantiate_inline(ccx, def_id)
         } else {
             def_id
@@ -357,33 +349,28 @@ pub fn trans_fn_ref_with_vtables(
     // intrinsic, or is a default method.  In particular, if we see an
     // intrinsic that is inlined from a different crate, we want to reemit the
     // intrinsic instead of trying to call it in the other crate.
-    let must_monomorphise;
-    if type_params.len() > 0 || is_default {
-        must_monomorphise = true;
-    } else if def_id.crate == ast::LOCAL_CRATE {
-        {
-            let map_node = session::expect(
-                ccx.sess,
-                ccx.tcx.items.find(def_id.node),
-                || format!("local item should be in ast map"));
+    let must_monomorphise = if type_params.len() > 0 || is_default {
+        true
+    } else if def_id.krate == ast::LOCAL_CRATE {
+        let map_node = session::expect(
+            ccx.sess,
+            ccx.tcx.map.find(def_id.node),
+            || format!("local item should be in ast map"));
 
-            match map_node {
-                ast_map::NodeForeignItem(_, abis, _, _) => {
-                    must_monomorphise = abis.is_intrinsic()
-                }
-                _ => {
-                    must_monomorphise = false;
-                }
+        match map_node {
+            ast_map::NodeForeignItem(_) => {
+                ccx.tcx.map.get_foreign_abis(def_id.node).is_intrinsic()
             }
+            _ => false
         }
     } else {
-        must_monomorphise = false;
-    }
+        false
+    };
 
     // Create a monomorphic verison of generic functions
     if must_monomorphise {
         // Should be either intra-crate or inlined.
-        assert_eq!(def_id.crate, ast::LOCAL_CRATE);
+        assert_eq!(def_id.krate, ast::LOCAL_CRATE);
 
         let (val, must_cast) =
             monomorphize::monomorphic_fn(ccx, def_id, &substs,
@@ -393,7 +380,12 @@ pub fn trans_fn_ref_with_vtables(
         if must_cast && ref_id != 0 {
             // Monotype of the REFERENCE to the function (type params
             // are subst'd)
-            let ref_ty = common::node_id_type(bcx, ref_id);
+            let ref_ty = if is_method {
+                let t = bcx.ccx().maps.method_map.borrow().get().get(&ref_id).ty;
+                monomorphize_type(bcx, t)
+            } else {
+                node_id_type(bcx, ref_id)
+            };
 
             val = PointerCast(
                 bcx, val, type_of::type_of_fn_from_ty(ccx, ref_ty).ptr_to());
@@ -403,7 +395,7 @@ pub fn trans_fn_ref_with_vtables(
 
     // Find the actual function pointer.
     let mut val = {
-        if def_id.crate == ast::LOCAL_CRATE {
+        if def_id.krate == ast::LOCAL_CRATE {
             // Internal reference.
             get_item_val(ccx, def_id.node)
         } else {
@@ -466,41 +458,22 @@ pub fn trans_call<'a>(
 }
 
 pub fn trans_method_call<'a>(
-                         in_cx: &'a Block<'a>,
+                         bcx: &'a Block<'a>,
                          call_ex: &ast::Expr,
-                         callee_id: ast::NodeId,
                          rcvr: &ast::Expr,
                          args: CallArgs,
                          dest: expr::Dest)
                          -> &'a Block<'a> {
     let _icx = push_ctxt("trans_method_call");
-    debug!("trans_method_call(call_ex={})", call_ex.repr(in_cx.tcx()));
+    debug!("trans_method_call(call_ex={})", call_ex.repr(bcx.tcx()));
+    let method_ty = bcx.ccx().maps.method_map.borrow().get().get(&call_ex.id).ty;
     trans_call_inner(
-        in_cx,
+        bcx,
         Some(common::expr_info(call_ex)),
-        node_id_type(in_cx, callee_id),
-        expr_ty(in_cx, call_ex),
+        monomorphize_type(bcx, method_ty),
+        expr_ty(bcx, call_ex),
         |cx, arg_cleanup_scope| {
-            let origin_opt = {
-                let mut method_map = cx.ccx().maps.method_map.borrow_mut();
-                method_map.get().find_copy(&call_ex.id)
-            };
-            match origin_opt {
-                Some(origin) => {
-                    debug!("origin for {}: {}",
-                           call_ex.repr(in_cx.tcx()),
-                           origin.repr(in_cx.tcx()));
-
-                    meth::trans_method_callee(cx,
-                                              callee_id,
-                                              rcvr,
-                                              origin,
-                                              arg_cleanup_scope)
-                }
-                None => {
-                    cx.tcx().sess.span_bug(call_ex.span, "method call expr wasn't in method map")
-                }
-            }
+            meth::trans_method_callee(cx, call_ex.id, rcvr, arg_cleanup_scope)
         },
         args,
         Some(dest)).bcx
@@ -512,7 +485,7 @@ pub fn trans_lang_call<'a>(
                        args: &[ValueRef],
                        dest: Option<expr::Dest>)
                        -> Result<'a> {
-    let fty = if did.crate == ast::LOCAL_CRATE {
+    let fty = if did.krate == ast::LOCAL_CRATE {
         ty::node_id_to_type(bcx.ccx().tcx, did.node)
     } else {
         csearch::get_type(bcx.ccx().tcx, did).ty
@@ -541,7 +514,7 @@ pub fn trans_lang_call_with_type_params<'a>(
                                         dest: expr::Dest)
                                         -> &'a Block<'a> {
     let fty;
-    if did.crate == ast::LOCAL_CRATE {
+    if did.krate == ast::LOCAL_CRATE {
         fty = ty::node_id_to_type(bcx.tcx(), did.node);
     } else {
         fty = csearch::get_type(bcx.tcx(), did).ty;

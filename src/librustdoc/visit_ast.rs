@@ -38,12 +38,13 @@ impl<'a> RustdocVisitor<'a> {
         }
     }
 
-    pub fn visit(&mut self, crate: &ast::Crate) {
-        self.attrs = crate.attrs.clone();
+    pub fn visit(&mut self, krate: &ast::Crate) {
+        self.attrs = krate.attrs.clone();
 
-        self.module = self.visit_mod_contents(crate.span, crate.attrs.clone(),
+        self.module = self.visit_mod_contents(krate.span, krate.attrs.clone(),
                                               ast::Public, ast::CRATE_NODE_ID,
-                                              &crate.module, None);
+                                              &krate.module, None);
+        self.module.is_crate = true;
     }
 
     pub fn visit_struct_def(&mut self, item: &ast::Item, sd: @ast::StructDef,
@@ -188,9 +189,9 @@ impl<'a> RustdocVisitor<'a> {
         };
         if analysis.public_items.contains(&def.node) { return false }
 
-        let item = self.cx.tycx.unwrap().items.get(def.node);
+        let item = self.cx.tycx.unwrap().map.get(def.node);
         match item {
-            ast_map::NodeItem(it, _) => {
+            ast_map::NodeItem(it) => {
                 if glob {
                     match it.node {
                         ast::ItemMod(ref m) => {
@@ -280,7 +281,14 @@ impl<'a> RustdocVisitor<'a> {
             ast::ItemForeignMod(ref fm) => {
                 om.foreigns.push(fm.clone());
             }
-            _ => (),
+            ast::ItemMac(ref _m) => {
+                om.macros.push(Macro {
+                    id: item.id,
+                    attrs: item.attrs.clone(),
+                    name: item.ident,
+                    where: item.span,
+                })
+            }
         }
     }
 }

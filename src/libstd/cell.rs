@@ -10,9 +10,13 @@
 
 //! Types dealing with dynamic mutability
 
-use prelude::*;
 use cast;
+use clone::{Clone, DeepClone};
+use cmp::Eq;
+use fmt;
 use kinds::{marker, Pod};
+use ops::Drop;
+use option::{None, Option, Some};
 
 /// A mutable memory location that admits only `Pod` data.
 pub struct Cell<T> {
@@ -49,6 +53,18 @@ impl<T:Pod> Cell<T> {
 impl<T:Pod> Clone for Cell<T> {
     fn clone(&self) -> Cell<T> {
         Cell::new(self.get())
+    }
+}
+
+impl<T:Eq + Pod> Eq for Cell<T> {
+    fn eq(&self, other: &Cell<T>) -> bool {
+        self.get() == other.get()
+    }
+}
+
+impl<T: fmt::Show> fmt::Show for Cell<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f.buf, r"Cell \{ value: {} \}", self.value)
     }
 }
 
@@ -270,11 +286,14 @@ mod test {
     #[test]
     fn smoketest_cell() {
         let x = Cell::new(10);
+        assert_eq!(x, Cell::new(10));
         assert_eq!(x.get(), 10);
         x.set(20);
+        assert_eq!(x, Cell::new(20));
         assert_eq!(x.get(), 20);
 
         let y = Cell::new((30, 40));
+        assert_eq!(y, Cell::new((30, 40)));
         assert_eq!(y.get(), (30, 40));
     }
 

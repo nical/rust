@@ -29,75 +29,22 @@ Rust extras are part of the standard Rust distribution.
       html_favicon_url = "http://www.rust-lang.org/favicon.ico",
       html_root_url = "http://static.rust-lang.org/doc/master")];
 
-#[feature(macro_rules, globs, managed_boxes)];
+#[feature(macro_rules, globs, managed_boxes, asm)];
 
 #[deny(non_camel_case_types)];
 #[deny(missing_doc)];
 
-#[cfg(stage0)]
-macro_rules! if_ok (
-    ($e:expr) => (match $e { Ok(e) => e, Err(e) => return Err(e) })
-)
+extern crate sync;
+extern crate serialize;
+extern crate collections;
+extern crate time;
 
 // Utility modules
-
 pub mod c_vec;
-
-// Concurrency
-
-pub mod sync;
-pub mod arc;
-pub mod comm;
-pub mod future;
-pub mod task_pool;
-
-// Collections
-
-pub mod container;
-pub mod bitv;
-pub mod list;
-pub mod ringbuf;
-pub mod priority_queue;
-pub mod smallintmap;
-
-pub mod dlist;
-pub mod treemap;
-pub mod btree;
-pub mod lru_cache;
-
-// And ... other stuff
-
 pub mod url;
-pub mod ebml;
-pub mod getopts;
-pub mod json;
 pub mod tempfile;
-pub mod time;
-pub mod base64;
 pub mod workcache;
-pub mod enum_set;
-#[path="num/bigint.rs"]
-pub mod bigint;
-#[path="num/rational.rs"]
-pub mod rational;
-#[path="num/complex.rs"]
-pub mod complex;
 pub mod stats;
-pub mod hex;
 
 #[cfg(unicode)]
 mod unicode;
-
-// Compiler support modules
-
-pub mod test;
-pub mod serialize;
-
-// A curious inner-module that's not exported that contains the binding
-// 'extra' so that macro-expanded references to extra::serialize and such
-// can be resolved within libextra.
-#[doc(hidden)]
-pub mod extra {
-    pub use serialize;
-    pub use test;
-}

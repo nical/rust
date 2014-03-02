@@ -16,9 +16,9 @@ Runtime type reflection
 
 #[allow(missing_doc)];
 
-use unstable::intrinsics::{Disr, Opaque, TyDesc, TyVisitor};
+use intrinsics::{Disr, Opaque, TyDesc, TyVisitor};
 use mem;
-use unstable::raw;
+use raw;
 
 /**
  * Trait for visitor that wishes to reflect on data. To use this, create a
@@ -424,9 +424,9 @@ impl<V:TyVisitor + MovePtr> TyVisitor for MovePtrAdaptor<V> {
     }
 
     fn visit_trait(&mut self, name: &str) -> bool {
-        self.align_to::<@TyVisitor>();
+        self.align_to::<~TyVisitor>();
         if ! self.inner.visit_trait(name) { return false; }
-        self.bump_past::<@TyVisitor>();
+        self.bump_past::<~TyVisitor>();
         true
     }
 
@@ -439,22 +439,6 @@ impl<V:TyVisitor + MovePtr> TyVisitor for MovePtrAdaptor<V> {
         self.align_to::<&'static u8>();
         if ! self.inner.visit_self() { return false; }
         self.align_to::<&'static u8>();
-        true
-    }
-
-    fn visit_type(&mut self) -> bool {
-        if ! self.inner.visit_type() { return false; }
-        true
-    }
-
-    // NOTE remove after next snapshot
-    #[cfg(stage0)]
-    fn visit_closure_ptr(&mut self, ck: uint) -> bool {
-        self.align_to::<proc()>();
-        if ! self.inner.visit_closure_ptr(ck) {
-            return false
-        }
-        self.bump_past::<proc()>();
         true
     }
 }

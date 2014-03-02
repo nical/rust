@@ -26,16 +26,19 @@ pub fn guarantee_lifetime(bccx: &BorrowckCtxt,
                           item_scope_id: ast::NodeId,
                           root_scope_id: ast::NodeId,
                           span: Span,
+                          cause: LoanCause,
                           cmt: mc::cmt,
                           loan_region: ty::Region,
-                          loan_mutbl: LoanMutability) -> R {
+                          loan_kind: ty::BorrowKind)
+                          -> Result<(),()> {
     debug!("guarantee_lifetime(cmt={}, loan_region={})",
            cmt.repr(bccx.tcx), loan_region.repr(bccx.tcx));
     let ctxt = GuaranteeLifetimeContext {bccx: bccx,
                                          item_scope_id: item_scope_id,
                                          span: span,
+                                         cause: cause,
                                          loan_region: loan_region,
-                                         loan_mutbl: loan_mutbl,
+                                         loan_kind: loan_kind,
                                          cmt_original: cmt,
                                          root_scope_id: root_scope_id};
     ctxt.check(cmt, None)
@@ -55,8 +58,9 @@ struct GuaranteeLifetimeContext<'a> {
     root_scope_id: ast::NodeId,
 
     span: Span,
+    cause: LoanCause,
     loan_region: ty::Region,
-    loan_mutbl: LoanMutability,
+    loan_kind: ty::BorrowKind,
     cmt_original: mc::cmt
 }
 
@@ -76,29 +80,25 @@ impl<'a> GuaranteeLifetimeContext<'a> {
             mc::cat_copied_upvar(..) |                  // L-Local
             mc::cat_local(..) |                         // L-Local
             mc::cat_arg(..) |                           // L-Local
-            mc::cat_deref(_, _, mc::region_ptr(..)) |   // L-Deref-Borrowed
-            mc::cat_deref(_, _, mc::unsafe_ptr(..)) => {
+            mc::cat_upvar(..) |
+            mc::cat_deref(_, _, mc::BorrowedPtr(..)) |  // L-Deref-Borrowed
+            mc::cat_deref(_, _, mc::UnsafePtr(..)) => {
                 let scope = self.scope(cmt);
                 self.check_scope(scope)
-            }
-
-            mc::cat_stack_upvar(cmt) => {
-                self.check(cmt, discr_scope)
             }
 
             mc::cat_static_item => {
                 Ok(())
             }
 
-            mc::cat_deref(base, derefs, mc::gc_ptr) => {
+            mc::cat_deref(base, derefs, mc::GcPtr) => {
                 let base_scope = self.scope(base);
 
                 // L-Deref-Managed-Imm-User-Root
-                let omit_root = (
+                let omit_root =
                     self.bccx.is_subregion_of(self.loan_region, base_scope) &&
                     self.is_rvalue_or_immutable(base) &&
-                    !self.is_moved(base)
-                );
+                    !self.is_moved(base);
 
                 if !omit_root {
                     // L-Deref-Managed-Imm-Compiler-Root
@@ -112,7 +112,7 @@ impl<'a> GuaranteeLifetimeContext<'a> {
             }
 
             mc::cat_downcast(base) |
-            mc::cat_deref(base, _, mc::uniq_ptr) |     // L-Deref-Send
+            mc::cat_deref(base, _, mc::OwnedPtr) |     // L-Deref-Send
             mc::cat_interior(base, _) => {             // L-Field
                 self.check(base, discr_scope)
             }
@@ -215,7 +215,7 @@ impl<'a> GuaranteeLifetimeContext<'a> {
                 // the check above should fail for anything is not ReScope
                 self.bccx.tcx.sess.span_bug(
                     cmt_base.span,
-                    format!("Cannot issue root for scope region: {:?}",
+                    format!("cannot issue root for scope region: {:?}",
                          self.loan_region));
             }
         };
@@ -269,12 +269,12 @@ impl<'a> GuaranteeLifetimeContext<'a> {
             mc::cat_rvalue(..) |
             mc::cat_static_item |
             mc::cat_copied_upvar(..) |
-            mc::cat_deref(..) => {
+            mc::cat_deref(..) |
+            mc::cat_upvar(..) => {
                 false
             }
             r @ mc::cat_downcast(..) |
             r @ mc::cat_interior(..) |
-            r @ mc::cat_stack_upvar(..) |
             r @ mc::cat_discr(..) => {
                 self.tcx().sess.span_bug(
                     cmt.span,
@@ -294,6 +294,7 @@ impl<'a> GuaranteeLifetimeContext<'a> {
             mc::cat_rvalue(temp_scope) => {
                 temp_scope
             }
+            mc::cat_upvar(..) |
             mc::cat_copied_upvar(_) => {
                 ty::ReScope(self.item_scope_id)
             }
@@ -304,17 +305,16 @@ impl<'a> GuaranteeLifetimeContext<'a> {
             mc::cat_arg(local_id) => {
                 ty::ReScope(self.bccx.tcx.region_maps.var_scope(local_id))
             }
-            mc::cat_deref(_, _, mc::unsafe_ptr(..)) => {
+            mc::cat_deref(_, _, mc::UnsafePtr(..)) => {
                 ty::ReStatic
             }
-            mc::cat_deref(_, _, mc::region_ptr(_, r)) => {
+            mc::cat_deref(_, _, mc::BorrowedPtr(_, r)) => {
                 r
             }
             mc::cat_downcast(cmt) |
-            mc::cat_deref(cmt, _, mc::uniq_ptr) |
-            mc::cat_deref(cmt, _, mc::gc_ptr) |
+            mc::cat_deref(cmt, _, mc::OwnedPtr) |
+            mc::cat_deref(cmt, _, mc::GcPtr) |
             mc::cat_interior(cmt, _) |
-            mc::cat_stack_upvar(cmt) |
             mc::cat_discr(cmt, _) => {
                 self.scope(cmt)
             }
@@ -322,10 +322,9 @@ impl<'a> GuaranteeLifetimeContext<'a> {
     }
 
     fn report_error(&self, code: bckerr_code) {
-        self.bccx.report(BckError {
-            cmt: self.cmt_original,
-            span: self.span,
-            code: code
-        });
+        self.bccx.report(BckError { cmt: self.cmt_original,
+                                    span: self.span,
+                                    cause: self.cause,
+                                    code: code });
     }
 }

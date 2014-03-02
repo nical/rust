@@ -1,4 +1,4 @@
-// Copyright 2012-2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,6 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#[allow(non_camel_case_types)];
 
 use c = metadata::common;
 use cstore = metadata::cstore;
@@ -20,14 +21,13 @@ use metadata::tydecode;
 use metadata::tydecode::{DefIdSource, NominalType, TypeWithId, TypeParameter,
                          RegionParameter};
 use metadata::tyencode;
-use middle::typeck::{method_origin, method_map_entry};
+use middle::typeck::{MethodCallee, MethodOrigin};
 use middle::{ty, typeck, moves};
 use middle;
 use util::ppaux::ty_to_str;
 
 use syntax::{ast, ast_map, ast_util, codemap, fold};
 use syntax::codemap::Span;
-use syntax::diagnostic::SpanHandler;
 use syntax::fold::Folder;
 use syntax::parse::token;
 use syntax;
@@ -37,12 +37,12 @@ use std::cast;
 use std::io::Seek;
 use std::rc::Rc;
 
-use extra::ebml::reader;
-use extra::ebml;
-use extra::serialize;
-use extra::serialize::{Encoder, Encodable, EncoderHelpers, DecoderHelpers};
-use extra::serialize::{Decoder, Decodable};
-use writer = extra::ebml::writer;
+use serialize::ebml::reader;
+use serialize::ebml;
+use serialize;
+use serialize::{Encoder, Encodable, EncoderHelpers, DecoderHelpers};
+use serialize::{Decoder, Decodable};
+use writer = serialize::ebml::writer;
 
 #[cfg(test)] use syntax::parse;
 #[cfg(test)] use syntax::print::pprust;
@@ -50,7 +50,7 @@ use writer = extra::ebml::writer;
 // Auxiliary maps of things to be encoded
 pub struct Maps {
     root_map: middle::borrowck::root_map,
-    method_map: middle::typeck::method_map,
+    method_map: middle::typeck::MethodMap,
     vtable_map: middle::typeck::vtable_map,
     capture_map: middle::moves::CaptureMap,
 }
@@ -80,17 +80,15 @@ trait tr_intern {
 
 pub fn encode_inlined_item(ecx: &e::EncodeContext,
                            ebml_w: &mut writer::Encoder,
-                           path: &[ast_map::PathElem],
                            ii: e::InlinedItemRef,
                            maps: Maps) {
-    let ident = match ii {
-        e::IIItemRef(i) => i.ident,
-        e::IIForeignRef(i) => i.ident,
-        e::IIMethodRef(_, _, m) => m.ident,
+    let id = match ii {
+        e::IIItemRef(i) => i.id,
+        e::IIForeignRef(i) => i.id,
+        e::IIMethodRef(_, _, m) => m.id,
     };
-    debug!("> Encoding inlined item: {}::{} ({})",
-           ast_map::path_to_str(path, token::get_ident_interner()),
-           ecx.tcx.sess.str_of(ident),
+    debug!("> Encoding inlined item: {} ({})",
+           ecx.tcx.map.path_to_str(id),
            ebml_w.writer.tell());
 
     let ii = simplify_ast(ii);
@@ -102,9 +100,8 @@ pub fn encode_inlined_item(ecx: &e::EncodeContext,
     encode_side_tables_for_ii(ecx, maps, ebml_w, &ii);
     ebml_w.end_tag();
 
-    debug!("< Encoded inlined fn: {}::{} ({})",
-           ast_map::path_to_str(path, token::get_ident_interner()),
-           ecx.tcx.sess.str_of(ident),
+    debug!("< Encoded inlined fn: {} ({})",
+           ecx.tcx.map.path_to_str(id),
            ebml_w.writer.tell());
 }
 
@@ -118,19 +115,25 @@ pub fn encode_exported_macro(ebml_w: &mut writer::Encoder, i: &ast::Item) {
 pub fn decode_inlined_item(cdata: @cstore::crate_metadata,
                            tcx: ty::ctxt,
                            maps: Maps,
-                           path: &[ast_map::PathElem],
+                           path: ~[ast_map::PathElem],
                            par_doc: ebml::Doc)
-                        -> Option<ast::InlinedItem> {
+                           -> Result<ast::InlinedItem, ~[ast_map::PathElem]> {
     let dcx = @DecodeContext {
         cdata: cdata,
         tcx: tcx,
         maps: maps
     };
     match par_doc.opt_child(c::tag_ast) {
-      None => None,
+      None => Err(path),
       Some(ast_doc) => {
+        let mut path_as_str = None;
         debug!("> Decoding inlined fn: {}::?",
-               ast_map::path_to_str(path, token::get_ident_interner()));
+        {
+            // Do an Option dance to use the path after it is moved below.
+            let s = ast_map::path_to_str(ast_map::Values(path.iter()));
+            path_as_str = Some(s);
+            path_as_str.as_ref().map(|x| x.as_slice())
+        });
         let mut ast_dsr = reader::Decoder(ast_doc);
         let from_id_range = Decodable::decode(&mut ast_dsr);
         let to_id_range = reserve_id_range(dcx.tcx.sess, from_id_range);
@@ -140,30 +143,26 @@ pub fn decode_inlined_item(cdata: @cstore::crate_metadata,
             to_id_range: to_id_range
         };
         let raw_ii = decode_ast(ast_doc);
-        let ii = renumber_and_map_ast(xcx,
-                                      tcx.sess.diagnostic(),
-                                      dcx.tcx.items,
-                                      path.to_owned(),
-                                      raw_ii);
+        let ii = renumber_and_map_ast(xcx, &dcx.tcx.map, path, raw_ii);
         let ident = match ii {
             ast::IIItem(i) => i.ident,
             ast::IIForeign(i) => i.ident,
             ast::IIMethod(_, _, m) => m.ident,
         };
-        debug!("Fn named: {}", tcx.sess.str_of(ident));
+        debug!("Fn named: {}", token::get_ident(ident));
         debug!("< Decoded inlined fn: {}::{}",
-               ast_map::path_to_str(path, token::get_ident_interner()),
-               tcx.sess.str_of(ident));
+               path_as_str.unwrap(),
+               token::get_ident(ident));
         region::resolve_inlined_item(tcx.sess, &tcx.region_maps, &ii);
         decode_side_tables(xcx, ast_doc);
         match ii {
           ast::IIItem(i) => {
             debug!(">>> DECODED ITEM >>>\n{}\n<<< DECODED ITEM <<<",
-                   syntax::print::pprust::item_to_str(i, tcx.sess.intr()));
+                   syntax::print::pprust::item_to_str(i));
           }
           _ => { }
         }
-        Some(ii)
+        Ok(ii)
       }
     }
 }
@@ -236,8 +235,8 @@ impl ExtendedDecodeContext {
          * refer to the current crate and to the new, inlined node-id.
          */
 
-        assert_eq!(did.crate, ast::LOCAL_CRATE);
-        ast::DefId { crate: ast::LOCAL_CRATE, node: self.tr_id(did.node) }
+        assert_eq!(did.krate, ast::LOCAL_CRATE);
+        ast::DefId { krate: ast::LOCAL_CRATE, node: self.tr_id(did.node) }
     }
     pub fn tr_span(&self, _span: Span) -> Span {
         codemap::DUMMY_SP // FIXME (#1972): handle span properly
@@ -381,7 +380,12 @@ struct AstRenumberer {
 
 impl ast_map::FoldOps for AstRenumberer {
     fn new_id(&self, id: ast::NodeId) -> ast::NodeId {
-        self.xcx.tr_id(id)
+        if id == ast::DUMMY_NODE_ID {
+            // Used by ast_map to map the NodeInlinedParent.
+            self.xcx.dcx.tcx.sess.next_node_id()
+        } else {
+            self.xcx.tr_id(id)
+        }
     }
     fn new_span(&self, span: Span) -> Span {
         self.xcx.tr_span(span)
@@ -389,11 +393,10 @@ impl ast_map::FoldOps for AstRenumberer {
 }
 
 fn renumber_and_map_ast(xcx: @ExtendedDecodeContext,
-                        diag: @SpanHandler,
-                        map: ast_map::Map,
-                        path: ast_map::Path,
+                        map: &ast_map::Map,
+                        path: ~[ast_map::PathElem],
                         ii: ast::InlinedItem) -> ast::InlinedItem {
-    ast_map::map_decoded_item(diag, map, path, AstRenumberer { xcx: xcx }, |fld| {
+    ast_map::map_decoded_item(map, path, AstRenumberer { xcx: xcx }, |fld| {
         match ii {
             ast::IIItem(i) => {
                 ast::IIItem(fld.fold_item(i).expect_one("expected one item"))
@@ -571,58 +574,68 @@ impl tr for moves::CaptureVar {
 }
 
 // ______________________________________________________________________
-// Encoding and decoding of method_map_entry
+// Encoding and decoding of MethodCallee
 
-trait read_method_map_entry_helper {
-    fn read_method_map_entry(&mut self, xcx: @ExtendedDecodeContext)
-                             -> method_map_entry;
+trait read_method_callee_helper {
+    fn read_method_callee(&mut self, xcx: @ExtendedDecodeContext) -> MethodCallee;
 }
 
-fn encode_method_map_entry(ebml_w: &mut writer::Encoder, mme: method_map_entry) {
-    ebml_w.emit_struct("method_map_entry", 3, |ebml_w| {
-        ebml_w.emit_struct_field("origin", 1u, |ebml_w| {
-            mme.origin.encode(ebml_w);
+fn encode_method_callee(ecx: &e::EncodeContext,
+                        ebml_w: &mut writer::Encoder,
+                        method: &MethodCallee) {
+    ebml_w.emit_struct("MethodCallee", 3, |ebml_w| {
+        ebml_w.emit_struct_field("origin", 0u, |ebml_w| {
+            method.origin.encode(ebml_w);
+        });
+        ebml_w.emit_struct_field("ty", 1u, |ebml_w| {
+            ebml_w.emit_ty(ecx, method.ty);
+        });
+        ebml_w.emit_struct_field("substs", 2u, |ebml_w| {
+            ebml_w.emit_substs(ecx, &method.substs);
         });
     })
 }
 
-impl<'a> read_method_map_entry_helper for reader::Decoder<'a> {
-    fn read_method_map_entry(&mut self, xcx: @ExtendedDecodeContext)
-                             -> method_map_entry {
-        self.read_struct("method_map_entry", 3, |this| {
-            method_map_entry {
-                origin: this.read_struct_field("origin", 1, |this| {
-                    let method_origin: method_origin =
+impl<'a> read_method_callee_helper for reader::Decoder<'a> {
+    fn read_method_callee(&mut self, xcx: @ExtendedDecodeContext) -> MethodCallee {
+        self.read_struct("MethodCallee", 3, |this| {
+            MethodCallee {
+                origin: this.read_struct_field("origin", 0, |this| {
+                    let method_origin: MethodOrigin =
                         Decodable::decode(this);
                     method_origin.tr(xcx)
+                }),
+                ty: this.read_struct_field("ty", 1, |this| {
+                    this.read_ty(xcx)
+                }),
+                substs: this.read_struct_field("substs", 2, |this| {
+                    this.read_substs(xcx)
                 })
             }
         })
     }
 }
 
-impl tr for method_origin {
-    fn tr(&self, xcx: @ExtendedDecodeContext) -> method_origin {
+impl tr for MethodOrigin {
+    fn tr(&self, xcx: @ExtendedDecodeContext) -> MethodOrigin {
         match *self {
-          typeck::method_static(did) => {
-              typeck::method_static(did.tr(xcx))
-          }
-          typeck::method_param(ref mp) => {
-            typeck::method_param(
-                typeck::method_param {
-                    trait_id: mp.trait_id.tr(xcx),
-                    .. *mp
-                }
-            )
-          }
-          typeck::method_object(ref mo) => {
-            typeck::method_object(
-                typeck::method_object {
-                    trait_id: mo.trait_id.tr(xcx),
-                    .. *mo
-                }
-            )
-          }
+            typeck::MethodStatic(did) => typeck::MethodStatic(did.tr(xcx)),
+            typeck::MethodParam(ref mp) => {
+                typeck::MethodParam(
+                    typeck::MethodParam {
+                        trait_id: mp.trait_id.tr(xcx),
+                        .. *mp
+                    }
+                )
+            }
+            typeck::MethodObject(ref mo) => {
+                typeck::MethodObject(
+                    typeck::MethodObject {
+                        trait_id: mo.trait_id.tr(xcx),
+                        .. *mo
+                    }
+                )
+            }
         }
     }
 }
@@ -989,7 +1002,7 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
         }
     }
 
-    let lid = ast::DefId { crate: ast::LOCAL_CRATE, node: id };
+    let lid = ast::DefId { krate: ast::LOCAL_CRATE, node: id };
     {
         let tcache = tcx.tcache.borrow();
         let r = tcache.get().find(&lid);
@@ -1018,17 +1031,13 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
         }
     }
 
-    {
-        let method_map = maps.method_map.borrow();
-        let r = method_map.get().find(&id);
-        for &mme in r.iter() {
-            ebml_w.tag(c::tag_table_method_map, |ebml_w| {
-                ebml_w.id(id);
-                ebml_w.tag(c::tag_table_val, |ebml_w| {
-                    encode_method_map_entry(ebml_w, *mme)
-                })
+    for &method in maps.method_map.borrow().get().find(&id).iter() {
+        ebml_w.tag(c::tag_table_method_map, |ebml_w| {
+            ebml_w.id(id);
+            ebml_w.tag(c::tag_table_val, |ebml_w| {
+                encode_method_callee(ecx, ebml_w, method)
             })
-        }
+        })
     }
 
     {
@@ -1350,7 +1359,7 @@ fn decode_side_tables(xcx: @ExtendedDecodeContext,
                     }
                     c::tag_table_tcache => {
                         let tpbt = val_dsr.read_ty_param_bounds_and_ty(xcx);
-                        let lid = ast::DefId { crate: ast::LOCAL_CRATE, node: id };
+                        let lid = ast::DefId { krate: ast::LOCAL_CRATE, node: id };
                         let mut tcache = dcx.tcx.tcache.borrow_mut();
                         tcache.get().insert(lid, tpbt);
                     }
@@ -1362,9 +1371,8 @@ fn decode_side_tables(xcx: @ExtendedDecodeContext,
                         ty_param_defs.get().insert(id, bounds);
                     }
                     c::tag_table_method_map => {
-                        let entry = val_dsr.read_method_map_entry(xcx);
-                        let mut method_map = dcx.maps.method_map.borrow_mut();
-                        method_map.get().insert(id, entry);
+                        let method = val_dsr.read_method_callee(xcx);
+                        dcx.maps.method_map.borrow_mut().get().insert(id, method);
                     }
                     c::tag_table_vtable_map => {
                         let vtable_res =
@@ -1427,10 +1435,7 @@ trait fake_ext_ctxt {
 }
 
 #[cfg(test)]
-type fake_session = @parse::ParseSess;
-
-#[cfg(test)]
-impl fake_ext_ctxt for fake_session {
+impl fake_ext_ctxt for @parse::ParseSess {
     fn cfg(&self) -> ast::CrateConfig { ~[] }
     fn parse_sess(&self) -> @parse::ParseSess { *self }
     fn call_site(&self) -> Span {
@@ -1446,8 +1451,8 @@ impl fake_ext_ctxt for fake_session {
 }
 
 #[cfg(test)]
-fn mk_ctxt() -> @fake_ext_ctxt {
-    @parse::new_parse_sess(None) as @fake_ext_ctxt
+fn mk_ctxt() -> @parse::ParseSess {
+    parse::new_parse_sess()
 }
 
 #[cfg(test)]
@@ -1463,7 +1468,7 @@ fn roundtrip(in_item: Option<@ast::Item>) {
     let ebml_doc = reader::Doc(wr.get_ref());
     let out_item = decode_item_ast(ebml_doc);
 
-    assert_eq!(in_item, out_item);
+    assert!(in_item == out_item);
 }
 
 #[test]
@@ -1511,10 +1516,7 @@ fn test_simplification() {
     ).unwrap());
     match (item_out, item_exp) {
       (ast::IIItem(item_out), ast::IIItem(item_exp)) => {
-        assert!(pprust::item_to_str(item_out,
-                                    token::get_ident_interner())
-                     == pprust::item_to_str(item_exp,
-                                            token::get_ident_interner()));
+        assert!(pprust::item_to_str(item_out) == pprust::item_to_str(item_exp));
       }
       _ => fail!()
     }

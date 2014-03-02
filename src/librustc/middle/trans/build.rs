@@ -20,7 +20,6 @@ use syntax::codemap::Span;
 use middle::trans::builder::Builder;
 use middle::trans::type_::Type;
 
-use std::cast;
 use std::libc::{c_uint, c_ulonglong, c_char};
 
 pub fn terminate(cx: &Block, _: &str) {
@@ -34,7 +33,7 @@ pub fn check_not_terminated(cx: &Block) {
     }
 }
 
-pub fn B(cx: &Block) -> Builder {
+pub fn B<'a>(cx: &'a Block) -> Builder<'a> {
     let b = cx.fcx.ccx.builder();
     b.position_at_end(cx.llbb);
     b
@@ -623,9 +622,7 @@ pub fn Phi(cx: &Block, Ty: Type, vals: &[ValueRef], bbs: &[BasicBlockRef]) -> Va
 pub fn AddIncomingToPhi(phi: ValueRef, val: ValueRef, bb: BasicBlockRef) {
     unsafe {
         if llvm::LLVMIsUndef(phi) == lib::llvm::True { return; }
-        let valptr = cast::transmute(&val);
-        let bbptr = cast::transmute(&bb);
-        llvm::LLVMAddIncoming(phi, valptr, bbptr, 1 as c_uint);
+        llvm::LLVMAddIncoming(phi, &val, &bb, 1 as c_uint);
     }
 }
 

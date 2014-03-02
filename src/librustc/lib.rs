@@ -28,11 +28,19 @@ This API is completely unstable and subject to change.
       html_root_url = "http://static.rust-lang.org/doc/master")];
 
 #[feature(macro_rules, globs, struct_variant, managed_boxes)];
+#[feature(quote)];
 
-extern mod extra;
-extern mod flate;
-extern mod arena;
-extern mod syntax;
+#[allow(visible_private_types)];
+
+extern crate extra;
+extern crate flate;
+extern crate arena;
+extern crate syntax;
+extern crate serialize;
+extern crate sync;
+extern crate getopts;
+extern crate collections;
+extern crate time;
 
 use back::link;
 use driver::session;
@@ -40,24 +48,16 @@ use middle::lint;
 
 use d = driver::driver;
 
+use std::cmp;
 use std::io;
-use std::num;
 use std::os;
 use std::str;
 use std::task;
 use std::vec;
-use extra::getopts::groups;
-use extra::getopts;
 use syntax::ast;
-use syntax::attr;
 use syntax::diagnostic::Emitter;
 use syntax::diagnostic;
 use syntax::parse;
-
-#[cfg(stage0)]
-macro_rules! if_ok (
-    ($e:expr) => (match $e { Ok(e) => e, Err(e) => return Err(e) })
-)
 
 pub mod middle {
     pub mod trans;
@@ -70,6 +70,7 @@ pub mod middle {
     pub mod check_loop;
     pub mod check_match;
     pub mod check_const;
+    pub mod check_static;
     pub mod lint;
     pub mod borrowck;
     pub mod dataflow;
@@ -98,19 +99,21 @@ pub mod front {
     pub mod std_inject;
     pub mod assign_node_ids_and_map;
     pub mod feature_gate;
+    pub mod show_span;
 }
 
 pub mod back {
-    pub mod archive;
-    pub mod link;
     pub mod abi;
+    pub mod archive;
     pub mod arm;
+    pub mod link;
+    pub mod lto;
     pub mod mips;
+    pub mod rpath;
+    pub mod svh;
+    pub mod target_strs;
     pub mod x86;
     pub mod x86_64;
-    pub mod rpath;
-    pub mod target_strs;
-    pub mod lto;
 }
 
 pub mod metadata;
@@ -141,9 +144,10 @@ pub fn usage(argv0: &str) {
     let message = format!("Usage: {} [OPTIONS] INPUT", argv0);
     println!("{}\n\
 Additional help:
+    -C help             Print codegen options
     -W help             Print 'lint' options and default settings
     -Z help             Print internal options for debugging rustc\n",
-              groups::usage(message, d::optgroups()));
+              getopts::usage(message, d::optgroups()));
 }
 
 pub fn describe_warnings() {
@@ -163,12 +167,12 @@ Available lint options:
 
     let mut max_key = 0;
     for &(_, name) in lint_dict.iter() {
-        max_key = num::max(name.len(), max_key);
+        max_key = cmp::max(name.len(), max_key);
     }
     fn padded(max: uint, s: &str) -> ~str {
         " ".repeat(max - s.len()) + s
     }
-    println!("{}", "\nAvailable lint checks:\n"); // FIXME: #9970
+    println!("\nAvailable lint checks:\n");
     println!("    {}  {:7.7s}  {}",
              padded(max_key, "name"), "default", "meaning");
     println!("    {}  {:7.7s}  {}\n",
@@ -184,7 +188,7 @@ Available lint options:
 }
 
 pub fn describe_debug_flags() {
-    println!("{}", "\nAvailable debug options:\n"); // FIXME: #9970
+    println!("\nAvailable debug options:\n");
     let r = session::debugging_opts_map();
     for tuple in r.iter() {
         match *tuple {
@@ -195,17 +199,33 @@ pub fn describe_debug_flags() {
     }
 }
 
-pub fn run_compiler(args: &[~str], demitter: @diagnostic::Emitter) {
+pub fn describe_codegen_flags() {
+    println!("\nAvailable codegen options:\n");
+    let mut cg = session::basic_codegen_options();
+    for &(name, parser, desc) in session::CG_OPTIONS.iter() {
+        // we invoke the parser function on `None` to see if this option needs
+        // an argument or not.
+        let (width, extra) = if parser(&mut cg, None) {
+            (25, "")
+        } else {
+            (21, "=val")
+        };
+        println!("    -C {:>width$s}{} -- {}", name.replace("_", "-"),
+                 extra, desc, width=width);
+    }
+}
+
+pub fn run_compiler(args: &[~str]) {
     let mut args = args.to_owned();
     let binary = args.shift().unwrap();
 
     if args.is_empty() { usage(binary); return; }
 
     let matches =
-        &match getopts::groups::getopts(args, d::optgroups()) {
+        &match getopts::getopts(args, d::optgroups()) {
           Ok(m) => m,
           Err(f) => {
-            d::early_error(demitter, f.to_err_msg());
+            d::early_error(f.to_err_msg());
           }
         };
 
@@ -227,7 +247,13 @@ pub fn run_compiler(args: &[~str], demitter: @diagnostic::Emitter) {
         return;
     }
 
-    if matches.opt_str("passes") == Some(~"list") {
+    let cg_flags = matches.opt_strs("C");
+    if cg_flags.iter().any(|x| x == &~"help") {
+        describe_codegen_flags();
+        return;
+    }
+
+    if cg_flags.contains(&~"passes=list") {
         unsafe { lib::llvm::llvm::LLVMRustPrintPasses(); }
         return;
     }
@@ -237,7 +263,7 @@ pub fn run_compiler(args: &[~str], demitter: @diagnostic::Emitter) {
         return;
     }
     let (input, input_file_path) = match matches.free.len() {
-      0u => d::early_error(demitter, "no input filename given"),
+      0u => d::early_error("no input filename given"),
       1u => {
         let ifile = matches.free[0].as_slice();
         if ifile == "-" {
@@ -248,11 +274,11 @@ pub fn run_compiler(args: &[~str], demitter: @diagnostic::Emitter) {
             (d::FileInput(Path::new(ifile)), Some(Path::new(ifile)))
         }
       }
-      _ => d::early_error(demitter, "multiple input filenames provided")
+      _ => d::early_error("multiple input filenames provided")
     };
 
-    let sopts = d::build_session_options(binary, matches, demitter);
-    let sess = d::build_session(sopts, input_file_path, demitter);
+    let sopts = d::build_session_options(matches);
+    let sess = d::build_session(sopts, input_file_path);
     let odir = matches.opt_str("out-dir").map(|o| Path::new(o));
     let ofile = matches.opt_str("o").map(|o| Path::new(o));
     let cfg = d::build_configuration(sess);
@@ -271,11 +297,10 @@ pub fn run_compiler(args: &[~str], demitter: @diagnostic::Emitter) {
         match input {
           d::FileInput(ref ifile) => {
             let mut stdout = io::stdout();
-            d::list_metadata(sess, &(*ifile),
-                             &mut stdout as &mut io::Writer).unwrap();
+            d::list_metadata(sess, &(*ifile), &mut stdout).unwrap();
           }
           d::StrInput(_) => {
-            d::early_error(demitter, "can not list metadata for stdin");
+            d::early_error("can not list metadata for stdin");
           }
         }
         return;
@@ -286,29 +311,19 @@ pub fn run_compiler(args: &[~str], demitter: @diagnostic::Emitter) {
         let attrs = parse_crate_attrs(sess, &input);
         let t_outputs = d::build_output_filenames(&input, &odir, &ofile,
                                                   attrs, sess);
-        if crate_id || crate_name {
-            let crateid = match attr::find_crateid(attrs) {
-                Some(crateid) => crateid,
-                None => {
-                    sess.fatal("No crate_id and --crate-id or \
-                                --crate-name requested")
-                }
-            };
-            if crate_id {
-                println!("{}", crateid.to_str());
-            }
-            if crate_name {
-                println!("{}", crateid.name);
-            }
-        }
+        let id = link::find_crate_id(attrs, &t_outputs);
 
+        if crate_id {
+            println!("{}", id.to_str());
+        }
+        if crate_name {
+            println!("{}", id.name);
+        }
         if crate_file_name {
-            let lm = link::build_link_meta(sess, attrs, &t_outputs.obj_filename,
-                                           &mut ::util::sha2::Sha256::new());
-            let outputs = session::collect_outputs(&sess, attrs);
-            for &style in outputs.iter() {
-                let fname = link::filename_for_input(&sess, style, &lm,
-                                                     &t_outputs.out_filename);
+            let crate_types = session::collect_crate_types(&sess, attrs);
+            for &style in crate_types.iter() {
+                let fname = link::filename_for_input(&sess, style, &id,
+                                                     &t_outputs.with_extension(""));
                 println!("{}", fname.filename_display());
             }
         }
@@ -339,7 +354,7 @@ fn parse_crate_attrs(sess: session::Session,
 ///
 /// The diagnostic emitter yielded to the procedure should be used for reporting
 /// errors of the compiler.
-pub fn monitor(f: proc(@diagnostic::Emitter)) {
+pub fn monitor(f: proc()) {
     // FIXME: This is a hack for newsched since it doesn't support split stacks.
     // rustc needs a lot of stack! When optimizations are disabled, it needs
     // even *more* stack than usual as well.
@@ -348,8 +363,7 @@ pub fn monitor(f: proc(@diagnostic::Emitter)) {
     #[cfg(not(rtopt))]
     static STACK_SIZE: uint = 20000000; // 20MB
 
-    let mut task_builder = task::task();
-    task_builder.name("rustc");
+    let mut task_builder = task::task().named("rustc");
 
     // FIXME: Hacks on hacks. If the env is trying to override the stack size
     // then *don't* set it explicitly.
@@ -363,13 +377,14 @@ pub fn monitor(f: proc(@diagnostic::Emitter)) {
 
     match task_builder.try(proc() {
         io::stdio::set_stderr(~w as ~io::Writer);
-        f(@diagnostic::DefaultEmitter)
+        f()
     }) {
         Ok(()) => { /* fallthrough */ }
         Err(value) => {
             // Task failed without emitting a fatal diagnostic
             if !value.is::<diagnostic::FatalError>() {
-                diagnostic::DefaultEmitter.emit(
+                let mut emitter = diagnostic::EmitterWriter::stderr();
+                emitter.emit(
                     None,
                     diagnostic::ice_msg("unexpected failure"),
                     diagnostic::Error);
@@ -379,9 +394,7 @@ pub fn monitor(f: proc(@diagnostic::Emitter)) {
                      this is a bug",
                 ];
                 for note in xs.iter() {
-                    diagnostic::DefaultEmitter.emit(None,
-                                                    *note,
-                                                    diagnostic::Note)
+                    emitter.emit(None, *note, diagnostic::Note)
                 }
 
                 println!("{}", r.read_to_str());
@@ -402,6 +415,6 @@ pub fn main() {
 
 pub fn main_args(args: &[~str]) -> int {
     let owned_args = args.to_owned();
-    monitor(proc(demitter) run_compiler(owned_args, demitter));
+    monitor(proc() run_compiler(owned_args));
     0
 }

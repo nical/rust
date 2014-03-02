@@ -10,9 +10,9 @@
 
 // force-host
 
-#[feature(globs, macro_registrar, macro_rules)];
+#[feature(globs, macro_registrar, macro_rules, quote)];
 
-extern mod syntax;
+extern crate syntax;
 
 use syntax::ast::{Name, TokenTree};
 use syntax::codemap::Span;

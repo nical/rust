@@ -8,11 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern mod extra;
-extern mod arena;
+extern crate sync;
+extern crate arena;
 
 use std::iter::range_step;
-use extra::future::Future;
+use sync::Future;
 use arena::TypedArena;
 
 enum Tree<'a> {

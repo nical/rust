@@ -14,23 +14,25 @@
 
 use ast::Name;
 
+use collections::HashMap;
 use std::cast;
 use std::cell::RefCell;
 use std::cmp::Equiv;
-use std::hashmap::HashMap;
+use std::fmt;
+use std::hash::Hash;
 use std::rc::Rc;
 
 pub struct Interner<T> {
-    priv map: @RefCell<HashMap<T, Name>>,
-    priv vect: @RefCell<~[T]>,
+    priv map: RefCell<HashMap<T, Name>>,
+    priv vect: RefCell<~[T]>,
 }
 
 // when traits can extend traits, we should extend index<Name,T> to get []
-impl<T:Eq + IterBytes + Hash + Freeze + Clone + 'static> Interner<T> {
+impl<T:Eq + Hash + Freeze + Clone + 'static> Interner<T> {
     pub fn new() -> Interner<T> {
         Interner {
-            map: @RefCell::new(HashMap::new()),
-            vect: @RefCell::new(~[]),
+            map: RefCell::new(HashMap::new()),
+            vect: RefCell::new(~[]),
         }
     }
 
@@ -74,8 +76,7 @@ impl<T:Eq + IterBytes + Hash + Freeze + Clone + 'static> Interner<T> {
         vect.get().len()
     }
 
-    pub fn find_equiv<Q:Hash + IterBytes + Equiv<T>>(&self, val: &Q)
-                                              -> Option<Name> {
+    pub fn find_equiv<Q:Hash + Equiv<T>>(&self, val: &Q) -> Option<Name> {
         let map = self.map.borrow();
         match map.get().find_equiv(val) {
             Some(v) => Some(*v),
@@ -84,7 +85,7 @@ impl<T:Eq + IterBytes + Hash + Freeze + Clone + 'static> Interner<T> {
     }
 }
 
-#[deriving(Clone, Eq, IterBytes, Ord)]
+#[deriving(Clone, Eq, Hash, Ord)]
 pub struct RcStr {
     priv string: Rc<~str>,
 }
@@ -114,6 +115,13 @@ impl Str for RcStr {
     }
 }
 
+impl fmt::Show for RcStr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use std::fmt::Show;
+        self.as_slice().fmt(f)
+    }
+}
+
 impl RcStr {
     pub fn new(string: &str) -> RcStr {
         RcStr {
@@ -123,18 +131,18 @@ impl RcStr {
 }
 
 // A StrInterner differs from Interner<String> in that it accepts
-// references rather than @ ones, resulting in less allocation.
+// &str rather than RcStr, resulting in less allocation.
 pub struct StrInterner {
-    priv map: @RefCell<HashMap<RcStr, Name>>,
-    priv vect: @RefCell<~[RcStr]>,
+    priv map: RefCell<HashMap<RcStr, Name>>,
+    priv vect: RefCell<~[RcStr]>,
 }
 
 // when traits can extend traits, we should extend index<Name,T> to get []
 impl StrInterner {
     pub fn new() -> StrInterner {
         StrInterner {
-            map: @RefCell::new(HashMap::new()),
-            vect: @RefCell::new(~[]),
+            map: RefCell::new(HashMap::new()),
+            vect: RefCell::new(~[]),
         }
     }
 
@@ -206,8 +214,7 @@ impl StrInterner {
         vect.get().len()
     }
 
-    pub fn find_equiv<Q:Hash + IterBytes + Equiv<RcStr>>(&self, val: &Q)
-                                                         -> Option<Name> {
+    pub fn find_equiv<Q:Hash + Equiv<RcStr>>(&self, val: &Q) -> Option<Name> {
         let map = self.map.borrow();
         match map.get().find_equiv(val) {
             Some(v) => Some(*v),

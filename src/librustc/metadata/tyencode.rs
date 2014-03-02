@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -11,9 +11,10 @@
 // Type encoding
 
 #[allow(unused_must_use)]; // as with encoding, everything is a no-fail MemWriter
+#[allow(non_camel_case_types)];
 
 use std::cell::RefCell;
-use std::hashmap::HashMap;
+use collections::HashMap;
 use std::io;
 use std::io::MemWriter;
 use std::str;
@@ -26,6 +27,7 @@ use syntax::abi::AbiSet;
 use syntax::ast;
 use syntax::ast::*;
 use syntax::diagnostic::SpanHandler;
+use syntax::parse::token;
 use syntax::print::pprust::*;
 
 macro_rules! mywrite( ($wr:expr, $($arg:tt)*) => (
@@ -177,7 +179,7 @@ fn enc_region(w: &mut MemWriter, cx: @ctxt, r: ty::Region) {
             mywrite!(w, "B[{}|{}|{}]",
                      node_id,
                      index,
-                     cx.tcx.sess.str_of(ident));
+                     token::get_name(ident));
         }
         ty::ReFree(ref fr) => {
             mywrite!(w, "f[{}|", fr.scope_id);
@@ -195,7 +197,7 @@ fn enc_region(w: &mut MemWriter, cx: @ctxt, r: ty::Region) {
         }
         ty::ReInfer(_) => {
             // these should not crop up after typeck
-            cx.diag.handler().bug("Cannot encode region variables");
+            cx.diag.handler().bug("cannot encode region variables");
         }
     }
 }
@@ -208,7 +210,7 @@ fn enc_bound_region(w: &mut MemWriter, cx: @ctxt, br: ty::BoundRegion) {
         ty::BrNamed(d, s) => {
             mywrite!(w, "[{}|{}]",
                      (cx.ds)(d),
-                     cx.tcx.sess.str_of(s));
+                     token::get_name(s));
         }
         ty::BrFresh(id) => {
             mywrite!(w, "f{}|", id);
@@ -236,7 +238,6 @@ pub fn enc_trait_ref(w: &mut MemWriter, cx: @ctxt, s: &ty::TraitRef) {
 pub fn enc_trait_store(w: &mut MemWriter, cx: @ctxt, s: ty::TraitStore) {
     match s {
         ty::UniqTraitStore => mywrite!(w, "~"),
-        ty::BoxTraitStore => mywrite!(w, "@"),
         ty::RegionTraitStore(re) => {
             mywrite!(w, "&");
             enc_region(w, cx, re);
@@ -321,7 +322,7 @@ fn enc_sty(w: &mut MemWriter, cx: @ctxt, st: &ty::sty) {
             enc_bare_fn_ty(w, cx, f);
         }
         ty::ty_infer(_) => {
-            cx.diag.handler().bug("Cannot encode inference variable types");
+            cx.diag.handler().bug("cannot encode inference variable types");
         }
         ty::ty_param(param_ty {idx: id, def_id: did}) => {
             mywrite!(w, "p{}|{}", (cx.ds)(did), id);
@@ -329,13 +330,12 @@ fn enc_sty(w: &mut MemWriter, cx: @ctxt, st: &ty::sty) {
         ty::ty_self(did) => {
             mywrite!(w, "s{}|", (cx.ds)(did));
         }
-        ty::ty_type => mywrite!(w, "Y"),
         ty::ty_struct(def, ref substs) => {
             mywrite!(w, "a[{}|", (cx.ds)(def));
             enc_substs(w, cx, substs);
             mywrite!(w, "]");
         }
-        ty::ty_err => fail!("Shouldn't encode error type")
+        ty::ty_err => fail!("shouldn't encode error type")
     }
 }
 
@@ -422,7 +422,7 @@ fn enc_bounds(w: &mut MemWriter, cx: @ctxt, bs: &ty::ParamBounds) {
 }
 
 pub fn enc_type_param_def(w: &mut MemWriter, cx: @ctxt, v: &ty::TypeParameterDef) {
-    mywrite!(w, "{}:{}|", cx.tcx.sess.str_of(v.ident), (cx.ds)(v.def_id));
+    mywrite!(w, "{}:{}|", token::get_ident(v.ident), (cx.ds)(v.def_id));
     enc_bounds(w, cx, v.bounds);
     enc_opt(w, v.default, |w, t| enc_ty(w, cx, t));
 }

@@ -102,27 +102,27 @@ There are a number of free functions that create or take vectors, for example:
 #[warn(non_camel_case_types)];
 
 use cast;
+use cast::transmute;
 use ops::Drop;
 use clone::{Clone, DeepClone};
 use container::{Container, Mutable};
 use cmp::{Eq, TotalOrd, Ordering, Less, Equal, Greater};
 use cmp;
 use default::Default;
+use fmt;
 use iter::*;
-use num::{Integer, CheckedAdd, Saturating, checked_next_power_of_two};
+use num::{CheckedAdd, Saturating, checked_next_power_of_two, div_rem};
 use option::{None, Option, Some};
-use ptr::to_unsafe_ptr;
 use ptr;
 use ptr::RawPtr;
 use rt::global_heap::{malloc_raw, realloc_raw, exchange_free};
+use result::{Ok, Err};
 use mem;
 use mem::size_of;
 use kinds::marker;
 use uint;
-use unstable::finally::Finally;
-use unstable::intrinsics;
-use unstable::raw::{Repr, Slice, Vec};
-use util;
+use unstable::finally::try_finally;
+use raw::{Repr, Slice, Vec};
 
 /**
  * Creates and initializes an owned vector.
@@ -134,15 +134,16 @@ pub fn from_fn<T>(n_elts: uint, op: |uint| -> T) -> ~[T] {
     unsafe {
         let mut v = with_capacity(n_elts);
         let p = v.as_mut_ptr();
-        let mut i: uint = 0u;
-        (|| {
-            while i < n_elts {
-                intrinsics::move_val_init(&mut(*ptr::mut_offset(p, i as int)), op(i));
-                i += 1u;
-            }
-        }).finally(|| {
-            v.set_len(i);
-        });
+        let mut i = 0;
+        try_finally(
+            &mut i, (),
+            |i, ()| while *i < n_elts {
+                mem::move_val_init(
+                    &mut(*p.offset(*i as int)),
+                    op(*i));
+                *i += 1u;
+            },
+            |i| v.set_len(*i));
         v
     }
 }
@@ -162,14 +163,15 @@ pub fn from_elem<T:Clone>(n_elts: uint, t: T) -> ~[T] {
         let mut v = with_capacity(n_elts);
         let p = v.as_mut_ptr();
         let mut i = 0u;
-        (|| {
-            while i < n_elts {
-                intrinsics::move_val_init(&mut(*ptr::mut_offset(p, i as int)), t.clone());
-                i += 1u;
-            }
-        }).finally(|| {
-            v.set_len(i);
-        });
+        try_finally(
+            &mut i, (),
+            |i, ()| while *i < n_elts {
+                mem::move_val_init(
+                    &mut(*p.offset(*i as int)),
+                    t.clone());
+                *i += 1u;
+            },
+            |i| v.set_len(*i));
         v
     }
 }
@@ -186,7 +188,7 @@ pub fn with_capacity<T>(capacity: uint) -> ~[T] {
         let ptr = malloc_raw(size) as *mut Vec<()>;
         (*ptr).alloc = alloc;
         (*ptr).fill = 0;
-        cast::transmute(ptr)
+        transmute(ptr)
     }
 }
 
@@ -214,7 +216,7 @@ pub fn build<A>(size: Option<uint>, builder: |push: |v: A||) -> ~[A] {
  */
 pub fn ref_slice<'a, A>(s: &'a A) -> &'a [A] {
     unsafe {
-        cast::transmute(Slice { data: s, len: 1 })
+        transmute(Slice { data: s, len: 1 })
     }
 }
 
@@ -223,8 +225,8 @@ pub fn ref_slice<'a, A>(s: &'a A) -> &'a [A] {
  */
 pub fn mut_ref_slice<'a, A>(s: &'a mut A) -> &'a mut [A] {
     unsafe {
-        let ptr: *A = cast::transmute(s);
-        cast::transmute(Slice { data: ptr, len: 1 })
+        let ptr: *A = transmute(s);
+        transmute(Slice { data: ptr, len: 1 })
     }
 }
 
@@ -296,7 +298,8 @@ impl<'a, T> Iterator<&'a [T]> for RevSplits<'a, T> {
             return Some(self.v);
         }
 
-        match self.v.iter().rposition(|x| (self.pred)(x)) {
+        let pred = &mut self.pred;
+        match self.v.iter().rposition(|x| (*pred)(x)) {
             None => {
                 self.finished = true;
                 Some(self.v)
@@ -572,7 +575,7 @@ impl<'a, T> Iterator<&'a [T]> for Chunks<'a, T> {
         if self.v.len() == 0 {
             (0, Some(0))
         } else {
-            let (n, rem) = self.v.len().div_rem(&self.size);
+            let (n, rem) = div_rem(self.v.len(), self.size);
             let n = if rem > 0 { n+1 } else { n };
             (n, Some(n))
         }
@@ -952,7 +955,7 @@ pub trait ImmutableVector<'a, T> {
      *
      * Equivalent to:
      *
-     * ```
+     * ```ignore
      *     if self.len() == 0 { return None }
      *     let head = &self[0];
      *     *self = self.slice_from(1);
@@ -970,7 +973,7 @@ pub trait ImmutableVector<'a, T> {
      *
      * Equivalent to:
      *
-     * ```
+     * ```ignore
      *     if self.len() == 0 { return None; }
      *     let tail = &self[self.len() - 1];
      *     *self = self.slice_to(self.len() - 1);
@@ -988,7 +991,7 @@ impl<'a,T> ImmutableVector<'a, T> for &'a [T] {
         assert!(start <= end);
         assert!(end <= self.len());
         unsafe {
-            cast::transmute(Slice {
+            transmute(Slice {
                     data: self.as_ptr().offset(start as int),
                     len: (end - start)
                 })
@@ -1106,7 +1109,7 @@ impl<'a,T> ImmutableVector<'a, T> for &'a [T] {
 
     #[inline]
     unsafe fn unsafe_ref(self, index: uint) -> &'a T {
-        cast::transmute(self.repr().data.offset(index as int))
+        transmute(self.repr().data.offset(index as int))
     }
 
     #[inline]
@@ -1141,7 +1144,7 @@ impl<'a,T> ImmutableVector<'a, T> for &'a [T] {
     fn shift_ref(&mut self) -> Option<&'a T> {
         if self.len() == 0 { return None; }
         unsafe {
-            let s: &mut Slice<T> = cast::transmute(self);
+            let s: &mut Slice<T> = transmute(self);
             Some(&*raw::shift_ptr(s))
         }
     }
@@ -1149,7 +1152,7 @@ impl<'a,T> ImmutableVector<'a, T> for &'a [T] {
     fn pop_ref(&mut self) -> Option<&'a T> {
         if self.len() == 0 { return None; }
         unsafe {
-            let s: &mut Slice<T> = cast::transmute(self);
+            let s: &mut Slice<T> = transmute(self);
             Some(&*raw::pop_ptr(s))
         }
     }
@@ -1220,10 +1223,8 @@ impl<'a, T: TotalOrd> ImmutableTotalOrdVector<T> for &'a [T] {
 
 /// Extension methods for vectors containing `Clone` elements.
 pub trait ImmutableCloneableVector<T> {
-    /**
-     * Partitions the vector into those that satisfies the predicate, and
-     * those that do not.
-     */
+    /// Partitions the vector into two vectors `(A,B)`, where all
+    /// elements of `A` satisfy `f` and all elements of `B` do not.
     fn partitioned(&self, f: |&T| -> bool) -> (~[T], ~[T]);
 
     /// Create an iterator that yields every possible permutation of the
@@ -1365,13 +1366,24 @@ pub trait OwnedVector<T> {
     /// ```
     fn remove(&mut self, i: uint) -> Option<T>;
 
-    /**
-     * Remove an element from anywhere in the vector and return it, replacing it
-     * with the last element. This does not preserve ordering, but is O(1).
-     *
-     * Fails if index >= length.
-     */
-    fn swap_remove(&mut self, index: uint) -> T;
+    /// Remove an element from anywhere in the vector and return it, replacing it
+    /// with the last element. This does not preserve ordering, but is O(1).
+    ///
+    /// Returns `None` if `index` is out of bounds.
+    ///
+    /// # Example
+    /// ```rust
+    /// let mut v = ~[~"foo", ~"bar", ~"baz", ~"qux"];
+    ///
+    /// assert_eq!(v.swap_remove(1), Some(~"bar"));
+    /// assert_eq!(v, ~[~"foo", ~"qux", ~"baz"]);
+    ///
+    /// assert_eq!(v.swap_remove(0), Some(~"foo"));
+    /// assert_eq!(v, ~[~"baz", ~"qux"]);
+    ///
+    /// assert_eq!(v.swap_remove(2), None);
+    /// ```
+    fn swap_remove(&mut self, index: uint) -> Option<T>;
 
     /// Shorten a vector, dropping excess elements.
     fn truncate(&mut self, newlen: uint);
@@ -1380,9 +1392,10 @@ pub trait OwnedVector<T> {
      * Like `filter()`, but in place.  Preserves order of `v`.  Linear time.
      */
     fn retain(&mut self, f: |t: &T| -> bool);
+
     /**
-     * Partitions the vector into those that satisfies the predicate, and
-     * those that do not.
+     * Partitions the vector into two vectors `(A,B)`, where all
+     * elements of `A` satisfy `f` and all elements of `B` do not.
      */
     fn partition(self, f: |&T| -> bool) -> (~[T], ~[T]);
 
@@ -1414,8 +1427,8 @@ impl<T> OwnedVector<T> for ~[T] {
     #[inline]
     fn move_iter(self) -> MoveItems<T> {
         unsafe {
-            let iter = cast::transmute(self.iter());
-            let ptr = cast::transmute(self);
+            let iter = transmute(self.iter());
+            let ptr = transmute(self);
             MoveItems { allocation: ptr, iter: iter }
         }
     }
@@ -1429,7 +1442,7 @@ impl<T> OwnedVector<T> for ~[T] {
         // Only make the (slow) call into the runtime if we have to
         if self.capacity() < n {
             unsafe {
-                let ptr: *mut *mut Vec<()> = cast::transmute(self);
+                let ptr: *mut *mut Vec<()> = transmute(self);
                 let alloc = n * mem::nonzero_size_of::<T>();
                 let size = alloc + mem::size_of::<Vec<()>>();
                 if alloc / mem::nonzero_size_of::<T>() != n || size < alloc {
@@ -1460,14 +1473,14 @@ impl<T> OwnedVector<T> for ~[T] {
     #[inline]
     fn capacity(&self) -> uint {
         unsafe {
-            let repr: **Vec<()> = cast::transmute(self);
+            let repr: **Vec<()> = transmute(self);
             (**repr).alloc / mem::nonzero_size_of::<T>()
         }
     }
 
     fn shrink_to_fit(&mut self) {
         unsafe {
-            let ptr: *mut *mut Vec<()> = cast::transmute(self);
+            let ptr: *mut *mut Vec<()> = transmute(self);
             let alloc = (**ptr).fill;
             let size = alloc + mem::size_of::<Vec<()>>();
             *ptr = realloc_raw(*ptr as *mut u8, size) as *mut Vec<()>;
@@ -1478,7 +1491,7 @@ impl<T> OwnedVector<T> for ~[T] {
     #[inline]
     fn push(&mut self, t: T) {
         unsafe {
-            let repr: **Vec<()> = cast::transmute(&mut *self);
+            let repr: **Vec<()> = transmute(&mut *self);
             let fill = (**repr).fill;
             if (**repr).alloc <= fill {
                 self.reserve_additional(1);
@@ -1490,12 +1503,12 @@ impl<T> OwnedVector<T> for ~[T] {
         // This doesn't bother to make sure we have space.
         #[inline] // really pretty please
         unsafe fn push_fast<T>(this: &mut ~[T], t: T) {
-            let repr: **mut Vec<u8> = cast::transmute(this);
+            let repr: **mut Vec<u8> = transmute(this);
             let fill = (**repr).fill;
             (**repr).fill += mem::nonzero_size_of::<T>();
-            let p = to_unsafe_ptr(&((**repr).data));
-            let p = ptr::offset(p, fill as int) as *mut T;
-            intrinsics::move_val_init(&mut(*p), t);
+            let p = &((**repr).data) as *u8;
+            let p = p.offset(fill as int) as *mut T;
+            mem::move_val_init(&mut(*p), t);
         }
     }
 
@@ -1508,7 +1521,7 @@ impl<T> OwnedVector<T> for ~[T] {
         unsafe { // Note: infallible.
             let self_p = self.as_mut_ptr();
             let rhs_p = rhs.as_ptr();
-            ptr::copy_memory(ptr::mut_offset(self_p, self_len as int), rhs_p, rhs_len);
+            ptr::copy_memory(self_p.offset(self_len as int), rhs_p, rhs_len);
             self.set_len(new_len);
             rhs.set_len(0);
         }
@@ -1518,10 +1531,10 @@ impl<T> OwnedVector<T> for ~[T] {
         match self.len() {
             0  => None,
             ln => {
-                let valptr = ptr::to_mut_unsafe_ptr(&mut self[ln - 1u]);
+                let valptr = &mut self[ln - 1u] as *mut T;
                 unsafe {
                     self.set_len(ln - 1u);
-                    Some(ptr::read_ptr(&*valptr))
+                    Some(ptr::read(&*valptr))
                 }
             }
         }
@@ -1549,10 +1562,10 @@ impl<T> OwnedVector<T> for ~[T] {
             let p = self.as_mut_ptr().offset(i as int);
             // Shift everything over to make space. (Duplicating the
             // `i`th element into two consecutive places.)
-            ptr::copy_memory(p.offset(1), p, len - i);
+            ptr::copy_memory(p.offset(1), &*p, len - i);
             // Write it in, overwriting the first copy of the `i`th
             // element.
-            intrinsics::move_val_init(&mut *p, x);
+            mem::move_val_init(&mut *p, x);
             self.set_len(len + 1);
         }
     }
@@ -1565,10 +1578,10 @@ impl<T> OwnedVector<T> for ~[T] {
                 let ptr = self.as_mut_ptr().offset(i as int);
                 // copy it out, unsafely having a copy of the value on
                 // the stack and in the vector at the same time.
-                let ret = Some(ptr::read_ptr(ptr as *T));
+                let ret = Some(ptr::read(ptr as *T));
 
                 // Shift everything down to fill in that spot.
-                ptr::copy_memory(ptr, ptr.offset(1), len - i - 1);
+                ptr::copy_memory(ptr, &*ptr.offset(1), len - i - 1);
                 self.set_len(len - 1);
 
                 ret
@@ -1577,15 +1590,14 @@ impl<T> OwnedVector<T> for ~[T] {
             None
         }
     }
-    fn swap_remove(&mut self, index: uint) -> T {
+    fn swap_remove(&mut self, index: uint) -> Option<T> {
         let ln = self.len();
-        if index >= ln {
-            fail!("vec::swap_remove - index {} >= length {}", index, ln);
-        }
         if index < ln - 1 {
             self.swap(index, ln - 1);
+        } else if index >= ln {
+            return None
         }
-        self.pop().unwrap()
+        self.pop()
     }
     fn truncate(&mut self, newlen: uint) {
         let oldlen = self.len();
@@ -1595,7 +1607,7 @@ impl<T> OwnedVector<T> for ~[T] {
             let p = self.as_mut_ptr();
             // This loop is optimized out for non-drop types.
             for i in range(newlen, oldlen) {
-                ptr::read_and_zero_ptr(p.offset(i as int));
+                ptr::read_and_zero(p.offset(i as int));
             }
         }
         unsafe { self.set_len(newlen); }
@@ -1645,7 +1657,7 @@ impl<T> OwnedVector<T> for ~[T] {
 
     #[inline]
     unsafe fn set_len(&mut self, new_len: uint) {
-        let repr: **mut Vec<()> = cast::transmute(self);
+        let repr: **mut Vec<()> = transmute(self);
         (**repr).fill = new_len * mem::nonzero_size_of::<T>();
     }
 }
@@ -1795,12 +1807,12 @@ impl<T:Eq> OwnedEqVector<T> for ~[T] {
             let mut w = 1;
 
             while r < ln {
-                let p_r = ptr::mut_offset(p, r as int);
-                let p_wm1 = ptr::mut_offset(p, (w - 1) as int);
+                let p_r = p.offset(r as int);
+                let p_wm1 = p.offset((w - 1) as int);
                 if *p_r != *p_wm1 {
                     if r != w {
-                        let p_w = ptr::mut_offset(p_wm1, 1);
-                        util::swap(&mut *p_r, &mut *p_w);
+                        let p_w = p_wm1.offset(1);
+                        mem::swap(&mut *p_r, &mut *p_w);
                     }
                     w += 1;
                 }
@@ -1812,11 +1824,69 @@ impl<T:Eq> OwnedEqVector<T> for ~[T] {
     }
 }
 
+fn insertion_sort<T>(v: &mut [T], compare: |&T, &T| -> Ordering) {
+    let len = v.len() as int;
+    let buf_v = v.as_mut_ptr();
+
+    // 1 <= i < len;
+    for i in range(1, len) {
+        // j satisfies: 0 <= j <= i;
+        let mut j = i;
+        unsafe {
+            // `i` is in bounds.
+            let read_ptr = buf_v.offset(i) as *T;
+
+            // find where to insert, we need to do strict <,
+            // rather than <=, to maintain stability.
+
+            // 0 <= j - 1 < len, so .offset(j - 1) is in bounds.
+            while j > 0 &&
+                    compare(&*read_ptr, &*buf_v.offset(j - 1)) == Less {
+                j -= 1;
+            }
+
+            // shift everything to the right, to make space to
+            // insert this value.
+
+            // j + 1 could be `len` (for the last `i`), but in
+            // that case, `i == j` so we don't copy. The
+            // `.offset(j)` is always in bounds.
+
+            if i != j {
+                let tmp = ptr::read(read_ptr);
+                ptr::copy_memory(buf_v.offset(j + 1),
+                                 &*buf_v.offset(j),
+                                 (i - j) as uint);
+                ptr::copy_nonoverlapping_memory(buf_v.offset(j),
+                                                &tmp as *T,
+                                                1);
+                cast::forget(tmp);
+            }
+        }
+    }
+}
+
 fn merge_sort<T>(v: &mut [T], compare: |&T, &T| -> Ordering) {
     // warning: this wildly uses unsafe.
-    static INSERTION: uint = 8;
+    static BASE_INSERTION: uint = 32;
+    static LARGE_INSERTION: uint = 16;
+
+    // FIXME #12092: smaller insertion runs seems to make sorting
+    // vectors of large elements a little faster on some platforms,
+    // but hasn't been tested/tuned extensively
+    let insertion = if size_of::<T>() <= 16 {
+        BASE_INSERTION
+    } else {
+        LARGE_INSERTION
+    };
 
     let len = v.len();
+
+    // short vectors get sorted in-place via insertion sort to avoid allocations
+    if len <= insertion {
+        insertion_sort(v, compare);
+        return;
+    }
 
     // allocate some memory to use as scratch memory, we keep the
     // length 0 so we can keep shallow copies of the contents of `v`
@@ -1837,9 +1907,9 @@ fn merge_sort<T>(v: &mut [T], compare: |&T, &T| -> Ordering) {
     // We could hardcode the sorting comparisons here, and we could
     // manipulate/step the pointers themselves, rather than repeatedly
     // .offset-ing.
-    for start in range_step(0, len, INSERTION) {
-        // start <= i <= len;
-        for i in range(start, cmp::min(start + INSERTION, len)) {
+    for start in range_step(0, len, insertion) {
+        // start <= i < len;
+        for i in range(start, cmp::min(start + insertion, len)) {
             // j satisfies: start <= j <= i;
             let mut j = i as int;
             unsafe {
@@ -1863,7 +1933,7 @@ fn merge_sort<T>(v: &mut [T], compare: |&T, &T| -> Ordering) {
                 // that case, `i == j` so we don't copy. The
                 // `.offset(j)` is always in bounds.
                 ptr::copy_memory(buf_dat.offset(j + 1),
-                                 buf_dat.offset(j),
+                                 &*buf_dat.offset(j),
                                  i - j as uint);
                 ptr::copy_nonoverlapping_memory(buf_dat.offset(j), read_ptr, 1);
             }
@@ -1871,7 +1941,7 @@ fn merge_sort<T>(v: &mut [T], compare: |&T, &T| -> Ordering) {
     }
 
     // step 2. merge the sorted runs.
-    let mut width = INSERTION;
+    let mut width = insertion;
     while width < len {
         // merge the sorted runs of length `width` in `buf_dat` two at
         // a time, placing the result in `buf_tmp`.
@@ -1913,11 +1983,11 @@ fn merge_sort<T>(v: &mut [T], compare: |&T, &T| -> Ordering) {
                     if left == right_start {
                         // the number remaining in this run.
                         let elems = (right_end as uint - right as uint) / mem::size_of::<T>();
-                        ptr::copy_nonoverlapping_memory(out, right, elems);
+                        ptr::copy_nonoverlapping_memory(out, &*right, elems);
                         break;
                     } else if right == right_end {
                         let elems = (right_start as uint - left as uint) / mem::size_of::<T>();
-                        ptr::copy_nonoverlapping_memory(out, left, elems);
+                        ptr::copy_nonoverlapping_memory(out, &*left, elems);
                         break;
                     }
 
@@ -1931,13 +2001,13 @@ fn merge_sort<T>(v: &mut [T], compare: |&T, &T| -> Ordering) {
                     } else {
                         step(&mut left)
                     };
-                    ptr::copy_nonoverlapping_memory(out, to_copy, 1);
+                    ptr::copy_nonoverlapping_memory(out, &*to_copy, 1);
                     step(&mut out);
                 }
             }
         }
 
-        util::swap(&mut buf_dat, &mut buf_tmp);
+        mem::swap(&mut buf_dat, &mut buf_tmp);
 
         width *= 2;
     }
@@ -1945,7 +2015,7 @@ fn merge_sort<T>(v: &mut [T], compare: |&T, &T| -> Ordering) {
     // write the result to `v` in one go, so that there are never two copies
     // of the same object in `v`.
     unsafe {
-        ptr::copy_nonoverlapping_memory(v.as_mut_ptr(), buf_dat, len);
+        ptr::copy_nonoverlapping_memory(v.as_mut_ptr(), &*buf_dat, len);
     }
 
     // increment the pointer, returning the old pointer.
@@ -2014,7 +2084,7 @@ pub trait MutableVector<'a, T> {
      *
      * Equivalent to:
      *
-     * ```
+     * ```ignore
      *     if self.len() == 0 { return None; }
      *     let head = &mut self[0];
      *     *self = self.mut_slice_from(1);
@@ -2032,7 +2102,7 @@ pub trait MutableVector<'a, T> {
      *
      * Equivalent to:
      *
-     * ```
+     * ```ignore
      *     if self.len() == 0 { return None; }
      *     let tail = &mut self[self.len() - 1];
      *     *self = self.mut_slice_to(self.len() - 1);
@@ -2057,7 +2127,7 @@ pub trait MutableVector<'a, T> {
     /// ```rust
     /// let mut v = ["a", "b", "c", "d"];
     /// v.swap(1, 3);
-    /// assert_eq!(v, ["a", "d", "c", "b"]);
+    /// assert!(v == ["a", "d", "c", "b"]);
     /// ```
     fn swap(self, a: uint, b: uint);
 
@@ -2078,24 +2148,23 @@ pub trait MutableVector<'a, T> {
     /// // scoped to restrict the lifetime of the borrows
     /// {
     ///    let (left, right) = v.mut_split_at(0);
-    ///    assert_eq!(left, &mut []);
-    ///    assert_eq!(right, &mut [1, 2, 3, 4, 5, 6]);
+    ///    assert!(left == &mut []);
+    ///    assert!(right == &mut [1, 2, 3, 4, 5, 6]);
     /// }
     ///
     /// {
     ///     let (left, right) = v.mut_split_at(2);
-    ///     assert_eq!(left, &mut [1, 2]);
-    ///     assert_eq!(right, &mut [3, 4, 5, 6]);
+    ///     assert!(left == &mut [1, 2]);
+    ///     assert!(right == &mut [3, 4, 5, 6]);
     /// }
     ///
     /// {
     ///     let (left, right) = v.mut_split_at(6);
-    ///     assert_eq!(left, &mut [1, 2, 3, 4, 5, 6]);
-    ///     assert_eq!(right, &mut []);
+    ///     assert!(left == &mut [1, 2, 3, 4, 5, 6]);
+    ///     assert!(right == &mut []);
     /// }
     /// ```
-    fn mut_split_at(self, mid: uint) -> (&'a mut [T],
-                                      &'a mut [T]);
+    fn mut_split_at(self, mid: uint) -> (&'a mut [T], &'a mut [T]);
 
     /// Reverse the order of elements in a vector, in place.
     ///
@@ -2104,7 +2173,7 @@ pub trait MutableVector<'a, T> {
     /// ```rust
     /// let mut v = [1, 2, 3];
     /// v.reverse();
-    /// assert_eq!(v, [3, 2, 1]);
+    /// assert!(v == [3, 2, 1]);
     /// ```
     fn reverse(self);
 
@@ -2119,11 +2188,11 @@ pub trait MutableVector<'a, T> {
     /// ```rust
     /// let mut v = [5i, 4, 1, 3, 2];
     /// v.sort_by(|a, b| a.cmp(b));
-    /// assert_eq!(v, [1, 2, 3, 4, 5]);
+    /// assert!(v == [1, 2, 3, 4, 5]);
     ///
     /// // reverse sorting
     /// v.sort_by(|a, b| b.cmp(a));
-    /// assert_eq!(v, [5, 4, 3, 2, 1]);
+    /// assert!(v == [5, 4, 3, 2, 1]);
     /// ```
     fn sort_by(self, compare: |&T, &T| -> Ordering);
 
@@ -2208,7 +2277,7 @@ impl<'a,T> MutableVector<'a, T> for &'a mut [T] {
         assert!(start <= end);
         assert!(end <= self.len());
         unsafe {
-            cast::transmute(Slice {
+            transmute(Slice {
                     data: self.as_mut_ptr().offset(start as int) as *T,
                     len: (end - start)
                 })
@@ -2277,7 +2346,7 @@ impl<'a,T> MutableVector<'a, T> for &'a mut [T] {
     fn mut_shift_ref(&mut self) -> Option<&'a mut T> {
         if self.len() == 0 { return None; }
         unsafe {
-            let s: &mut Slice<T> = cast::transmute(self);
+            let s: &mut Slice<T> = transmute(self);
             Some(cast::transmute_mut(&*raw::shift_ptr(s)))
         }
     }
@@ -2285,7 +2354,7 @@ impl<'a,T> MutableVector<'a, T> for &'a mut [T] {
     fn mut_pop_ref(&mut self) -> Option<&'a mut T> {
         if self.len() == 0 { return None; }
         unsafe {
-            let s: &mut Slice<T> = cast::transmute(self);
+            let s: &mut Slice<T> = transmute(self);
             Some(cast::transmute_mut(&*raw::pop_ptr(s)))
         }
     }
@@ -2296,7 +2365,7 @@ impl<'a,T> MutableVector<'a, T> for &'a mut [T] {
             // them to their raw pointers to do the swap
             let pa: *mut T = &mut self[a];
             let pb: *mut T = &mut self[b];
-            ptr::swap_ptr(pa, pb);
+            ptr::swap(pa, pb);
         }
     }
 
@@ -2317,14 +2386,14 @@ impl<'a,T> MutableVector<'a, T> for &'a mut [T] {
     #[inline]
     fn move_from(self, mut src: ~[T], start: uint, end: uint) -> uint {
         for (a, b) in self.mut_iter().zip(src.mut_slice(start, end).mut_iter()) {
-            util::swap(a, b);
+            mem::swap(a, b);
         }
         cmp::min(self.len(), end-start)
     }
 
     #[inline]
     unsafe fn unsafe_mut_ref(self, index: uint) -> &'a mut T {
-        cast::transmute(ptr::mut_offset(self.repr().data as *mut T, index as int))
+        transmute((self.repr().data as *mut T).offset(index as int))
     }
 
     #[inline]
@@ -2339,7 +2408,7 @@ impl<'a,T> MutableVector<'a, T> for &'a mut [T] {
 
     #[inline]
     unsafe fn init_elem(self, i: uint, val: T) {
-        intrinsics::move_val_init(&mut (*self.as_mut_ptr().offset(i as int)), val);
+        mem::move_val_init(&mut (*self.as_mut_ptr().offset(i as int)), val);
     }
 
     #[inline]
@@ -2364,12 +2433,12 @@ pub trait MutableCloneableVector<T> {
     /// let mut dst = [0, 0, 0];
     /// let src = [1, 2];
     ///
-    /// assert_eq!(dst.copy_from(src), 2);
-    /// assert_eq!(dst, [1, 2, 0]);
+    /// assert!(dst.copy_from(src) == 2);
+    /// assert!(dst == [1, 2, 0]);
     ///
     /// let src2 = [3, 4, 5, 6];
-    /// assert_eq!(dst.copy_from(src2), 3);
-    /// assert_eq!(dst, [3, 4, 5]);
+    /// assert!(dst.copy_from(src2) == 3);
+    /// assert!(dst == [3, 4, 5]);
     /// ```
     fn copy_from(self, &[T]) -> uint;
 }
@@ -2397,7 +2466,7 @@ pub trait MutableTotalOrdVector<T> {
     /// let mut v = [-5, 4, 1, -3, 2];
     ///
     /// v.sort();
-    /// assert_eq!(v, [-5, -3, 1, 2, 4]);
+    /// assert!(v == [-5, -3, 1, 2, 4]);
     /// ```
     fn sort(self);
 }
@@ -2423,10 +2492,11 @@ pub unsafe fn from_buf<T>(ptr: *T, elts: uint) -> ~[T] {
 
 /// Unsafe operations
 pub mod raw {
-    use cast;
+    use cast::transmute;
     use ptr;
+    use ptr::RawPtr;
     use vec::{with_capacity, MutableVector, OwnedVector};
-    use unstable::raw::Slice;
+    use raw::Slice;
 
     /**
      * Form a slice from a pointer and length (as a number of units,
@@ -2435,7 +2505,7 @@ pub mod raw {
     #[inline]
     pub unsafe fn buf_as_slice<T,U>(p: *T, len: uint, f: |v: &[T]| -> U)
                                -> U {
-        f(cast::transmute(Slice {
+        f(transmute(Slice {
             data: p,
             len: len
         }))
@@ -2452,7 +2522,7 @@ pub mod raw {
                                    len: uint,
                                    f: |v: &mut [T]| -> U)
                                    -> U {
-        f(cast::transmute(Slice {
+        f(transmute(Slice {
             data: p as *T,
             len: len
         }))
@@ -2483,7 +2553,7 @@ pub mod raw {
     pub unsafe fn shift_ptr<T>(slice: &mut Slice<T>) -> *T {
         if slice.len == 0 { fail!("shift on empty slice"); }
         let head: *T = slice.data;
-        slice.data = ptr::offset(slice.data, 1);
+        slice.data = slice.data.offset(1);
         slice.len -= 1;
         head
     }
@@ -2495,7 +2565,7 @@ pub mod raw {
      */
     pub unsafe fn pop_ptr<T>(slice: &mut Slice<T>) -> *T {
         if slice.len == 0 { fail!("pop on empty slice"); }
-        let tail: *T = ptr::offset(slice.data, (slice.len - 1) as int);
+        let tail: *T = slice.data.offset((slice.len - 1) as int);
         slice.len -= 1;
         tail
     }
@@ -2581,6 +2651,28 @@ impl<A: DeepClone> DeepClone for ~[A] {
     }
 }
 
+impl<'a, T: fmt::Show> fmt::Show for &'a [T] {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f.buf, "["));
+        let mut is_first = true;
+        for x in self.iter() {
+            if is_first {
+                is_first = false;
+            } else {
+                try!(write!(f.buf, ", "));
+            }
+            try!(write!(f.buf, "{}", *x))
+        }
+        write!(f.buf, "]")
+    }
+}
+
+impl<T: fmt::Show> fmt::Show for ~[T] {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.as_slice().fmt(f)
+    }
+}
+
 // This works because every lifetime is a sub-lifetime of 'static
 impl<'a, A> Default for &'a [A] {
     fn default() -> &'a [A] { &'a [] }
@@ -2612,12 +2704,12 @@ macro_rules! iterator {
                             // purposefully don't use 'ptr.offset' because for
                             // vectors with 0-size elements this would return the
                             // same pointer.
-                            cast::transmute(self.ptr as uint + 1)
+                            transmute(self.ptr as uint + 1)
                         } else {
                             self.ptr.offset(1)
                         };
 
-                        Some(cast::transmute(old))
+                        Some(transmute(old))
                     }
                 }
             }
@@ -2640,11 +2732,11 @@ macro_rules! iterator {
                     } else {
                         self.end = if mem::size_of::<T>() == 0 {
                             // See above for why 'ptr.offset' isn't used
-                            cast::transmute(self.end as uint - 1)
+                            transmute(self.end as uint - 1)
                         } else {
                             self.end.offset(-1)
                         };
-                        Some(cast::transmute(self.end))
+                        Some(transmute(self.end))
                     }
                 }
             }
@@ -2663,7 +2755,7 @@ impl<'a, T> RandomAccessIterator<&'a T> for Items<'a, T> {
     fn idx(&self, index: uint) -> Option<&'a T> {
         unsafe {
             if index < self.indexable() {
-                cast::transmute(self.ptr.offset(index as int))
+                transmute(self.ptr.offset(index as int))
             } else {
                 None
             }
@@ -2700,14 +2792,14 @@ impl<'a, T> Iterator<&'a mut [T]> for MutSplits<'a, T> {
         match self.v.iter().position(|x| (self.pred)(x)) {
             None => {
                 self.finished = true;
-                let tmp = util::replace(&mut self.v, &mut []);
+                let tmp = mem::replace(&mut self.v, &mut []);
                 let len = tmp.len();
                 let (head, tail) = tmp.mut_split_at(len);
                 self.v = tail;
                 Some(head)
             }
             Some(idx) => {
-                let tmp = util::replace(&mut self.v, &mut []);
+                let tmp = mem::replace(&mut self.v, &mut []);
                 let (head, tail) = tmp.mut_split_at(idx);
                 self.v = tail.mut_slice_from(1);
                 Some(head)
@@ -2735,11 +2827,11 @@ impl<'a, T> DoubleEndedIterator<&'a mut [T]> for MutSplits<'a, T> {
         match self.v.iter().rposition(|x| (self.pred)(x)) {
             None => {
                 self.finished = true;
-                let tmp = util::replace(&mut self.v, &mut []);
+                let tmp = mem::replace(&mut self.v, &mut []);
                 Some(tmp)
             }
             Some(idx) => {
-                let tmp = util::replace(&mut self.v, &mut []);
+                let tmp = mem::replace(&mut self.v, &mut []);
                 let (head, tail) = tmp.mut_split_at(idx);
                 self.v = head;
                 Some(tail.mut_slice_from(1))
@@ -2763,7 +2855,7 @@ impl<'a, T> Iterator<&'a mut [T]> for MutChunks<'a, T> {
             None
         } else {
             let sz = cmp::min(self.v.len(), self.chunk_size);
-            let tmp = util::replace(&mut self.v, &mut []);
+            let tmp = mem::replace(&mut self.v, &mut []);
             let (head, tail) = tmp.mut_split_at(sz);
             self.v = tail;
             Some(head)
@@ -2775,7 +2867,7 @@ impl<'a, T> Iterator<&'a mut [T]> for MutChunks<'a, T> {
         if self.v.len() == 0 {
             (0, Some(0))
         } else {
-            let (n, rem) = self.v.len().div_rem(&self.chunk_size);
+            let (n, rem) = div_rem(self.v.len(), self.chunk_size);
             let n = if rem > 0 { n + 1 } else { n };
             (n, Some(n))
         }
@@ -2790,7 +2882,7 @@ impl<'a, T> DoubleEndedIterator<&'a mut [T]> for MutChunks<'a, T> {
         } else {
             let remainder = self.v.len() % self.chunk_size;
             let sz = if remainder != 0 { remainder } else { self.chunk_size };
-            let tmp = util::replace(&mut self.v, &mut []);
+            let tmp = mem::replace(&mut self.v, &mut []);
             let tmp_len = tmp.len();
             let (head, tail) = tmp.mut_split_at(tmp_len - sz);
             self.v = head;
@@ -2809,7 +2901,7 @@ impl<T> Iterator<T> for MoveItems<T> {
     #[inline]
     fn next(&mut self) -> Option<T> {
         unsafe {
-            self.iter.next().map(|x| ptr::read_ptr(x))
+            self.iter.next().map(|x| ptr::read(x))
         }
     }
 
@@ -2823,7 +2915,7 @@ impl<T> DoubleEndedIterator<T> for MoveItems<T> {
     #[inline]
     fn next_back(&mut self) -> Option<T> {
         unsafe {
-            self.iter.next_back().map(|x| ptr::read_ptr(x))
+            self.iter.next_back().map(|x| ptr::read(x))
         }
     }
 }
@@ -3110,15 +3202,15 @@ mod tests {
     fn test_swap_remove() {
         let mut v = ~[1, 2, 3, 4, 5];
         let mut e = v.swap_remove(0);
-        assert_eq!(v.len(), 4);
-        assert_eq!(e, 1);
-        assert_eq!(v[0], 5);
+        assert_eq!(e, Some(1));
+        assert_eq!(v, ~[5, 2, 3, 4]);
         e = v.swap_remove(3);
-        assert_eq!(v.len(), 3);
-        assert_eq!(e, 4);
-        assert_eq!(v[0], 5);
-        assert_eq!(v[1], 2);
-        assert_eq!(v[2], 3);
+        assert_eq!(e, Some(4));
+        assert_eq!(v, ~[5, 2, 3]);
+
+        e = v.swap_remove(3);
+        assert_eq!(e, None);
+        assert_eq!(v, ~[5, 2, 3]);
     }
 
     #[test]
@@ -3298,12 +3390,12 @@ mod tests {
         for (i, (a, b)) in ElementSwaps::new(v.len()).enumerate() {
             v.swap(a, b);
             match i {
-                0 => assert_eq!(v, [1, 3, 2]),
-                1 => assert_eq!(v, [3, 1, 2]),
-                2 => assert_eq!(v, [3, 2, 1]),
-                3 => assert_eq!(v, [2, 3, 1]),
-                4 => assert_eq!(v, [2, 1, 3]),
-                5 => assert_eq!(v, [1, 2, 3]),
+                0 => assert!(v == [1, 3, 2]),
+                1 => assert!(v == [3, 1, 2]),
+                2 => assert!(v == [3, 2, 1]),
+                3 => assert!(v == [2, 3, 1]),
+                4 => assert!(v == [2, 1, 3]),
+                5 => assert!(v == [1, 2, 3]),
                 _ => fail!(),
             }
         }
@@ -3311,7 +3403,6 @@ mod tests {
 
     #[test]
     fn test_permutations() {
-        use hashmap;
         {
             let v: [int, ..0] = [];
             let mut it = v.permutations();
@@ -3334,13 +3425,13 @@ mod tests {
             assert_eq!(it.next(), None);
         }
         {
-            // check that we have N! unique permutations
-            let mut set = hashmap::HashSet::new();
+            // check that we have N! permutations
             let v = ['A', 'B', 'C', 'D', 'E', 'F'];
-            for perm in v.permutations() {
-                set.insert(perm);
+            let mut amt = 0;
+            for _perm in v.permutations() {
+                amt += 1;
             }
-            assert_eq!(set.len(), 2 * 3 * 4 * 5 * 6);
+            assert_eq!(amt, 2 * 3 * 4 * 5 * 6);
         }
     }
 
@@ -3436,9 +3527,9 @@ mod tests {
         let mut v: [uint, .. 0] = [];
         v.sort();
 
-        let mut v = [0xDEADBEEF];
+        let mut v = [0xDEADBEEFu];
         v.sort();
-        assert_eq!(v, [0xDEADBEEF]);
+        assert!(v == [0xDEADBEEF]);
     }
 
     #[test]
@@ -3804,7 +3895,7 @@ mod tests {
         for x in xs.mut_iter() {
             *x += 1;
         }
-        assert_eq!(xs, [2, 3, 4, 5, 6])
+        assert!(xs == [2, 3, 4, 5, 6])
     }
 
     #[test]
@@ -3828,7 +3919,7 @@ mod tests {
         for (i,x) in xs.mut_rev_iter().enumerate() {
             *x += i;
         }
-        assert_eq!(xs, [5, 5, 5, 5, 5])
+        assert!(xs == [5, 5, 5, 5, 5])
     }
 
     #[test]
@@ -3956,19 +4047,19 @@ mod tests {
         let mut a = [1,2,3,4,5];
         let b = ~[6,7,8];
         assert_eq!(a.move_from(b, 0, 3), 3);
-        assert_eq!(a, [6,7,8,4,5]);
+        assert!(a == [6,7,8,4,5]);
         let mut a = [7,2,8,1];
         let b = ~[3,1,4,1,5,9];
         assert_eq!(a.move_from(b, 0, 6), 4);
-        assert_eq!(a, [3,1,4,1]);
+        assert!(a == [3,1,4,1]);
         let mut a = [1,2,3,4];
         let b = ~[5,6,7,8,9,0];
         assert_eq!(a.move_from(b, 2, 3), 1);
-        assert_eq!(a, [7,2,3,4]);
+        assert!(a == [7,2,3,4]);
         let mut a = [1,2,3,4,5];
         let b = ~[5,6,7,8,9,0];
         assert_eq!(a.mut_slice(2,4).move_from(b,1,6), 2);
-        assert_eq!(a, [1,2,6,7,5]);
+        assert!(a == [1,2,6,7,5]);
     }
 
     #[test]
@@ -3976,18 +4067,34 @@ mod tests {
         let mut a = [1,2,3,4,5];
         let b = [6,7,8];
         assert_eq!(a.copy_from(b), 3);
-        assert_eq!(a, [6,7,8,4,5]);
+        assert!(a == [6,7,8,4,5]);
         let mut c = [7,2,8,1];
         let d = [3,1,4,1,5,9];
         assert_eq!(c.copy_from(d), 4);
-        assert_eq!(c, [3,1,4,1]);
+        assert!(c == [3,1,4,1]);
     }
 
     #[test]
     fn test_reverse_part() {
         let mut values = [1,2,3,4,5];
         values.mut_slice(1, 4).reverse();
-        assert_eq!(values, [1,4,3,2,5]);
+        assert!(values == [1,4,3,2,5]);
+    }
+
+    #[test]
+    fn test_show() {
+        macro_rules! test_show_vec(
+            ($x:expr, $x_str:expr) => ({
+                let (x, x_str) = ($x, $x_str);
+                assert_eq!(format!("{}", x), x_str);
+                assert_eq!(format!("{}", x.as_slice()), x_str);
+            })
+        )
+        let empty: ~[int] = ~[];
+        test_show_vec!(empty, ~"[]");
+        test_show_vec!(~[1], ~"[1]");
+        test_show_vec!(~[1, 2, 3], ~"[1, 2, 3]");
+        test_show_vec!(~[~[], ~[1u], ~[1u, 1u]], ~"[[], [1], [1, 1]]");
     }
 
     #[test]
@@ -4009,9 +4116,9 @@ mod tests {
         use vec::bytes::MutableByteVector;
         let mut values = [1u8,2,3,4,5];
         values.mut_slice(0,5).set_memory(0xAB);
-        assert_eq!(values, [0xAB, 0xAB, 0xAB, 0xAB, 0xAB]);
+        assert!(values == [0xAB, 0xAB, 0xAB, 0xAB, 0xAB]);
         values.mut_slice(2,4).set_memory(0xFF);
-        assert_eq!(values, [0xAB, 0xAB, 0xFF, 0xFF, 0xAB]);
+        assert!(values == [0xAB, 0xAB, 0xFF, 0xFF, 0xAB]);
     }
 
     #[test]
@@ -4037,18 +4144,18 @@ mod tests {
         let mut values = [1u8,2,3,4,5];
         {
             let (left, right) = values.mut_split_at(2);
-            assert_eq!(left.slice(0, left.len()), [1, 2]);
+            assert!(left.slice(0, left.len()) == [1, 2]);
             for p in left.mut_iter() {
                 *p += 1;
             }
 
-            assert_eq!(right.slice(0, right.len()), [3, 4, 5]);
+            assert!(right.slice(0, right.len()) == [3, 4, 5]);
             for p in right.mut_iter() {
                 *p += 2;
             }
         }
 
-        assert_eq!(values, [2, 3, 5, 6, 7]);
+        assert!(values == [2, 3, 5, 6, 7]);
     }
 
     #[deriving(Clone, Eq)]
@@ -4172,13 +4279,13 @@ mod tests {
         for slice in xs.mut_split(|x| *x == 0) {
             slice.reverse();
         }
-        assert_eq!(xs, [0,1,0,3,2,0,0,5,4,0]);
+        assert!(xs == [0,1,0,3,2,0,0,5,4,0]);
 
         let mut xs = [0,1,0,2,3,0,0,4,5,0,6,7];
         for slice in xs.mut_split(|x| *x == 0).take(5) {
             slice.reverse();
         }
-        assert_eq!(xs, [0,1,0,3,2,0,0,5,4,0,6,7]);
+        assert!(xs == [0,1,0,3,2,0,0,5,4,0,6,7]);
     }
 
     #[test]
@@ -4187,7 +4294,7 @@ mod tests {
         for slice in xs.mut_split(|x| *x == 0).rev().take(4) {
             slice.reverse();
         }
-        assert_eq!(xs, [1,2,0,4,3,0,0,6,5,0]);
+        assert!(xs == [1,2,0,4,3,0,0,6,5,0]);
     }
 
     #[test]
@@ -4199,7 +4306,7 @@ mod tests {
             }
         }
         let result = [0u8, 0, 0, 1, 1, 1, 2];
-        assert_eq!(v, result);
+        assert!(v == result);
     }
 
     #[test]
@@ -4211,7 +4318,7 @@ mod tests {
             }
         }
         let result = [2u8, 2, 2, 1, 1, 1, 0];
-        assert_eq!(v, result);
+        assert!(v == result);
     }
 
     #[test]
@@ -4253,14 +4360,15 @@ mod tests {
         let h = x.mut_last();
         assert_eq!(*h.unwrap(), 5);
 
-        let mut y: &mut [int] = [];
+        let y: &mut [int] = [];
         assert!(y.mut_last().is_none());
     }
 }
 
 #[cfg(test)]
 mod bench {
-    use extra::test::BenchHarness;
+    extern crate test;
+    use self::test::BenchHarness;
     use mem;
     use prelude::*;
     use ptr;
@@ -4326,6 +4434,7 @@ mod bench {
         let mut vec: ~[uint] = ~[0u];
         bh.iter(|| {
             vec.push(0);
+            &vec
         })
     }
 
@@ -4333,7 +4442,7 @@ mod bench {
     fn starts_with_same_vector(bh: &mut BenchHarness) {
         let vec: ~[uint] = vec::from_fn(100, |i| i);
         bh.iter(|| {
-            vec.starts_with(vec);
+            vec.starts_with(vec)
         })
     }
 
@@ -4341,7 +4450,7 @@ mod bench {
     fn starts_with_single_element(bh: &mut BenchHarness) {
         let vec: ~[uint] = ~[0u];
         bh.iter(|| {
-            vec.starts_with(vec);
+            vec.starts_with(vec)
         })
     }
 
@@ -4351,7 +4460,7 @@ mod bench {
         let mut match_vec: ~[uint] = vec::from_fn(99, |i| i);
         match_vec.push(0);
         bh.iter(|| {
-            vec.starts_with(match_vec);
+            vec.starts_with(match_vec)
         })
     }
 
@@ -4359,7 +4468,7 @@ mod bench {
     fn ends_with_same_vector(bh: &mut BenchHarness) {
         let vec: ~[uint] = vec::from_fn(100, |i| i);
         bh.iter(|| {
-            vec.ends_with(vec);
+            vec.ends_with(vec)
         })
     }
 
@@ -4367,7 +4476,7 @@ mod bench {
     fn ends_with_single_element(bh: &mut BenchHarness) {
         let vec: ~[uint] = ~[0u];
         bh.iter(|| {
-            vec.ends_with(vec);
+            vec.ends_with(vec)
         })
     }
 
@@ -4377,7 +4486,7 @@ mod bench {
         let mut match_vec: ~[uint] = vec::from_fn(100, |i| i);
         match_vec[0] = 200;
         bh.iter(|| {
-            vec.starts_with(match_vec);
+            vec.starts_with(match_vec)
         })
     }
 
@@ -4385,7 +4494,7 @@ mod bench {
     fn contains_last_element(bh: &mut BenchHarness) {
         let vec: ~[uint] = vec::from_fn(100, |i| i);
         bh.iter(|| {
-                vec.contains(&99u);
+            vec.contains(&99u)
         })
     }
 
@@ -4405,13 +4514,14 @@ mod bench {
                 ptr::set_memory(vp, 0, 1024);
                 v.set_len(1024);
             }
+            v
         });
     }
 
     #[bench]
     fn zero_1kb_fixed_repeat(bh: &mut BenchHarness) {
         bh.iter(|| {
-            let _v: ~[u8] = ~[0u8, ..1024];
+            ~[0u8, ..1024]
         });
     }
 
@@ -4440,6 +4550,7 @@ mod bench {
             for x in v.mut_iter() {
                 *x = 0;
             }
+            v
         });
     }
 
@@ -4500,6 +4611,47 @@ mod bench {
     #[bench]
     fn sort_sorted(bh: &mut BenchHarness) {
         let mut v = vec::from_fn(10000, |i| i);
+        bh.iter(|| {
+            v.sort();
+        });
+        bh.bytes = (v.len() * mem::size_of_val(&v[0])) as u64;
+    }
+
+    type BigSortable = (u64,u64,u64,u64);
+
+    #[bench]
+    fn sort_big_random_small(bh: &mut BenchHarness) {
+        let mut rng = weak_rng();
+        bh.iter(|| {
+            let mut v: ~[BigSortable] = rng.gen_vec(5);
+            v.sort();
+        });
+        bh.bytes = 5 * mem::size_of::<BigSortable>() as u64;
+    }
+
+    #[bench]
+    fn sort_big_random_medium(bh: &mut BenchHarness) {
+        let mut rng = weak_rng();
+        bh.iter(|| {
+            let mut v: ~[BigSortable] = rng.gen_vec(100);
+            v.sort();
+        });
+        bh.bytes = 100 * mem::size_of::<BigSortable>() as u64;
+    }
+
+    #[bench]
+    fn sort_big_random_large(bh: &mut BenchHarness) {
+        let mut rng = weak_rng();
+        bh.iter(|| {
+            let mut v: ~[BigSortable] = rng.gen_vec(10000);
+            v.sort();
+        });
+        bh.bytes = 10000 * mem::size_of::<BigSortable>() as u64;
+    }
+
+    #[bench]
+    fn sort_big_sorted(bh: &mut BenchHarness) {
+        let mut v = vec::from_fn(10000u, |i| (i, i, i, i));
         bh.iter(|| {
             v.sort();
         });

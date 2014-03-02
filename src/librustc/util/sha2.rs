@@ -16,13 +16,13 @@ use std::iter::range_step;
 use std::num::Zero;
 use std::vec;
 use std::vec::bytes::{MutableByteVector, copy_memory};
-use extra::hex::ToHex;
+use serialize::hex::ToHex;
 
 /// Write a u32 into a vector, which must be 4 bytes long. The value is written in big-endian
 /// format.
 fn write_u32_be(dst: &mut[u8], input: u32) {
     use std::cast::transmute;
-    use std::unstable::intrinsics::to_be32;
+    use std::mem::to_be32;
     assert!(dst.len() == 4);
     unsafe {
         let x: *mut i32 = transmute(dst.unsafe_mut_ref(0));
@@ -33,7 +33,7 @@ fn write_u32_be(dst: &mut[u8], input: u32) {
 /// Read a vector of bytes into a vector of u32s. The values are read in big-endian format.
 fn read_u32v_be(dst: &mut[u32], input: &[u8]) {
     use std::cast::transmute;
-    use std::unstable::intrinsics::to_be32;
+    use std::mem::to_be32;
     assert!(dst.len() * 4 == input.len());
     unsafe {
         let mut x: *mut i32 = transmute(dst.unsafe_mut_ref(0));
@@ -64,12 +64,12 @@ fn add_bytes_to_bits<T: Int + CheckedAdd + ToBits>(bits: T, bytes: T) -> T {
     let (new_high_bits, new_low_bits) = bytes.to_bits();
 
     if new_high_bits > Zero::zero() {
-        fail!("Numeric overflow occured.")
+        fail!("numeric overflow occured.")
     }
 
     match bits.checked_add(&new_low_bits) {
         Some(x) => return x,
-        None => fail!("Numeric overflow occured.")
+        None => fail!("numeric overflow occured.")
     }
 }
 
@@ -453,7 +453,8 @@ impl Engine256 {
         assert!(!self.finished)
         // Assumes that input.len() can be converted to u64 without overflow
         self.length_bits = add_bytes_to_bits(self.length_bits, input.len() as u64);
-        self.buffer.input(input, |input: &[u8]| { self.state.process_block(input) });
+        let self_state = &mut self.state;
+        self.buffer.input(input, |input: &[u8]| { self_state.process_block(input) });
     }
 
     fn finish(&mut self) {
@@ -461,10 +462,11 @@ impl Engine256 {
             return;
         }
 
-        self.buffer.standard_padding(8, |input: &[u8]| { self.state.process_block(input) });
+        let self_state = &mut self.state;
+        self.buffer.standard_padding(8, |input: &[u8]| { self_state.process_block(input) });
         write_u32_be(self.buffer.next(4), (self.length_bits >> 32) as u32 );
         write_u32_be(self.buffer.next(4), self.length_bits as u32);
-        self.state.process_block(self.buffer.full_buffer());
+        self_state.process_block(self.buffer.full_buffer());
 
         self.finished = true;
     }
@@ -527,7 +529,7 @@ mod tests {
     use std::vec;
     use std::rand::isaac::IsaacRng;
     use std::rand::Rng;
-    use extra::hex::FromHex;
+    use serialize::hex::FromHex;
 
     // A normal addition - no overflow occurs
     #[test]
@@ -633,7 +635,8 @@ mod tests {
 
 #[cfg(test)]
 mod bench {
-    use extra::test::BenchHarness;
+    extern crate test;
+    use self::test::BenchHarness;
     use super::{Sha256, FixedBuffer, Digest};
 
     #[bench]
