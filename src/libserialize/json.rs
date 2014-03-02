@@ -2679,26 +2679,6 @@ mod tests {
                 (End,                           ~[]),
             ]
         );
-
-        assert_eq!(from_str(
-                      ~"{" +
-                          "\"a\": 1.0, " +
-                          "\"b\": [" +
-                              "true," +
-                              "\"foo\\nbar\", " +
-                              "{ \"c\": {\"d\": null} } " +
-                          "]" +
-                      "}").unwrap(),
-                  mk_object([
-                      (~"a", Number(1.0)),
-                      (~"b", List(~[
-                          Boolean(true),
-                          String(~"foo\nbar"),
-                          mk_object([
-                              (~"c", mk_object([(~"d", Null)]))
-                          ])
-                      ]))
-                  ]));
     }
     #[test]
     fn test_read_list_streaming() {
@@ -2716,17 +2696,82 @@ mod tests {
         assert_eq!(from_str("[6 7]"),
                    Err(Error {line: 1u, col: 4u, msg: ~"expected `,` or `]`"}));
 
-        assert_eq!(from_str("[]"), Ok(List(~[])));
-        assert_eq!(from_str("[ ]"), Ok(List(~[])));
-        assert_eq!(from_str("[true]"), Ok(List(~[Boolean(true)])));
-        assert_eq!(from_str("[ false ]"), Ok(List(~[Boolean(false)])));
-        assert_eq!(from_str("[null]"), Ok(List(~[Null])));
-        assert_eq!(from_str("[3, 1]"),
-                   Ok(List(~[Number(3.0), Number(1.0)])));
-        assert_eq!(from_str("\n[3, 2]\n"),
-                   Ok(List(~[Number(3.0), Number(2.0)])));
-        assert_eq!(from_str("[2, [4, 1]]"),
-                   Ok(List(~[Number(2.0), List(~[Number(4.0), Number(1.0)])])));
+        assert_stream_equal(
+            "[]",
+            ~[
+                (BeginList, ~[]),
+                (EndList,   ~[]),
+                (End,       ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[ ]",
+            ~[
+                (BeginList, ~[]),
+                (EndList,   ~[]),
+                (End,       ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[true]",
+            ~[
+                (BeginList,              ~[]),
+                    (BooleanValue(true), ~[Index(0)]),
+                (EndList,                ~[]),
+                (End,                    ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[ false ]",
+            ~[
+                (BeginList,               ~[]),
+                    (BooleanValue(false), ~[Index(0)]),
+                (EndList,                 ~[]),
+                (End,                     ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[null]",
+            ~[
+                (BeginList,     ~[]),
+                    (NullValue, ~[Index(0)]),
+                (EndList,       ~[]),
+                (End,           ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[3, 1]",
+            ~[
+                (BeginList,     ~[]),
+                    (NumberValue(3.0), ~[Index(0)]),
+                    (NumberValue(1.0), ~[Index(1)]),
+                (EndList,       ~[]),
+                (End,           ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "\n[3, 2]\n",
+            ~[
+                (BeginList,     ~[]),
+                    (NumberValue(3.0), ~[Index(0)]),
+                    (NumberValue(2.0), ~[Index(1)]),
+                (EndList,       ~[]),
+                (End,           ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[2, [4, 1]]",
+            ~[
+                (BeginList,                 ~[]),
+                    (NumberValue(2.0),      ~[Index(0)]),
+                    (BeginList,             ~[Index(1)]),
+                        (NumberValue(4.0),  ~[Index(1), Index(0)]),
+                        (NumberValue(1.0),  ~[Index(1), Index(1)]),
+                    (EndList,               ~[Index(1)]),
+                (EndList,                   ~[]),
+                (End,                       ~[]),
+            ]
+        );
     }
     #[test]
     fn test_trailing_characters_streaming() {
