@@ -1130,8 +1130,12 @@ pub enum Namespace {
 }
 
 pub struct StreamingParser<T> {
+    // Reuse some of the general purpose parser's logic.
     priv p : Parser<T>,
+    // We maintain a stack representing where we are in the logical structure
+    // of the the json stream (for example: foo.bar[3].x).
     priv stack: ~[Namespace],
+    // Some states are kept to make it possible to inteerupt and resume parsing.
     priv expect: Expected,
     priv start_list: bool,
     priv start_obj: bool,
@@ -1139,10 +1143,33 @@ pub struct StreamingParser<T> {
 
 impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
     fn next(&mut self) -> Option<JsonEvent> {
-        self.p.parse_whitespace();
         if self.expect == ExpectNothing {
             return None;
         }
+        return Some(self.parse());
+    }
+}
+
+impl<T: Iterator<char>> StreamingParser<T> {
+    /// Provide an iterator of json events consuming an Iterator<char>.
+    pub fn new(rdr: T) -> StreamingParser<T> {
+        StreamingParser {
+            p: Parser::new(rdr),
+            stack: ~[],
+            expect: ExpectValue,
+            start_list: false,
+            start_obj: false,
+        }
+    }
+
+    // Invoked at each iteration, consumes the stream until it has enough
+    // information to return a JsonEvent.
+    // Manages an internal state so that parsing can be interrupted and resumed.
+    // Also keeps track of the position in the logical structure of the json
+    // stream int the form of a stack that can be queried by the user usng the
+    // stack() method.
+    fn parse(&mut self) -> JsonEvent {
+        self.p.parse_whitespace();
         if self.start_list {
             self.stack.push(Index(0));
             self.start_list = false;
@@ -1150,9 +1177,6 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
         match self.p.ch_or_null() {
             ',' => {
                 if self.expect & ExpectComa != 0 {
-                    if self.stack.len() == 0 {
-                        return self.error(~"unexpected `,` at root level");
-                    }
                     match self.stack[self.stack.len()-1] {
                       Name(_) => {
                         self.stack.pop();
@@ -1179,7 +1203,7 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
                         self.expect = ExpectEOS;
                     }
                     self.p.bump();
-                    return Some(EndObject);
+                    return EndObject;
                    } else {
                     return self.error(~"unexpected `}`");
                 }
@@ -1194,7 +1218,7 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
                         self.expect = ExpectEOS;
                     }
                     self.p.bump();
-                    return Some(EndList);
+                    return EndList;
                 } else {
                     return self.error(~"unexpected `]`");
                 }
@@ -1205,17 +1229,17 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
         if self.expect & ExpectEOS != 0 {
             if self.p.eof() {
                 self.expect = ExpectNothing;
-                return Some(End);
+                return End;
             }
         }
         if self.expect&ExpectValue != 0 {
             match self.parse_value() {
               Ok(v) => {
-                return Some(v);
+                return v;
               },
               Err(e) => {
                 self.expect = ExpectNothing;
-                return Some(EndWithError(e));
+                return EndWithError(e);
               }
             }
         }
@@ -1232,14 +1256,14 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
                     self.stack.push(Name(s));
                     self.p.bump();
                     self.p.parse_whitespace();
-                    match self.parse_value() {
-                      Ok(v) => { return Some(v); }
-                      Err(e) => { return Some(EndWithError(e)); }
+                    return match self.parse_value() {
+                      Ok(v) => v,
+                      Err(e) => EndWithError(e),
                     }
                   },
                   Err(e) => {
                     self.expect = ExpectNothing;
-                    return Some(EndWithError(e));
+                    return EndWithError(e);
                   }
                 }
             } else if self.p.eof() {
@@ -1258,18 +1282,6 @@ impl<T: Iterator<char>> Iterator<JsonEvent> for StreamingParser<T> {
             return self.error(~"trailing character");
         } else {
             return self.error(~"invalid syntax");
-        }
-    }
-}
-
-impl<T: Iterator<char>> StreamingParser<T> {
-    pub fn new(rdr: T) -> StreamingParser<T> {
-        StreamingParser {
-            p: Parser::new(rdr),
-            stack: ~[],
-            expect: ExpectValue,
-            start_list: false,
-            start_obj: false,
         }
     }
 
@@ -1294,7 +1306,7 @@ impl<T: Iterator<char>> StreamingParser<T> {
             match self.p.parse_number() {
               Ok(f) => {
                 self.expect = ExpectComa|ExpectEnd;
-                Ok(NumberValue(f))
+                return Ok(NumberValue(f));
               }
               Err(e) => {
                 self.expect = ExpectNothing;
@@ -1305,7 +1317,7 @@ impl<T: Iterator<char>> StreamingParser<T> {
             match self.p.parse_str() {
               Ok(s) => {
                 self.expect = ExpectComa|ExpectEnd;
-                Ok(StringValue(s))
+                return Ok(StringValue(s));
               }
               Err(e) => {
                 self.expect = ExpectNothing;
@@ -1316,17 +1328,17 @@ impl<T: Iterator<char>> StreamingParser<T> {
               self.expect = ExpectValue|ExpectEnd;
               self.start_list = true;
               self.p.bump();
-              Ok(BeginList)
+              return Ok(BeginList);
             }
           '{' => {
               self.expect = ExpectName|ExpectEnd;
               self.start_obj = true;
               self.p.bump();
-              Ok(BeginObject)
+              return Ok(BeginObject);
             }
           _ => {
                 self.expect = ExpectNothing;
-                self.p.error(~"invalid syntax")
+                return self.p.error(~"invalid syntax");
             }
         }
     }
@@ -1340,9 +1352,9 @@ impl<T: Iterator<char>> StreamingParser<T> {
         }
     }
 
-    fn error(&mut self, msg: ~str) -> Option<JsonEvent> {
+    fn error(&mut self, msg: ~str) -> JsonEvent {
         self.expect = ExpectNothing;
-        Some(EndWithError(Error { line: self.p.line, col: self.p.col, msg: msg }))
+        EndWithError(Error { line: self.p.line, col: self.p.col, msg: msg })
     }
 
     pub fn stack<'l>(&'l self) -> &'l [Namespace] {
