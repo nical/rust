@@ -1100,7 +1100,7 @@ impl<T : Iterator<char>> Parser<T> {
     }
 }
 
-// used by streamin parser to keep track of what to expect next
+// used by the streaming parser to keep track of what to expect next.
 type Expected = u8;
 static ExpectValue  : Expected = 1;
 static ExpectName   : Expected = 2;
@@ -1109,12 +1109,13 @@ static ExpectEnd    : Expected = 8;
 static ExpectEOS    : Expected = 16;
 static ExpectNothing: Expected = 0;
 
+/// The output of the streaming parser.
 #[deriving(Eq, Show)]
 pub enum JsonEvent {
-    BeginObject,
-    EndObject,
-    BeginList,
-    EndList,
+    ObjectStart,
+    ObjectEnd,
+    ListStart,
+    ListEnd,
     BooleanValue(bool),
     NumberValue(f64),
     StringValue(~str),
@@ -1123,9 +1124,11 @@ pub enum JsonEvent {
     End,
 }
 
+/// An array of stack nodes represents a stack giving the current position
+/// in the logical structure of the JSON stream (for example, foo.bar[3].x)
 #[deriving(Eq, Clone, Show)]
-pub enum Namespace {
-    Name(~str),
+pub enum StackNode {
+    Key(~str),
     Index(uint),
 }
 
@@ -1133,8 +1136,8 @@ pub struct StreamingParser<T> {
     // Reuse some of the general purpose parser's logic.
     priv p : Parser<T>,
     // We maintain a stack representing where we are in the logical structure
-    // of the the json stream (for example: foo.bar[3].x).
-    priv stack: ~[Namespace],
+    // of the the JSON stream (for example: foo.bar[3].x).
+    priv stack: ~[StackNode],
     // Some states are kept to make it possible to inteerupt and resume parsing.
     priv expect: Expected,
     priv start_list: bool,
@@ -1178,7 +1181,7 @@ impl<T: Iterator<char>> StreamingParser<T> {
             ',' => {
                 if self.expect & ExpectComa != 0 {
                     match self.stack[self.stack.len()-1] {
-                      Name(_) => {
+                      Key(_) => {
                         self.stack.pop();
                         self.expect = ExpectName|ExpectEnd;
                       }
@@ -1203,7 +1206,7 @@ impl<T: Iterator<char>> StreamingParser<T> {
                         self.expect = ExpectEOS;
                     }
                     self.p.bump();
-                    return EndObject;
+                    return ObjectEnd;
                    } else {
                     return self.error(~"unexpected `}`");
                 }
@@ -1218,7 +1221,7 @@ impl<T: Iterator<char>> StreamingParser<T> {
                         self.expect = ExpectEOS;
                     }
                     self.p.bump();
-                    return EndList;
+                    return ListEnd;
                 } else {
                     return self.error(~"unexpected `]`");
                 }
@@ -1253,7 +1256,7 @@ impl<T: Iterator<char>> StreamingParser<T> {
                     } else if self.p.ch_or_null() != ':' {
                         return self.error(~"expected `:`");
                     }
-                    self.stack.push(Name(s));
+                    self.stack.push(Key(s));
                     self.p.bump();
                     self.p.parse_whitespace();
                     return match self.parse_value() {
@@ -1274,7 +1277,7 @@ impl<T: Iterator<char>> StreamingParser<T> {
         }
         if self.p.eof() {
             return match self.stack[self.stack.len()-1] {
-              Name(_) => self.error(~"EOF while parsing object"),
+              Key(_) => self.error(~"EOF while parsing object"),
               Index(_) => self.error(~"EOF while parsing list"),
             }
         }
@@ -1328,13 +1331,13 @@ impl<T: Iterator<char>> StreamingParser<T> {
               self.expect = ExpectValue|ExpectEnd;
               self.start_list = true;
               self.p.bump();
-              return Ok(BeginList);
+              return Ok(ListStart);
             }
           '{' => {
               self.expect = ExpectName|ExpectEnd;
               self.start_obj = true;
               self.p.bump();
-              return Ok(BeginObject);
+              return Ok(ObjectStart);
             }
           _ => {
                 self.expect = ExpectNothing;
@@ -1357,7 +1360,7 @@ impl<T: Iterator<char>> StreamingParser<T> {
         EndWithError(Error { line: self.p.line, col: self.p.col, msg: msg })
     }
 
-    pub fn stack<'l>(&'l self) -> &'l [Namespace] {
+    pub fn stack<'l>(&'l self) -> &'l [StackNode] {
         return self.stack.slice(0, self.stack.len());
     }
 }
@@ -1859,9 +1862,9 @@ mod tests {
     use {Encodable, Decodable};
     use super::{Encoder, Decoder, Error, Boolean, Number, List, String, Null,
                 PrettyEncoder, Object, Json, from_str,
-                JsonEvent, StreamingParser, Namespace,
-                BeginObject, EndObject, BeginList, EndList, BooleanValue, NumberValue, StringValue,
-                NullValue, EndWithError, End, Name, Index};
+                JsonEvent, StreamingParser, StackNode,
+                ObjectStart, ObjectEnd, ListStart, ListEnd, BooleanValue, NumberValue, StringValue,
+                NullValue, EndWithError, End, Key, Index};
     use std::io;
     use collections::TreeMap;
 
@@ -2559,7 +2562,7 @@ mod tests {
         check_err::<DecodeEnum>("{\"variant\": \"C\", \"fields\": []}",
                                 "unknown variant name");
     }
-    fn assert_stream_equal(src: &str, expected: ~[(JsonEvent, ~[Namespace])]) {
+    fn assert_stream_equal(src: &str, expected: ~[(JsonEvent, ~[StackNode])]) {
         let mut expected_result = expected;
         let mut parser = StreamingParser::new(src.chars());
         loop {
@@ -2577,22 +2580,22 @@ mod tests {
         assert_stream_equal(
             "{ \"foo\":\"bar\", \"array\" : [0, 1, 2,3 ,4,5], \"idents\":[null,true,false]}",
             ~[
-                (BeginObject,             ~[]),
-                  (StringValue(~"bar"),   ~[Name(~"foo")]),
-                  (BeginList,             ~[Name(~"array")]),
-                    (NumberValue(0.0),    ~[Name(~"array"), Index(0)]),
-                    (NumberValue(1.0),    ~[Name(~"array"), Index(1)]),
-                    (NumberValue(2.0),    ~[Name(~"array"), Index(2)]),
-                    (NumberValue(3.0),    ~[Name(~"array"), Index(3)]),
-                    (NumberValue(4.0),    ~[Name(~"array"), Index(4)]),
-                    (NumberValue(5.0),    ~[Name(~"array"), Index(5)]),
-                  (EndList,               ~[Name(~"array")]),
-                  (BeginList,             ~[Name(~"idents")]),
-                    (NullValue,           ~[Name(~"idents"), Index(0)]),
-                    (BooleanValue(true),  ~[Name(~"idents"), Index(1)]),
-                    (BooleanValue(false), ~[Name(~"idents"), Index(2)]),
-                  (EndList,               ~[Name(~"idents")]),
-                (EndObject,               ~[]),
+                (ObjectStart,             ~[]),
+                  (StringValue(~"bar"),   ~[Key(~"foo")]),
+                  (ListStart,             ~[Key(~"array")]),
+                    (NumberValue(0.0),    ~[Key(~"array"), Index(0)]),
+                    (NumberValue(1.0),    ~[Key(~"array"), Index(1)]),
+                    (NumberValue(2.0),    ~[Key(~"array"), Index(2)]),
+                    (NumberValue(3.0),    ~[Key(~"array"), Index(3)]),
+                    (NumberValue(4.0),    ~[Key(~"array"), Index(4)]),
+                    (NumberValue(5.0),    ~[Key(~"array"), Index(5)]),
+                  (ListEnd,               ~[Key(~"array")]),
+                  (ListStart,             ~[Key(~"idents")]),
+                    (NullValue,           ~[Key(~"idents"), Index(0)]),
+                    (BooleanValue(true),  ~[Key(~"idents"), Index(1)]),
+                    (BooleanValue(false), ~[Key(~"idents"), Index(2)]),
+                  (ListEnd,               ~[Key(~"idents")]),
+                (ObjectEnd,               ~[]),
                 (End,                     ~[]),
             ]
         );
@@ -2633,36 +2636,36 @@ mod tests {
 
         assert_stream_equal(
             "{}",
-            ~[(BeginObject, ~[]), (EndObject, ~[]), (End, ~[]),]
+            ~[(ObjectStart, ~[]), (ObjectEnd, ~[]), (End, ~[]),]
         );
         assert_stream_equal(
             "{\"a\": 3}",
             ~[
-                (BeginObject,        ~[]),
-                  (NumberValue(3.0), ~[Name(~"a")]),
-                (EndObject,          ~[]),
+                (ObjectStart,        ~[]),
+                  (NumberValue(3.0), ~[Key(~"a")]),
+                (ObjectEnd,          ~[]),
                 (End,                ~[]),
             ]
         );
         assert_stream_equal(
             "{ \"a\": null, \"b\" : true }",
             ~[
-                (BeginObject,           ~[]),
-                  (NullValue,           ~[Name(~"a")]),
-                  (BooleanValue(true),  ~[Name(~"b")]),
-                (EndObject,             ~[]),
+                (ObjectStart,           ~[]),
+                  (NullValue,           ~[Key(~"a")]),
+                  (BooleanValue(true),  ~[Key(~"b")]),
+                (ObjectEnd,             ~[]),
                 (End,                   ~[]),
             ]
         );
         assert_stream_equal(
             "{\"a\" : 1.0 ,\"b\": [ true ]}",
             ~[
-                (BeginObject,           ~[]),
-                  (NumberValue(1.0),    ~[Name(~"a")]),
-                  (BeginList,           ~[Name(~"b")]),
-                    (BooleanValue(true),~[Name(~"b"), Index(0)]),
-                  (EndList,             ~[Name(~"b")]),
-                (EndObject,             ~[]),
+                (ObjectStart,           ~[]),
+                  (NumberValue(1.0),    ~[Key(~"a")]),
+                  (ListStart,           ~[Key(~"b")]),
+                    (BooleanValue(true),~[Key(~"b"), Index(0)]),
+                  (ListEnd,             ~[Key(~"b")]),
+                (ObjectEnd,             ~[]),
                 (End,                   ~[]),
             ]
         );
@@ -2676,18 +2679,18 @@ mod tests {
                 "]" +
             "}",
             ~[
-                (BeginObject,                   ~[]),
-                  (NumberValue(1.0),            ~[Name(~"a")]),
-                  (BeginList,                   ~[Name(~"b")]),
-                    (BooleanValue(true),        ~[Name(~"b"), Index(0)]),
-                    (StringValue(~"foo\nbar"),  ~[Name(~"b"), Index(1)]),
-                    (BeginObject,               ~[Name(~"b"), Index(2)]),
-                      (BeginObject,             ~[Name(~"b"), Index(2), Name(~"c")]),
-                        (NullValue,             ~[Name(~"b"), Index(2), Name(~"c"), Name(~"d")]),
-                      (EndObject,               ~[Name(~"b"), Index(2), Name(~"c")]),
-                    (EndObject,                 ~[Name(~"b"), Index(2)]),
-                  (EndList,                     ~[Name(~"b")]),
-                (EndObject,                     ~[]),
+                (ObjectStart,                   ~[]),
+                  (NumberValue(1.0),            ~[Key(~"a")]),
+                  (ListStart,                   ~[Key(~"b")]),
+                    (BooleanValue(true),        ~[Key(~"b"), Index(0)]),
+                    (StringValue(~"foo\nbar"),  ~[Key(~"b"), Index(1)]),
+                    (ObjectStart,               ~[Key(~"b"), Index(2)]),
+                      (ObjectStart,             ~[Key(~"b"), Index(2), Key(~"c")]),
+                        (NullValue,             ~[Key(~"b"), Index(2), Key(~"c"), Key(~"d")]),
+                      (ObjectEnd,               ~[Key(~"b"), Index(2), Key(~"c")]),
+                    (ObjectEnd,                 ~[Key(~"b"), Index(2)]),
+                  (ListEnd,                     ~[Key(~"b")]),
+                (ObjectEnd,                     ~[]),
                 (End,                           ~[]),
             ]
         );
@@ -2711,76 +2714,76 @@ mod tests {
         assert_stream_equal(
             "[]",
             ~[
-                (BeginList, ~[]),
-                (EndList,   ~[]),
+                (ListStart, ~[]),
+                (ListEnd,   ~[]),
                 (End,       ~[]),
             ]
         );
         assert_stream_equal(
             "[ ]",
             ~[
-                (BeginList, ~[]),
-                (EndList,   ~[]),
+                (ListStart, ~[]),
+                (ListEnd,   ~[]),
                 (End,       ~[]),
             ]
         );
         assert_stream_equal(
             "[true]",
             ~[
-                (BeginList,              ~[]),
+                (ListStart,              ~[]),
                     (BooleanValue(true), ~[Index(0)]),
-                (EndList,                ~[]),
+                (ListEnd,                ~[]),
                 (End,                    ~[]),
             ]
         );
         assert_stream_equal(
             "[ false ]",
             ~[
-                (BeginList,               ~[]),
+                (ListStart,               ~[]),
                     (BooleanValue(false), ~[Index(0)]),
-                (EndList,                 ~[]),
+                (ListEnd,                 ~[]),
                 (End,                     ~[]),
             ]
         );
         assert_stream_equal(
             "[null]",
             ~[
-                (BeginList,     ~[]),
+                (ListStart,     ~[]),
                     (NullValue, ~[Index(0)]),
-                (EndList,       ~[]),
+                (ListEnd,       ~[]),
                 (End,           ~[]),
             ]
         );
         assert_stream_equal(
             "[3, 1]",
             ~[
-                (BeginList,     ~[]),
+                (ListStart,     ~[]),
                     (NumberValue(3.0), ~[Index(0)]),
                     (NumberValue(1.0), ~[Index(1)]),
-                (EndList,       ~[]),
+                (ListEnd,       ~[]),
                 (End,           ~[]),
             ]
         );
         assert_stream_equal(
             "\n[3, 2]\n",
             ~[
-                (BeginList,     ~[]),
+                (ListStart,     ~[]),
                     (NumberValue(3.0), ~[Index(0)]),
                     (NumberValue(2.0), ~[Index(1)]),
-                (EndList,       ~[]),
+                (ListEnd,       ~[]),
                 (End,           ~[]),
             ]
         );
         assert_stream_equal(
             "[2, [4, 1]]",
             ~[
-                (BeginList,                 ~[]),
+                (ListStart,                 ~[]),
                     (NumberValue(2.0),      ~[Index(0)]),
-                    (BeginList,             ~[Index(1)]),
+                    (ListStart,             ~[Index(1)]),
                         (NumberValue(4.0),  ~[Index(1), Index(0)]),
                         (NumberValue(1.0),  ~[Index(1), Index(1)]),
-                    (EndList,               ~[Index(1)]),
-                (EndList,                   ~[]),
+                    (ListEnd,               ~[Index(1)]),
+                (ListEnd,                   ~[]),
                 (End,                       ~[]),
             ]
         );
