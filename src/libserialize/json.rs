@@ -239,6 +239,8 @@ use std::io::MemWriter;
 use std::num;
 use std::str;
 use std::fmt;
+use std::vec::Vec;
+use std::mem::swap;
 
 use Encodable;
 use collections::TreeMap;
@@ -257,31 +259,87 @@ pub enum Json {
 pub type List = ~[Json];
 pub type Object = TreeMap<~str, Json>;
 
-#[deriving(Eq, Show)]
-pub enum Error {
+/// The errors that can arise while parsing a JSON stream.
+#[deriving(Clone, Eq)]
+pub enum ErrorCode {
+    InvalidSyntax,
+    InvalidNumber,
+    EOFWhileParsingObject,
+    EOFWhileParsingList,
+    EOFWhileParsingValue,
+    EOFWhileParsingString,
+    KeyMustBeAString,
+    ExpectedColon,
+    TrailingCharacters,
+    InvalidEscape,
+    UnrecognizedHex,
+    NotFourDigit,
+    NotUtf8,
+}
+
+#[deriving(Clone, Eq, Show)]
+pub enum ParserError {
     /// msg, line, col
-    ParseError(~str, uint, uint),
+    SyntaxError(ErrorCode, uint, uint),
+    IoError(io::IoErrorKind, &'static str),
+}
+
+// Builder and Parser have the same errors.
+pub type BuilderError = ParserError;
+
+#[deriving(Clone, Eq, Show)]
+pub enum DecoderError {
+    ParseError(ParserError),
     ExpectedError(~str, ~str),
     MissingFieldError(~str),
     UnknownVariantError(~str),
-    IoError(io::IoError)
+}
+
+/// Returns a readable error string for a given error code.
+pub fn error_str(error: ErrorCode) -> &'static str {
+    return match error {
+        InvalidSyntax => "invalid syntax",
+        InvalidNumber => "invalid number",
+        EOFWhileParsingObject => "EOF While parsing object",
+        EOFWhileParsingList => "EOF While parsing list",
+        EOFWhileParsingValue => "EOF While parsing value",
+        EOFWhileParsingString => "EOF While parsing string",
+        KeyMustBeAString => "key must be a string",
+        ExpectedColon => "expected `:`",
+        TrailingCharacters => "trailing characters",
+        InvalidEscape => "invalid escape",
+        UnrecognizedHex => "invalid \\u escape (unrecognized hex)",
+        NotFourDigit => "invalid \\u escape (not four digits)",
+        NotUtf8 => "contents not utf-8",
+    }
+}
+
+impl fmt::Show for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        error_str(*self).fmt(f)
+    }
+}
+
+
+fn io_error_to_error(io: io::IoError) -> ParserError {
+    IoError(io.kind, io.desc)
 }
 
 pub type EncodeResult = io::IoResult<()>;
-pub type DecodeResult<T> = Result<T, Error>;
+pub type DecodeResult<T> = Result<T, DecoderError>;
 
 fn escape_str(s: &str) -> ~str {
     let mut escaped = ~"\"";
     for c in s.chars() {
         match c {
-          '"' => escaped.push_str("\\\""),
-          '\\' => escaped.push_str("\\\\"),
-          '\x08' => escaped.push_str("\\b"),
-          '\x0c' => escaped.push_str("\\f"),
-          '\n' => escaped.push_str("\\n"),
-          '\r' => escaped.push_str("\\r"),
-          '\t' => escaped.push_str("\\t"),
-          _ => escaped.push_char(c),
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\x08' => escaped.push_str("\\b"),
+            '\x0c' => escaped.push_str("\\f"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push_char(c),
         }
     };
 
@@ -898,46 +956,236 @@ impl Json {
     }
 }
 
+/// The output of the streaming parser.
+#[deriving(Eq, Clone, Show)]
+pub enum JsonEvent {
+    ObjectStart,
+    ObjectEnd,
+    ListStart,
+    ListEnd,
+    BooleanValue(bool),
+    NumberValue(f64),
+    StringValue(~str),
+    NullValue,
+    Error(ParserError),
+}
+
+#[deriving(Eq, Show)]
+enum ParserState {
+    // Parse a value in a list, true means first element.
+    ParseList(bool),
+    // Parse ',' or ']' after an element in a list.
+    ParseListComma,
+    // Parse a key:value in an object, true means first element.
+    ParseObject(bool),
+    // Parse ',' or ']' after an element in an object.
+    ParseObjectComma,
+    // Initialial state.
+    ParseStart,
+    // Expecting the stream to end.
+    ParseBeforeFinish,
+    // Parsing can't continue.
+    ParseFinished,
+}
+
+/// A Stack represents the current position of the parser in the logical
+/// structure of the JSON stream.
+/// For example foo.bar[3].x
+pub struct Stack {
+    priv stack: Vec<InternalStackElement>,
+    priv str_buffer: Vec<u8>,
+}
+
+/// StackElements compose a Stack.
+/// For example, Key("foo"), Key("bar"), Index(3) and Key("x") are the
+/// StackElements compositing the stack that represents foo.bar[3].x
+#[deriving(Eq, Clone, Show)]
+pub enum StackElement<'l> {
+    Index(u32),
+    Key(&'l str),
+}
+
+// Internally, Key elements are stored as indices in a buffer to avoid
+// allocating a string for every member of an object.
+#[deriving(Eq, Clone, Show)]
+enum InternalStackElement {
+    InternalIndex(u32),
+    InternalKey(u16, u16), // start, size
+}
+
+impl Stack {
+    pub fn new() -> Stack {
+        Stack {
+            stack: Vec::new(),
+            str_buffer: Vec::new(),
+        }
+    }
+
+    /// Returns The number of elements in the Stack.
+    pub fn len(&self) -> uint { self.stack.len() }
+
+    /// Returns true if the stack is empty, equivalent to self.len() == 0.
+    pub fn is_empty(&self) -> bool { self.stack.len() == 0 }
+
+    /// Provides access to the StackElement at a given index.
+    /// lower indices are at the bottom of the stack while higher indices are
+    /// at the top.
+    pub fn get<'l>(&'l self, idx: uint) -> StackElement<'l> {
+        return match *self.stack.get(idx) {
+          InternalIndex(i) => { Index(i) }
+          InternalKey(start, size) => {
+            Key(str::from_utf8(self.str_buffer.slice(start as uint, (start+size) as uint)).unwrap())
+          }
+        }
+    }
+
+    /// Compares this stack with an array of StackElements.
+    pub fn is_equal_to(&self, rhs: &[StackElement]) -> bool {
+        if self.stack.len() != rhs.len() { return false; }
+        for i in range(0, rhs.len()) {
+            if self.get(i) != rhs[i] { return false; }
+        }
+        return true;
+    }
+
+    /// Returns true if the bottom-most elements of this stack are the same as
+    /// the ones passed as parameter.
+    pub fn starts_with(&self, rhs: &[StackElement]) -> bool {
+        if self.stack.len() < rhs.len() { return false; }
+        for i in range(0, rhs.len()) {
+            if self.get(i) != rhs[i] { return false; }
+        }
+        return true;
+    }
+
+    /// Returns true if the top-most elements of this stack are the same as
+    /// the ones passed as parameter.
+    pub fn ends_with(&self, rhs: &[StackElement]) -> bool {
+        if self.stack.len() < rhs.len() { return false; }
+        let offset = self.stack.len() - rhs.len();
+        for i in range(0, rhs.len()) {
+            if self.get(i + offset) != rhs[i] { return false; }
+        }
+        return true;
+    }
+
+    /// Returns the top-most element (if any).
+    pub fn top<'l>(&'l self) -> Option<StackElement<'l>> {
+        return match self.stack.last() {
+            None => None,
+            Some(&InternalIndex(i)) => Some(Index(i)),
+            Some(&InternalKey(start, size)) => {
+                Some(Key(str::from_utf8(
+                    self.str_buffer.slice(start as uint, (start+size) as uint)
+                ).unwrap()))
+            }
+        }
+    }
+
+    // Used by Parser to insert Key elements at the top of the stack.
+    fn push_key(&mut self, key: ~str) {
+        self.stack.push(InternalKey(self.str_buffer.len() as u16, key.len() as u16));
+        for c in key.as_bytes().iter() {
+            self.str_buffer.push(*c);
+        }
+    }
+
+    // Used by Parser to insert Index elements at the top of the stack.
+    fn push_index(&mut self, index: u32) {
+        self.stack.push(InternalIndex(index));
+    }
+
+    // Used by Parser to remove the top-most element of the stack.
+    fn pop(&mut self) {
+        assert!(!self.is_empty());
+        match *self.stack.last().unwrap() {
+            InternalKey(_, sz) => {
+                let new_size = self.str_buffer.len() - sz as uint;
+                unsafe {
+                    self.str_buffer.set_len(new_size);
+                }
+            }
+            InternalIndex(_) => {}
+        }
+        self.stack.pop();
+    }
+
+    // Used by Parser to test whether the top-most element is an index.
+    fn last_is_index(&self) -> bool {
+        if self.is_empty() { return false; }
+        return match *self.stack.last().unwrap() {
+            InternalIndex(_) => true,
+            _ => false,
+        }
+    }
+
+    // Used by Parser to increment the index of the top-most element.
+    fn bump_index(&mut self) {
+        let len = self.stack.len();
+        let idx = match *self.stack.last().unwrap() {
+          InternalIndex(i) => { i + 1 }
+          _ => { fail!(); }
+        };
+        *self.stack.get_mut(len - 1) = InternalIndex(idx);
+    }
+}
+
+/// A streaming JSON parser implemented as an iterator of JsonEvent, consuming
+/// an iterator of char.
 pub struct Parser<T> {
     priv rdr: T,
     priv ch: Option<char>,
     priv line: uint,
     priv col: uint,
+    // We maintain a stack representing where we are in the logical structure
+    // of the JSON stream.
+    priv stack: Stack,
+    // A state machine is kept to make it possible to interupt and resume parsing.
+    priv state: ParserState,
+}
+
+impl<T: Iterator<char>> Iterator<JsonEvent> for Parser<T> {
+    fn next(&mut self) -> Option<JsonEvent> {
+        if self.state == ParseFinished {
+            return None;
+        }
+
+        if self.state == ParseBeforeFinish {
+            self.parse_whitespace();
+            // Make sure there is no trailing characters.
+            if self.eof() {
+                self.state = ParseFinished;
+                return None;
+            } else {
+                return Some(self.error_event(TrailingCharacters));
+            }
+        }
+
+        return Some(self.parse());
+    }
 }
 
 impl<T: Iterator<char>> Parser<T> {
-    /// Decode a json value from an Iterator<char>
+    /// Creates the JSON parser.
     pub fn new(rdr: T) -> Parser<T> {
         let mut p = Parser {
             rdr: rdr,
             ch: Some('\x00'),
             line: 1,
             col: 0,
+            stack: Stack::new(),
+            state: ParseStart,
         };
         p.bump();
-        p
+        return p;
     }
-}
 
-impl<T: Iterator<char>> Parser<T> {
-    pub fn parse(&mut self) -> DecodeResult<Json> {
-        match self.parse_value() {
-          Ok(value) => {
-            // Skip trailing whitespaces.
-            self.parse_whitespace();
-            // Make sure there is no trailing characters.
-            if self.eof() {
-                Ok(value)
-            } else {
-                self.error(~"trailing characters")
-            }
-          }
-          Err(e) => Err(e)
-        }
+    /// Provides access to the current position in the logical structure of the
+    /// JSON stream.
+    pub fn stack<'l>(&'l self) -> &'l Stack {
+        return &'l self.stack;
     }
-}
 
-impl<T : Iterator<char>> Parser<T> {
     fn eof(&self) -> bool { self.ch.is_none() }
     fn ch_or_null(&self) -> char { self.ch.unwrap_or('\x00') }
     fn bump(&mut self) {
@@ -959,30 +1207,8 @@ impl<T : Iterator<char>> Parser<T> {
         self.ch == Some(c)
     }
 
-    fn error<T>(&self, msg: ~str) -> DecodeResult<T> {
-        Err(ParseError(msg, self.line, self.col))
-    }
-
-    fn parse_value(&mut self) -> DecodeResult<Json> {
-        self.parse_whitespace();
-
-        if self.eof() { return self.error(~"EOF while parsing value"); }
-
-        match self.ch_or_null() {
-            'n' => self.parse_ident("ull", Null),
-            't' => self.parse_ident("rue", Boolean(true)),
-            'f' => self.parse_ident("alse", Boolean(false)),
-            '0' .. '9' | '-' => self.parse_number(),
-            '"' => {
-                match self.parse_str() {
-                    Ok(s) => Ok(String(s)),
-                    Err(e) => Err(e),
-                }
-            },
-            '[' => self.parse_list(),
-            '{' => self.parse_object(),
-            _ => self.error(~"invalid syntax"),
-        }
+    fn error<T>(&self, reason: ErrorCode) -> Result<T, ParserError> {
+        Err(SyntaxError(reason, self.line, self.col))
     }
 
     fn parse_whitespace(&mut self) {
@@ -992,16 +1218,7 @@ impl<T : Iterator<char>> Parser<T> {
               self.ch_is('\r') { self.bump(); }
     }
 
-    fn parse_ident(&mut self, ident: &str, value: Json) -> DecodeResult<Json> {
-        if ident.chars().all(|c| Some(c) == self.next_char()) {
-            self.bump();
-            Ok(value)
-        } else {
-            self.error(~"invalid syntax")
-        }
-    }
-
-    fn parse_number(&mut self) -> DecodeResult<Json> {
+    fn parse_number(&mut self) -> Result<f64, ParserError> {
         let mut neg = 1.0;
 
         if self.ch_is('-') {
@@ -1028,10 +1245,10 @@ impl<T : Iterator<char>> Parser<T> {
             }
         }
 
-        Ok(Number(neg * res))
+        Ok(neg * res)
     }
 
-    fn parse_integer(&mut self) -> DecodeResult<f64> {
+    fn parse_integer(&mut self) -> Result<f64, ParserError> {
         let mut res = 0.0;
 
         match self.ch_or_null() {
@@ -1040,7 +1257,7 @@ impl<T : Iterator<char>> Parser<T> {
 
                 // There can be only one leading '0'.
                 match self.ch_or_null() {
-                    '0' .. '9' => return self.error(~"invalid number"),
+                    '0' .. '9' => return self.error(InvalidNumber),
                     _ => ()
                 }
             },
@@ -1050,25 +1267,24 @@ impl<T : Iterator<char>> Parser<T> {
                         c @ '0' .. '9' => {
                             res *= 10.0;
                             res += ((c as int) - ('0' as int)) as f64;
-
                             self.bump();
                         }
                         _ => break,
                     }
                 }
             }
-            _ => return self.error(~"invalid number"),
+            _ => return self.error(InvalidNumber),
         }
         Ok(res)
     }
 
-    fn parse_decimal(&mut self, res: f64) -> DecodeResult<f64> {
+    fn parse_decimal(&mut self, res: f64) -> Result<f64, ParserError> {
         self.bump();
 
         // Make sure a digit follows the decimal place.
         match self.ch_or_null() {
             '0' .. '9' => (),
-             _ => return self.error(~"invalid number")
+             _ => return self.error(InvalidNumber)
         }
 
         let mut res = res;
@@ -1078,7 +1294,6 @@ impl<T : Iterator<char>> Parser<T> {
                 c @ '0' .. '9' => {
                     dec /= 10.0;
                     res += (((c as int) - ('0' as int)) as f64) * dec;
-
                     self.bump();
                 }
                 _ => break,
@@ -1088,7 +1303,7 @@ impl<T : Iterator<char>> Parser<T> {
         Ok(res)
     }
 
-    fn parse_exponent(&mut self, mut res: f64) -> DecodeResult<f64> {
+    fn parse_exponent(&mut self, mut res: f64) -> Result<f64, ParserError> {
         self.bump();
 
         let mut exp = 0u;
@@ -1104,7 +1319,7 @@ impl<T : Iterator<char>> Parser<T> {
         // Make sure a digit follows the exponent place.
         match self.ch_or_null() {
             '0' .. '9' => (),
-            _ => return self.error(~"invalid number")
+            _ => return self.error(InvalidNumber)
         }
         while !self.eof() {
             match self.ch_or_null() {
@@ -1128,14 +1343,14 @@ impl<T : Iterator<char>> Parser<T> {
         Ok(res)
     }
 
-    fn parse_str(&mut self) -> DecodeResult<~str> {
+    fn parse_str(&mut self) -> Result<~str, ParserError> {
         let mut escape = false;
         let mut res = ~"";
 
         loop {
             self.bump();
             if self.eof() {
-                return self.error(~"EOF while parsing string");
+                return self.error(EOFWhileParsingString);
             }
 
             if escape {
@@ -1162,8 +1377,7 @@ impl<T : Iterator<char>> Parser<T> {
                                 'd' | 'D' => n * 16u + 13u,
                                 'e' | 'E' => n * 16u + 14u,
                                 'f' | 'F' => n * 16u + 15u,
-                                _ => return self.error(
-                                    ~"invalid \\u escape (unrecognized hex)")
+                                _ => return self.error(UnrecognizedHex)
                             };
 
                             i += 1u;
@@ -1171,13 +1385,12 @@ impl<T : Iterator<char>> Parser<T> {
 
                         // Error out if we didn't parse 4 digits.
                         if i != 4u {
-                            return self.error(
-                                ~"invalid \\u escape (not four digits)");
+                            return self.error(NotFourDigit);
                         }
 
                         res.push_char(char::from_u32(n as u32).unwrap());
                     }
-                    _ => return self.error(~"invalid escape"),
+                    _ => return self.error(InvalidEscape),
                 }
                 escape = false;
             } else if self.ch_is('\\') {
@@ -1192,108 +1405,347 @@ impl<T : Iterator<char>> Parser<T> {
         }
     }
 
-    fn parse_list(&mut self) -> DecodeResult<Json> {
-        self.bump();
-        self.parse_whitespace();
-
-        let mut values = ~[];
-
-        if self.ch_is(']') {
-            self.bump();
-            return Ok(List(values));
-        }
-
+    // Invoked at each iteration, consumes the stream until it has enough
+    // information to return a JsonEvent.
+    // Manages an internal state so that parsing can be interrupted and resumed.
+    // Also keeps track of the position in the logical structure of the json
+    // stream int the form of a stack that can be queried by the user usng the
+    // stack() method.
+    fn parse(&mut self) -> JsonEvent {
         loop {
-            match self.parse_value() {
-              Ok(v) => values.push(v),
-              Err(e) => return Err(e)
-            }
-
-            self.parse_whitespace();
-            if self.eof() {
-                return self.error(~"EOF while parsing list");
-            }
-
-            if self.ch_is(',') {
-                self.bump();
-            } else if self.ch_is(']') {
-                self.bump();
-                return Ok(List(values));
-            } else {
-                return self.error(~"expected `,` or `]`")
-            }
-        };
-    }
-
-    fn parse_object(&mut self) -> DecodeResult<Json> {
-        self.bump();
-        self.parse_whitespace();
-
-        let mut values = ~TreeMap::new();
-
-        if self.ch_is('}') {
-          self.bump();
-          return Ok(Object(values));
-        }
-
-        while !self.eof() {
+            // The only paths where the loop can spin a new iteration
+            // are in the cases ParseListComma and ParseObjectComma if ','
+            // is parsed. In these cases the state is set to (respectively)
+            // ParseList(false) and ParseObject(false), which always return,
+            // so there is no risk of getting stuck in an infinite loop.
+            // All other paths return before the end of the loop's iteration.
             self.parse_whitespace();
 
-            if !self.ch_is('"') {
-                return self.error(~"key must be a string");
-            }
-
-            let key = match self.parse_str() {
-              Ok(key) => key,
-              Err(e) => return Err(e)
-            };
-
-            self.parse_whitespace();
-
-            if !self.ch_is(':') {
-                if self.eof() { break; }
-                return self.error(~"expected `:`");
-            }
-            self.bump();
-
-            match self.parse_value() {
-              Ok(value) => { values.insert(key, value); }
-              Err(e) => return Err(e)
-            }
-            self.parse_whitespace();
-
-            match self.ch_or_null() {
-                ',' => self.bump(),
-                '}' => { self.bump(); return Ok(Object(values)); },
+            match self.state {
+                ParseStart => {
+                    return self.parse_start();
+                }
+                ParseList(first) => {
+                    return self.parse_list(first);
+                }
+                ParseListComma => {
+                    match self.parse_list_comma_or_end() {
+                        Some(evt) => { return evt; }
+                        None => {}
+                    }
+                }
+                ParseObject(first) => {
+                    return self.parse_object(first);
+                }
+                ParseObjectComma => {
+                    self.stack.pop();
+                    if self.ch_is(',') {
+                        self.state = ParseObject(false);
+                        self.bump();
+                    } else {
+                        return self.parse_object_end();
+                    }
+                }
                 _ => {
-                    if self.eof() { break; }
-                    return self.error(~"expected `,` or `}`");
+                    return self.error_event(InvalidSyntax);
                 }
             }
         }
+    }
 
-        return self.error(~"EOF while parsing object");
+    fn parse_start(&mut self) -> JsonEvent {
+        let val = self.parse_value();
+        self.state = match val {
+            Error(_) => { ParseFinished }
+            ListStart => { ParseList(true) }
+            ObjectStart => { ParseObject(true) }
+            _ => { ParseBeforeFinish }
+        };
+        return val;
+    }
+
+    fn parse_list(&mut self, first: bool) -> JsonEvent {
+        if self.ch_is(']') {
+            if !first {
+                return self.error_event(InvalidSyntax);
+            }
+            if self.stack.is_empty() {
+                self.state = ParseBeforeFinish;
+            } else {
+                self.state = if self.stack.last_is_index() {
+                    ParseListComma
+                } else {
+                    ParseObjectComma
+                }
+            }
+            self.bump();
+            return ListEnd;
+        }
+        if first {
+            self.stack.push_index(0);
+        }
+
+        let val = self.parse_value();
+
+        self.state = match val {
+            Error(_) => { ParseFinished }
+            ListStart => { ParseList(true) }
+            ObjectStart => { ParseObject(true) }
+            _ => { ParseListComma }
+        };
+        return val;
+    }
+
+    fn parse_list_comma_or_end(&mut self) -> Option<JsonEvent> {
+        if self.ch_is(',') {
+            self.stack.bump_index();
+            self.state = ParseList(false);
+            self.bump();
+            return None;
+        } else if self.ch_is(']') {
+            self.stack.pop();
+            if self.stack.is_empty() {
+                self.state = ParseBeforeFinish;
+            } else {
+                self.state = if self.stack.last_is_index() {
+                    ParseListComma
+                } else {
+                    ParseObjectComma
+                }
+            }
+            self.bump();
+            return Some(ListEnd);
+        } else if self.eof() {
+            return Some(self.error_event(EOFWhileParsingList));
+        } else {
+            return Some(self.error_event(InvalidSyntax));
+        }
+    }
+
+    fn parse_object(&mut self, first: bool) -> JsonEvent {
+        if self.ch_is('}') {
+            if !first {
+                self.stack.pop();
+            }
+            if self.stack.is_empty() {
+                self.state = ParseBeforeFinish;
+            } else {
+                self.state = if self.stack.last_is_index() {
+                    ParseListComma
+                } else {
+                    ParseObjectComma
+                }
+            }
+            self.bump();
+            return ObjectEnd;
+        }
+        if self.eof() {
+            return self.error_event(EOFWhileParsingObject);
+        }
+        if !self.ch_is('"') {
+            return self.error_event(KeyMustBeAString);
+        }
+        let s = match self.parse_str() {
+            Ok(s) => { s }
+            Err(e) => {
+                self.state = ParseFinished;
+                return Error(e);
+            }
+        };
+        self.parse_whitespace();
+        if self.eof() {
+            return self.error_event(EOFWhileParsingObject);
+        } else if self.ch_or_null() != ':' {
+            return self.error_event(ExpectedColon);
+        }
+        self.stack.push_key(s);
+        self.bump();
+        self.parse_whitespace();
+
+        let val = self.parse_value();
+
+        self.state = match val {
+            Error(_) => { ParseFinished }
+            ListStart => { ParseList(true) }
+            ObjectStart => { ParseObject(true) }
+            _ => { ParseObjectComma }
+        };
+        return val;
+    }
+
+    fn parse_object_end(&mut self) -> JsonEvent {
+        if self.ch_is('}') {
+            if self.stack.is_empty() {
+                self.state = ParseBeforeFinish;
+            } else {
+                self.state = if self.stack.last_is_index() {
+                    ParseListComma
+                } else {
+                    ParseObjectComma
+                }
+            }
+            self.bump();
+            return ObjectEnd;
+        } else if self.eof() {
+            return self.error_event(EOFWhileParsingObject);
+        } else {
+            return self.error_event(InvalidSyntax);
+        }
+    }
+
+    fn parse_value(&mut self) -> JsonEvent {
+        if self.eof() { return self.error_event(EOFWhileParsingValue); }
+        match self.ch_or_null() {
+            'n' => { return self.parse_ident("ull", NullValue); }
+            't' => { return self.parse_ident("rue", BooleanValue(true)); }
+            'f' => { return self.parse_ident("alse", BooleanValue(false)); }
+            '0' .. '9' | '-' => return match self.parse_number() {
+                Ok(f) => NumberValue(f),
+                Err(e) => Error(e),
+            },
+            '"' => return match self.parse_str() {
+                Ok(s) => StringValue(s),
+                Err(e) => Error(e),
+            },
+            '[' => {
+                self.bump();
+                return ListStart;
+            }
+            '{' => {
+                self.bump();
+                return ObjectStart;
+            }
+            _ => { return self.error_event(InvalidSyntax); }
+        }
+    }
+
+    fn parse_ident(&mut self, ident: &str, value: JsonEvent) -> JsonEvent {
+        if ident.chars().all(|c| Some(c) == self.next_char()) {
+            self.bump();
+            value
+        } else {
+            Error(SyntaxError(InvalidSyntax, self.line, self.col))
+        }
+    }
+
+    fn error_event(&mut self, reason: ErrorCode) -> JsonEvent {
+        self.state = ParseFinished;
+        Error(SyntaxError(reason, self.line, self.col))
     }
 }
 
+/// A Builder consumes a json::Parser to create a generic Json structure.
+pub struct Builder<T> {
+    parser: Parser<T>,
+    token: Option<JsonEvent>,
+}
+
+impl<T: Iterator<char>> Builder<T> {
+    /// Create a JSON Builder.
+    pub fn new(src: T) -> Builder<T> {
+        Builder {
+            parser: Parser::new(src),
+            token: None,
+        }
+    }
+
+    // Decode a Json value from a Parser.
+    pub fn build(&mut self) -> Result<Json, BuilderError> {
+        self.bump();
+        let result = self.build_value();
+        self.bump();
+        match self.token {
+            None => {}
+            Some(Error(e)) => { return Err(e); }
+            ref tok => { fail!("unexpected token {}", tok.clone()); }
+        }
+        return result;
+    }
+
+    fn bump(&mut self) {
+        self.token = self.parser.next();
+    }
+
+    fn build_value(&mut self) -> Result<Json, BuilderError> {
+        return match self.token {
+            Some(NullValue) => { Ok(Null) }
+            Some(NumberValue(n)) => { Ok(Number(n)) }
+            Some(BooleanValue(b)) => { Ok(Boolean(b)) }
+            Some(StringValue(ref mut s)) => {
+                let mut temp = ~"";
+                swap(s, &mut temp);
+                Ok(String(temp))
+            }
+            Some(Error(e)) => { Err(e) }
+            Some(ListStart) => { self.build_list() }
+            Some(ObjectStart) => { self.build_object() }
+            Some(ObjectEnd) => { self.parser.error(InvalidSyntax) }
+            Some(ListEnd) => { self.parser.error(InvalidSyntax) }
+            None => { self.parser.error(EOFWhileParsingValue) }
+        }
+    }
+
+    fn build_list(&mut self) -> Result<Json, BuilderError> {
+        self.bump();
+        let mut values = ~[];
+
+        loop {
+            if self.token == Some(ListEnd) {
+                return Ok(List(values));
+            }
+            match self.build_value() {
+                Ok(v) => values.push(v),
+                Err(e) => { return Err(e) }
+            }
+            self.bump();
+        }
+    }
+
+    fn build_object(&mut self) -> Result<Json, BuilderError> {
+        self.bump();
+
+        let mut values = ~TreeMap::new();
+
+        while self.token != None {
+            match self.token {
+                Some(ObjectEnd) => { return Ok(Object(values)); }
+                Some(Error(e)) => { return Err(e); }
+                None => { break; }
+                _ => {}
+            }
+            let key = match self.parser.stack().top() {
+                Some(Key(k)) => { k.into_owned() }
+                _ => { fail!("invalid state"); }
+            };
+            match self.build_value() {
+                Ok(value) => { values.insert(key, value); }
+                Err(e) => { return Err(e); }
+            }
+            self.bump();
+        }
+        return self.parser.error(EOFWhileParsingObject);
+    }
+}
+
+
 /// Decodes a json value from an `&mut io::Reader`
-pub fn from_reader(rdr: &mut io::Reader) -> DecodeResult<Json> {
+pub fn from_reader(rdr: &mut io::Reader) -> Result<Json, BuilderError> {
     let contents = match rdr.read_to_end() {
         Ok(c) => c,
-        Err(e) => return Err(IoError(e))
+        Err(e) => return Err(io_error_to_error(e))
     };
     let s = match str::from_utf8_owned(contents) {
         Some(s) => s,
-        None => return Err(ParseError(~"contents not utf-8", 0, 0))
+        None => return Err(SyntaxError(NotUtf8, 0, 0))
     };
-    let mut parser = Parser::new(s.chars());
-    parser.parse()
+    let mut builder = Builder::new(s.chars());
+    builder.build()
 }
 
 /// Decodes a json value from a string
-pub fn from_str(s: &str) -> DecodeResult<Json> {
-    let mut parser = Parser::new(s.chars());
-    parser.parse()
+pub fn from_str(s: &str) -> Result<Json, BuilderError> {
+    let mut builder = Builder::new(s.chars());
+    return builder.build();
 }
 
 /// A structure to decode JSON to values in rust.
@@ -1331,7 +1783,7 @@ macro_rules! expect(
     })
 )
 
-impl ::Decoder<Error> for Decoder {
+impl ::Decoder<DecoderError> for Decoder {
     fn read_nil(&mut self) -> DecodeResult<()> {
         debug!("read_nil");
         try!(expect!(self.pop(), Null));
@@ -1750,9 +2202,16 @@ mod tests {
     use {Encodable, Decodable};
     use super::{Encoder, Decoder, Error, Boolean, Number, List, String, Null,
                 PrettyEncoder, Object, Json, from_str, ParseError, ExpectedError,
-                MissingFieldError, UnknownVariantError, DecodeResult };
+                MissingFieldError, UnknownVariantError, DecodeResult, DecoderError,
+                JsonEvent, Parser, StackElement,
+                ObjectStart, ObjectEnd, ListStart, ListEnd, BooleanValue, NumberValue, StringValue,
+                NullValue, SyntaxError, Key, Index, Stack,
+                InvalidSyntax, InvalidNumber, EOFWhileParsingObject, EOFWhileParsingList,
+                EOFWhileParsingValue, EOFWhileParsingString, KeyMustBeAString, ExpectedColon,
+                TrailingCharacters};
     use std::io;
     use collections::TreeMap;
+    use test::BenchHarness;
 
     #[deriving(Eq, Encodable, Decodable, Show)]
     enum Animal {
@@ -2005,36 +2464,22 @@ mod tests {
 
     #[test]
     fn test_trailing_characters() {
-        assert_eq!(from_str("nulla"),
-            Err(ParseError(~"trailing characters", 1u, 5u)));
-        assert_eq!(from_str("truea"),
-            Err(ParseError(~"trailing characters", 1u, 5u)));
-        assert_eq!(from_str("falsea"),
-            Err(ParseError(~"trailing characters", 1u, 6u)));
-        assert_eq!(from_str("1a"),
-            Err(ParseError(~"trailing characters", 1u, 2u)));
-        assert_eq!(from_str("[]a"),
-            Err(ParseError(~"trailing characters", 1u, 3u)));
-        assert_eq!(from_str("{}a"),
-            Err(ParseError(~"trailing characters", 1u, 3u)));
+        assert_eq!(from_str("nulla"),  Err(SyntaxError(TrailingCharacters, 1, 5)));
+        assert_eq!(from_str("truea"),  Err(SyntaxError(TrailingCharacters, 1, 5)));
+        assert_eq!(from_str("falsea"), Err(SyntaxError(TrailingCharacters, 1, 6)));
+        assert_eq!(from_str("1a"),     Err(SyntaxError(TrailingCharacters, 1, 2)));
+        assert_eq!(from_str("[]a"),    Err(SyntaxError(TrailingCharacters, 1, 3)));
+        assert_eq!(from_str("{}a"),    Err(SyntaxError(TrailingCharacters, 1, 3)));
     }
 
     #[test]
     fn test_read_identifiers() {
-        assert_eq!(from_str("n"),
-            Err(ParseError(~"invalid syntax", 1u, 2u)));
-        assert_eq!(from_str("nul"),
-            Err(ParseError(~"invalid syntax", 1u, 4u)));
-
-        assert_eq!(from_str("t"),
-            Err(ParseError(~"invalid syntax", 1u, 2u)));
-        assert_eq!(from_str("truz"),
-            Err(ParseError(~"invalid syntax", 1u, 4u)));
-
-        assert_eq!(from_str("f"),
-            Err(ParseError(~"invalid syntax", 1u, 2u)));
-        assert_eq!(from_str("faz"),
-            Err(ParseError(~"invalid syntax", 1u, 3u)));
+        assert_eq!(from_str("n"),    Err(SyntaxError(InvalidSyntax, 1, 2)));
+        assert_eq!(from_str("nul"),  Err(SyntaxError(InvalidSyntax, 1, 4)));
+        assert_eq!(from_str("t"),    Err(SyntaxError(InvalidSyntax, 1, 2)));
+        assert_eq!(from_str("truz"), Err(SyntaxError(InvalidSyntax, 1, 4)));
+        assert_eq!(from_str("f"),    Err(SyntaxError(InvalidSyntax, 1, 2)));
+        assert_eq!(from_str("faz"),  Err(SyntaxError(InvalidSyntax, 1, 3)));
 
         assert_eq!(from_str("null"), Ok(Null));
         assert_eq!(from_str("true"), Ok(Boolean(true)));
@@ -2061,21 +2506,13 @@ mod tests {
 
     #[test]
     fn test_read_number() {
-        assert_eq!(from_str("+"),
-            Err(ParseError(~"invalid syntax", 1u, 1u)));
-        assert_eq!(from_str("."),
-            Err(ParseError(~"invalid syntax", 1u, 1u)));
-
-        assert_eq!(from_str("-"),
-            Err(ParseError(~"invalid number", 1u, 2u)));
-        assert_eq!(from_str("00"),
-            Err(ParseError(~"invalid number", 1u, 2u)));
-        assert_eq!(from_str("1."),
-            Err(ParseError(~"invalid number", 1u, 3u)));
-        assert_eq!(from_str("1e"),
-            Err(ParseError(~"invalid number", 1u, 3u)));
-        assert_eq!(from_str("1e+"),
-            Err(ParseError(~"invalid number", 1u, 4u)));
+        assert_eq!(from_str("+"),   Err(SyntaxError(InvalidSyntax, 1, 1)));
+        assert_eq!(from_str("."),   Err(SyntaxError(InvalidSyntax, 1, 1)));
+        assert_eq!(from_str("-"),   Err(SyntaxError(InvalidNumber, 1, 2)));
+        assert_eq!(from_str("00"),  Err(SyntaxError(InvalidNumber, 1, 2)));
+        assert_eq!(from_str("1."),  Err(SyntaxError(InvalidNumber, 1, 3)));
+        assert_eq!(from_str("1e"),  Err(SyntaxError(InvalidNumber, 1, 3)));
+        assert_eq!(from_str("1e+"), Err(SyntaxError(InvalidNumber, 1, 4)));
 
         assert_eq!(from_str("3"), Ok(Number(3.0)));
         assert_eq!(from_str("3.1"), Ok(Number(3.1)));
@@ -2120,10 +2557,8 @@ mod tests {
 
     #[test]
     fn test_read_str() {
-        assert_eq!(from_str("\""),
-            Err(ParseError(~"EOF while parsing string", 1u, 2u)));
-        assert_eq!(from_str("\"lol"),
-            Err(ParseError(~"EOF while parsing string", 1u, 5u)));
+        assert_eq!(from_str("\""),    Err(SyntaxError(EOFWhileParsingString, 1, 2)));
+        assert_eq!(from_str("\"lol"), Err(SyntaxError(EOFWhileParsingString, 1, 5)));
 
         assert_eq!(from_str("\"\""), Ok(String(~"")));
         assert_eq!(from_str("\"foo\""), Ok(String(~"foo")));
@@ -2178,16 +2613,11 @@ mod tests {
 
     #[test]
     fn test_read_list() {
-        assert_eq!(from_str("["),
-            Err(ParseError(~"EOF while parsing value", 1u, 2u)));
-        assert_eq!(from_str("[1"),
-            Err(ParseError(~"EOF while parsing list", 1u, 3u)));
-        assert_eq!(from_str("[1,"),
-            Err(ParseError(~"EOF while parsing value", 1u, 4u)));
-        assert_eq!(from_str("[1,]"),
-            Err(ParseError(~"invalid syntax", 1u, 4u)));
-        assert_eq!(from_str("[6 7]"),
-            Err(ParseError(~"expected `,` or `]`", 1u, 4u)));
+        assert_eq!(from_str("["),     Err(SyntaxError(EOFWhileParsingValue, 1, 2)));
+        assert_eq!(from_str("[1"),    Err(SyntaxError(EOFWhileParsingList,  1, 3)));
+        assert_eq!(from_str("[1,"),   Err(SyntaxError(EOFWhileParsingValue, 1, 4)));
+        assert_eq!(from_str("[1,]"),  Err(SyntaxError(InvalidSyntax,        1, 4)));
+        assert_eq!(from_str("[6 7]"), Err(SyntaxError(InvalidSyntax,        1, 4)));
 
         assert_eq!(from_str("[]"), Ok(List(~[])));
         assert_eq!(from_str("[ ]"), Ok(List(~[])));
@@ -2231,29 +2661,18 @@ mod tests {
 
     #[test]
     fn test_read_object() {
-        assert_eq!(from_str("{"),
-            Err(ParseError(~"EOF while parsing object", 1u, 2u)));
-        assert_eq!(from_str("{ "),
-            Err(ParseError(~"EOF while parsing object", 1u, 3u)));
-        assert_eq!(from_str("{1"),
-            Err(ParseError(~"key must be a string", 1u, 2u)));
-        assert_eq!(from_str("{ \"a\""),
-            Err(ParseError(~"EOF while parsing object", 1u, 6u)));
-        assert_eq!(from_str("{\"a\""),
-            Err(ParseError(~"EOF while parsing object", 1u, 5u)));
-        assert_eq!(from_str("{\"a\" "),
-            Err(ParseError(~"EOF while parsing object", 1u, 6u)));
+        assert_eq!(from_str("{"),       Err(SyntaxError(EOFWhileParsingObject, 1, 2)));
+        assert_eq!(from_str("{ "),      Err(SyntaxError(EOFWhileParsingObject, 1, 3)));
+        assert_eq!(from_str("{1"),      Err(SyntaxError(KeyMustBeAString,      1, 2)));
+        assert_eq!(from_str("{ \"a\""), Err(SyntaxError(EOFWhileParsingObject, 1, 6)));
+        assert_eq!(from_str("{\"a\""),  Err(SyntaxError(EOFWhileParsingObject, 1, 5)));
+        assert_eq!(from_str("{\"a\" "), Err(SyntaxError(EOFWhileParsingObject, 1, 6)));
 
-        assert_eq!(from_str("{\"a\" 1"),
-            Err(ParseError(~"expected `:`", 1u, 6u)));
-        assert_eq!(from_str("{\"a\":"),
-            Err(ParseError(~"EOF while parsing value", 1u, 6u)));
-        assert_eq!(from_str("{\"a\":1"),
-            Err(ParseError(~"EOF while parsing object", 1u, 7u)));
-        assert_eq!(from_str("{\"a\":1 1"),
-            Err(ParseError(~"expected `,` or `}`", 1u, 8u)));
-        assert_eq!(from_str("{\"a\":1,"),
-            Err(ParseError(~"EOF while parsing object", 1u, 8u)));
+        assert_eq!(from_str("{\"a\" 1"),   Err(SyntaxError(ExpectedColon,         1, 6)));
+        assert_eq!(from_str("{\"a\":"),    Err(SyntaxError(EOFWhileParsingValue,  1, 6)));
+        assert_eq!(from_str("{\"a\":1"),   Err(SyntaxError(EOFWhileParsingObject, 1, 7)));
+        assert_eq!(from_str("{\"a\":1 1"), Err(SyntaxError(InvalidSyntax,         1, 8)));
+        assert_eq!(from_str("{\"a\":1,"),  Err(SyntaxError(EOFWhileParsingObject, 1, 8)));
 
         assert_eq!(from_str("{}").unwrap(), mk_object([]));
         assert_eq!(from_str("{\"a\": 3}").unwrap(),
@@ -2350,7 +2769,7 @@ mod tests {
     #[test]
     fn test_multiline_errors() {
         assert_eq!(from_str("{\n  \"foo\":\n \"bar\""),
-            Err(ParseError(~"EOF while parsing object", 3u, 8u)));
+            Err(SyntaxError(EOFWhileParsingObject, 3u, 8u)));
     }
 
     #[deriving(Decodable)]
@@ -2365,20 +2784,19 @@ mod tests {
         A(f64),
         B(~str)
     }
-    fn check_err<T: Decodable<Decoder, Error>>(to_parse: &'static str, expected: Error) {
+    fn check_err<T: Decodable<Decoder, DecoderError>>(to_parse: &'static str, expected: DecoderError) {
         let res: DecodeResult<T> = match from_str(to_parse) {
-            Err(e) => Err(e),
+            Err(e) => Err(ParseError(e)),
             Ok(json) => Decodable::decode(&mut Decoder::new(json))
         };
         match res {
             Ok(_) => fail!("`{}` parsed & decoded ok, expecting error `{}`",
                               to_parse, expected),
-            Err(ParseError(e, _, _)) => fail!("`{}` is not valid json: {}",
+            Err(ParseError(e)) => fail!("`{}` is not valid json: {}",
                                            to_parse, e),
             Err(e) => {
                 assert_eq!(e, expected);
             }
-
         }
     }
     #[test]
@@ -2545,7 +2963,7 @@ mod tests {
         let mut mem_buf = MemWriter::new();
         {
             let mut encoder = PrettyEncoder::new(&mut mem_buf as &mut io::Writer);
-            hm.encode(&mut encoder).unwrap();
+            hm.encode(&mut encoder).unwrap()
         }
         let bytes = mem_buf.unwrap();
         let json_str = from_utf8(bytes).unwrap();
@@ -2565,5 +2983,348 @@ mod tests {
         };
         let mut decoder = Decoder::new(json_obj);
         let _hm: HashMap<uint, bool> = Decodable::decode(&mut decoder).unwrap();
+    }
+
+    fn assert_stream_equal(src: &str, mut expected: ~[(JsonEvent, ~[StackElement])]) {
+        let mut parser = Parser::new(src.chars());
+        loop {
+            let evt = match parser.next() {
+                Some(e) => e,
+                None => { break; }
+            };
+            let (expected_evt, expected_stack) = expected.shift().unwrap();
+            if !parser.stack().is_equal_to(expected_stack) {
+                fail!("Parser stack is not equal to {}", expected_stack);
+            }
+            assert_eq!(evt, expected_evt);
+        }
+    }
+    #[test]
+    fn test_streaming_parser() {
+        assert_stream_equal(
+            r#"{ "foo":"bar", "array" : [0, 1, 2,3 ,4,5], "idents":[null,true,false]}"#,
+            ~[
+                (ObjectStart,             ~[]),
+                  (StringValue(~"bar"),   ~[Key("foo")]),
+                  (ListStart,             ~[Key("array")]),
+                    (NumberValue(0.0),    ~[Key("array"), Index(0)]),
+                    (NumberValue(1.0),    ~[Key("array"), Index(1)]),
+                    (NumberValue(2.0),    ~[Key("array"), Index(2)]),
+                    (NumberValue(3.0),    ~[Key("array"), Index(3)]),
+                    (NumberValue(4.0),    ~[Key("array"), Index(4)]),
+                    (NumberValue(5.0),    ~[Key("array"), Index(5)]),
+                  (ListEnd,               ~[Key("array")]),
+                  (ListStart,             ~[Key("idents")]),
+                    (NullValue,           ~[Key("idents"), Index(0)]),
+                    (BooleanValue(true),  ~[Key("idents"), Index(1)]),
+                    (BooleanValue(false), ~[Key("idents"), Index(2)]),
+                  (ListEnd,               ~[Key("idents")]),
+                (ObjectEnd,               ~[]),
+            ]
+        );
+    }
+    fn last_event(src: &str) -> JsonEvent {
+        let mut parser = Parser::new(src.chars());
+        let mut evt = NullValue;
+        loop {
+            evt = match parser.next() {
+                Some(e) => e,
+                None => return evt,
+            }
+        }
+    }
+    #[test]
+    fn test_read_object_streaming() {
+        assert_eq!(last_event("{ "),      Error(SyntaxError(EOFWhileParsingObject, 1, 3)));
+        assert_eq!(last_event("{1"),      Error(SyntaxError(KeyMustBeAString,      1, 2)));
+        assert_eq!(last_event("{ \"a\""), Error(SyntaxError(EOFWhileParsingObject, 1, 6)));
+        assert_eq!(last_event("{\"a\""),  Error(SyntaxError(EOFWhileParsingObject, 1, 5)));
+        assert_eq!(last_event("{\"a\" "), Error(SyntaxError(EOFWhileParsingObject, 1, 6)));
+
+        assert_eq!(last_event("{\"a\" 1"),   Error(SyntaxError(ExpectedColon,         1, 6)));
+        assert_eq!(last_event("{\"a\":"),    Error(SyntaxError(EOFWhileParsingValue,  1, 6)));
+        assert_eq!(last_event("{\"a\":1"),   Error(SyntaxError(EOFWhileParsingObject, 1, 7)));
+        assert_eq!(last_event("{\"a\":1 1"), Error(SyntaxError(InvalidSyntax,         1, 8)));
+        assert_eq!(last_event("{\"a\":1,"),  Error(SyntaxError(EOFWhileParsingObject, 1, 8)));
+
+        assert_stream_equal(
+            "{}",
+            ~[(ObjectStart, ~[]), (ObjectEnd, ~[])]
+        );
+        assert_stream_equal(
+            "{\"a\": 3}",
+            ~[
+                (ObjectStart,        ~[]),
+                  (NumberValue(3.0), ~[Key("a")]),
+                (ObjectEnd,          ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "{ \"a\": null, \"b\" : true }",
+            ~[
+                (ObjectStart,           ~[]),
+                  (NullValue,           ~[Key("a")]),
+                  (BooleanValue(true),  ~[Key("b")]),
+                (ObjectEnd,             ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "{\"a\" : 1.0 ,\"b\": [ true ]}",
+            ~[
+                (ObjectStart,           ~[]),
+                  (NumberValue(1.0),    ~[Key("a")]),
+                  (ListStart,           ~[Key("b")]),
+                    (BooleanValue(true),~[Key("b"), Index(0)]),
+                  (ListEnd,             ~[Key("b")]),
+                (ObjectEnd,             ~[]),
+            ]
+        );
+        assert_stream_equal(
+            r#"{
+                "a": 1.0,
+                "b": [
+                    true,
+                    "foo\nbar",
+                    { "c": {"d": null} }
+                ]
+            }"#,
+            ~[
+                (ObjectStart,                   ~[]),
+                  (NumberValue(1.0),            ~[Key("a")]),
+                  (ListStart,                   ~[Key("b")]),
+                    (BooleanValue(true),        ~[Key("b"), Index(0)]),
+                    (StringValue(~"foo\nbar"),  ~[Key("b"), Index(1)]),
+                    (ObjectStart,               ~[Key("b"), Index(2)]),
+                      (ObjectStart,             ~[Key("b"), Index(2), Key("c")]),
+                        (NullValue,             ~[Key("b"), Index(2), Key("c"), Key("d")]),
+                      (ObjectEnd,               ~[Key("b"), Index(2), Key("c")]),
+                    (ObjectEnd,                 ~[Key("b"), Index(2)]),
+                  (ListEnd,                     ~[Key("b")]),
+                (ObjectEnd,                     ~[]),
+            ]
+        );
+    }
+    #[test]
+    fn test_read_list_streaming() {
+        assert_stream_equal(
+            "[]",
+            ~[
+                (ListStart, ~[]),
+                (ListEnd,   ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[ ]",
+            ~[
+                (ListStart, ~[]),
+                (ListEnd,   ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[true]",
+            ~[
+                (ListStart,              ~[]),
+                    (BooleanValue(true), ~[Index(0)]),
+                (ListEnd,                ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[ false ]",
+            ~[
+                (ListStart,               ~[]),
+                    (BooleanValue(false), ~[Index(0)]),
+                (ListEnd,                 ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[null]",
+            ~[
+                (ListStart,     ~[]),
+                    (NullValue, ~[Index(0)]),
+                (ListEnd,       ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[3, 1]",
+            ~[
+                (ListStart,     ~[]),
+                    (NumberValue(3.0), ~[Index(0)]),
+                    (NumberValue(1.0), ~[Index(1)]),
+                (ListEnd,       ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "\n[3, 2]\n",
+            ~[
+                (ListStart,     ~[]),
+                    (NumberValue(3.0), ~[Index(0)]),
+                    (NumberValue(2.0), ~[Index(1)]),
+                (ListEnd,       ~[]),
+            ]
+        );
+        assert_stream_equal(
+            "[2, [4, 1]]",
+            ~[
+                (ListStart,                 ~[]),
+                    (NumberValue(2.0),      ~[Index(0)]),
+                    (ListStart,             ~[Index(1)]),
+                        (NumberValue(4.0),  ~[Index(1), Index(0)]),
+                        (NumberValue(1.0),  ~[Index(1), Index(1)]),
+                    (ListEnd,               ~[Index(1)]),
+                (ListEnd,                   ~[]),
+            ]
+        );
+
+        assert_eq!(last_event("["), Error(SyntaxError(EOFWhileParsingValue, 1,  2)));
+
+        assert_eq!(from_str("["),     Err(SyntaxError(EOFWhileParsingValue, 1, 2)));
+        assert_eq!(from_str("[1"),    Err(SyntaxError(EOFWhileParsingList,  1, 3)));
+        assert_eq!(from_str("[1,"),   Err(SyntaxError(EOFWhileParsingValue, 1, 4)));
+        assert_eq!(from_str("[1,]"),  Err(SyntaxError(InvalidSyntax,        1, 4)));
+        assert_eq!(from_str("[6 7]"), Err(SyntaxError(InvalidSyntax,        1, 4)));
+
+    }
+    #[test]
+    fn test_trailing_characters_streaming() {
+        assert_eq!(last_event("nulla"),  Error(SyntaxError(TrailingCharacters, 1, 5)));
+        assert_eq!(last_event("truea"),  Error(SyntaxError(TrailingCharacters, 1, 5)));
+        assert_eq!(last_event("falsea"), Error(SyntaxError(TrailingCharacters, 1, 6)));
+        assert_eq!(last_event("1a"),     Error(SyntaxError(TrailingCharacters, 1, 2)));
+        assert_eq!(last_event("[]a"),    Error(SyntaxError(TrailingCharacters, 1, 3)));
+        assert_eq!(last_event("{}a"),    Error(SyntaxError(TrailingCharacters, 1, 3)));
+    }
+    #[test]
+    fn test_read_identifiers_streaming() {
+        assert_eq!(Parser::new("null".chars()).next(), Some(NullValue));
+        assert_eq!(Parser::new("true".chars()).next(), Some(BooleanValue(true)));
+        assert_eq!(Parser::new("false".chars()).next(), Some(BooleanValue(false)));
+
+        assert_eq!(last_event("n"),    Error(SyntaxError(InvalidSyntax, 1, 2)));
+        assert_eq!(last_event("nul"),  Error(SyntaxError(InvalidSyntax, 1, 4)));
+        assert_eq!(last_event("t"),    Error(SyntaxError(InvalidSyntax, 1, 2)));
+        assert_eq!(last_event("truz"), Error(SyntaxError(InvalidSyntax, 1, 4)));
+        assert_eq!(last_event("f"),    Error(SyntaxError(InvalidSyntax, 1, 2)));
+        assert_eq!(last_event("faz"),  Error(SyntaxError(InvalidSyntax, 1, 3)));
+    }
+
+    #[test]
+    fn test_stack() {
+        let mut stack = Stack::new();
+
+        assert!(stack.is_empty());
+        assert!(stack.len() == 0);
+        assert!(!stack.last_is_index());
+
+        stack.push_index(0);
+        stack.bump_index();
+
+        assert!(stack.len() == 1);
+        assert!(stack.is_equal_to([Index(1)]));
+        assert!(stack.starts_with([Index(1)]));
+        assert!(stack.ends_with([Index(1)]));
+        assert!(stack.last_is_index());
+        assert!(stack.get(0) == Index(1));
+
+        stack.push_key(~"foo");
+
+        assert!(stack.len() == 2);
+        assert!(stack.is_equal_to([Index(1), Key("foo")]));
+        assert!(stack.starts_with([Index(1), Key("foo")]));
+        assert!(stack.starts_with([Index(1)]));
+        assert!(stack.ends_with([Index(1), Key("foo")]));
+        assert!(stack.ends_with([Key("foo")]));
+        assert!(!stack.last_is_index());
+        assert!(stack.get(0) == Index(1));
+        assert!(stack.get(1) == Key("foo"));
+
+        stack.push_key(~"bar");
+
+        assert!(stack.len() == 3);
+        assert!(stack.is_equal_to([Index(1), Key("foo"), Key("bar")]));
+        assert!(stack.starts_with([Index(1)]));
+        assert!(stack.starts_with([Index(1), Key("foo")]));
+        assert!(stack.starts_with([Index(1), Key("foo"), Key("bar")]));
+        assert!(stack.ends_with([Key("bar")]));
+        assert!(stack.ends_with([Key("foo"), Key("bar")]));
+        assert!(stack.ends_with([Index(1), Key("foo"), Key("bar")]));
+        assert!(!stack.last_is_index());
+        assert!(stack.get(0) == Index(1));
+        assert!(stack.get(1) == Key("foo"));
+        assert!(stack.get(2) == Key("bar"));
+
+        stack.pop();
+
+        assert!(stack.len() == 2);
+        assert!(stack.is_equal_to([Index(1), Key("foo")]));
+        assert!(stack.starts_with([Index(1), Key("foo")]));
+        assert!(stack.starts_with([Index(1)]));
+        assert!(stack.ends_with([Index(1), Key("foo")]));
+        assert!(stack.ends_with([Key("foo")]));
+        assert!(!stack.last_is_index());
+        assert!(stack.get(0) == Index(1));
+        assert!(stack.get(1) == Key("foo"));
+    }
+
+    #[bench]
+    fn bench_streaming_small(b: &mut BenchHarness) {
+        b.iter( || {
+            let mut parser = Parser::new(
+                r#"{
+                    "a": 1.0,
+                    "b": [
+                        true,
+                        "foo\nbar",
+                        { "c": {"d": null} }
+                    ]
+                }"#.chars()
+            );
+            loop {
+                match parser.next() {
+                    None => return,
+                    _ => {}
+                }
+            }
+        });
+    }
+    #[bench]
+    fn bench_small(b: &mut BenchHarness) {
+        b.iter( || {
+            let _ = from_str(r#"{
+                "a": 1.0,
+                "b": [
+                    true,
+                    "foo\nbar",
+                    { "c": {"d": null} }
+                ]
+            }"#);
+        });
+    }
+
+    fn big_json() -> ~str {
+        let mut src = ~"[\n";
+        for _ in range(0, 500) {
+            src = src + r#"{ "a": true, "b": null, "c":3.1415, "d": "Hello world", "e": [1,2,3]},"#;
+        }
+        src = src + "{}]";
+        return src;
+    }
+
+    #[bench]
+    fn bench_streaming_large(b: &mut BenchHarness) {
+        let src = big_json();
+        b.iter( || {
+            let mut parser = Parser::new(src.chars());
+            loop {
+                match parser.next() {
+                    None => return,
+                    _ => {}
+                }
+            }
+        });
+    }
+    #[bench]
+    fn bench_large(b: &mut BenchHarness) {
+        let src = big_json();
+        b.iter( || { let _ = from_str(src); });
     }
 }
