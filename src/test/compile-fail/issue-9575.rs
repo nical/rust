@@ -8,8 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![feature(start)]
+
 #[start]
-fn start(argc: int, argv: **u8, crate_map: *u8) -> int {
-    //~^ ERROR start function expects type: `fn(int, **u8) -> int`
-    0
+fn start(argc: isize, argv: *const *const u8, crate_map: *const u8) -> isize {
+    //~^ start function has wrong type
+   0
 }

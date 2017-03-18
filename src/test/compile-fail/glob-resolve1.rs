@@ -10,12 +10,10 @@
 
 // Make sure that globs only bring in public things.
 
-#[feature(globs)];
-
 use bar::*;
 
 mod bar {
-    use import = self::fpriv;
+    use self::fpriv as import;
     fn fpriv() {}
     extern {
         fn epriv();
@@ -25,23 +23,19 @@ mod bar {
 
     struct C;
 
-    type D = int;
+    type D = isize;
 }
 
 fn foo<T>() {}
 
 fn main() {
-    fpriv(); //~ ERROR: unresolved
-    epriv(); //~ ERROR: unresolved
-    A1; //~ ERROR: unresolved
-    B1;
-    C; //~ ERROR: unresolved
-    import(); //~ ERROR: unresolved
+    fpriv(); //~ ERROR cannot find function `fpriv` in this scope
+    epriv(); //~ ERROR cannot find function `epriv` in this scope
+    B; //~ ERROR expected value, found enum `B`
+    C; //~ ERROR cannot find value `C` in this scope
+    import(); //~ ERROR: cannot find function `import` in this scope
 
-    foo::<A>(); //~ ERROR: undeclared
-    //~^ ERROR: undeclared
-    foo::<C>(); //~ ERROR: undeclared
-    //~^ ERROR: undeclared
-    foo::<D>(); //~ ERROR: undeclared
-    //~^ ERROR: undeclared
+    foo::<A>(); //~ ERROR: cannot find type `A` in this scope
+    foo::<C>(); //~ ERROR: cannot find type `C` in this scope
+    foo::<D>(); //~ ERROR: cannot find type `D` in this scope
 }

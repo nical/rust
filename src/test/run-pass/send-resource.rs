@@ -8,31 +8,39 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::task;
+// pretty-expanded FIXME #23616
+// ignore-emscripten no threads support
+
+#![feature(std_misc)]
+
+use std::thread;
+use std::sync::mpsc::channel;
 
 struct test {
-  f: int,
+  f: isize,
 }
 
 impl Drop for test {
     fn drop(&mut self) {}
 }
 
-fn test(f: int) -> test {
+fn test(f: isize) -> test {
     test {
         f: f
     }
 }
 
 pub fn main() {
-    let (p, c) = Chan::new();
+    let (tx, rx) = channel();
 
-    task::spawn(proc() {
-        let (pp, cc) = Chan::new();
-        c.send(cc);
+    let t = thread::spawn(move|| {
+        let (tx2, rx2) = channel();
+        tx.send(tx2).unwrap();
 
-        let _r = pp.recv();
+        let _r = rx2.recv().unwrap();
     });
 
-    p.recv().send(test(42));
+    rx.recv().unwrap().send(test(42)).unwrap();
+
+    t.join();
 }

@@ -8,12 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#[derive(Copy, Clone)]
 struct cat {
     meow: extern "Rust" fn(),
 }
 
 fn meow() {
-    error!("meow")
+    println!("meow")
 }
 
 fn cat() -> cat {
@@ -22,6 +23,7 @@ fn cat() -> cat {
     }
 }
 
+#[derive(Copy, Clone)]
 struct KittyInfo {kitty: cat}
 
 // Code compiles and runs successfully if we add a + before the first arg

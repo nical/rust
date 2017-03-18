@@ -8,12 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct X {
-    field: 'static ||:Send,
+struct X<F> where F: FnOnce() + 'static + Send {
+    field: F,
 }
 
-fn foo(blk: 'static ||:) -> X {
-    return X { field: blk }; //~ ERROR expected bounds `Send` but found no bounds
+fn foo<F>(blk: F) -> X<F> where F: FnOnce() + 'static {
+    //~^ ERROR `F: std::marker::Send` is not satisfied
+    return X { field: blk };
 }
 
 fn main() {

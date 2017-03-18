@@ -8,8 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 pub fn main() {
-    let x = [1,..100];
+    let x = [1; 100];
     let mut y = 0;
     for (n,i) in x.iter().enumerate() {
         if n < 10 {

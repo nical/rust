@@ -7,6 +7,7 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+//
 
 
 trait Cat {
@@ -15,7 +16,7 @@ trait Cat {
     fn purr(&self) -> bool { true }
 }
 
-impl Cat for int {
+impl Cat for isize {
     fn meow(&self) -> bool {
         self.scratch()
     }

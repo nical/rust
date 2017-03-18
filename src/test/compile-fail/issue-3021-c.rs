@@ -8,15 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern mod extra;
-
 fn siphash<T>() {
 
     trait t {
-        fn g(&self, x: T) -> T;  //~ ERROR attempt to use a type argument out of scope
-        //~^ ERROR attempt to use a type argument out of scope
-        //~^^ ERROR use of undeclared type name `T`
-        //~^^^ ERROR use of undeclared type name `T`
+        fn g(&self, x: T) -> T;  //~ ERROR can't use type parameters from outer function; try using
+        //~^ ERROR can't use type parameters from outer function; try using
     }
 }
 

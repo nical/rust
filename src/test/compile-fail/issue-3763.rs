@@ -8,11 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
-
 mod my_mod {
     pub struct MyStruct {
-        priv priv_field: int
+        priv_field: isize
     }
     pub fn MyStruct () -> MyStruct {
         MyStruct {priv_field: 4}
@@ -24,11 +22,15 @@ mod my_mod {
 
 fn main() {
     let my_struct = my_mod::MyStruct();
-    let _woohoo = (&my_struct).priv_field; //~ ERROR field `priv_field` is private
-    let _woohoo = (~my_struct).priv_field; //~ ERROR field `priv_field` is private
-    let _woohoo = (@my_struct).priv_field; //~ ERROR field `priv_field` is private
+    let _woohoo = (&my_struct).priv_field;
+    //~^ ERROR field `priv_field` of struct `my_mod::MyStruct` is private
+
+    let _woohoo = (Box::new(my_struct)).priv_field;
+    //~^ ERROR field `priv_field` of struct `my_mod::MyStruct` is private
+
     (&my_struct).happyfun();               //~ ERROR method `happyfun` is private
-    (~my_struct).happyfun();               //~ ERROR method `happyfun` is private
-    (@my_struct).happyfun();               //~ ERROR method `happyfun` is private
-    let nope = my_struct.priv_field;       //~ ERROR field `priv_field` is private
+
+    (Box::new(my_struct)).happyfun();          //~ ERROR method `happyfun` is private
+    let nope = my_struct.priv_field;
+    //~^ ERROR field `priv_field` of struct `my_mod::MyStruct` is private
 }

@@ -8,8 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// Note: This test is checking that we forbid a coding pattern that
+// Issue #5873 explicitly wants to allow.
+
 enum State { ST_NULL, ST_WHITESPACE }
 
 fn main() {
-    ~[ST_NULL, ..(ST_WHITESPACE as uint)]; //~ ERROR expected constant integer for repeat count but found variable
+    [State::ST_NULL; (State::ST_WHITESPACE as usize)];
+    //~^ ERROR constant evaluation error
+    //~| unimplemented constant expression: enum variants
 }

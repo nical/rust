@@ -8,24 +8,26 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct cat {
-    meows : uint,
+// pretty-expanded FIXME #23616
 
-    how_hungry : int,
+struct cat {
+    meows : usize,
+
+    how_hungry : isize,
 }
 
 impl cat {
     pub fn play(&mut self) {
-        self.meows += 1u;
+        self.meows += 1_usize;
         self.nap();
     }
 }
 
 impl cat {
-    fn nap(&mut self) { for _ in range(1u, 10u) { } }
+    fn nap(&mut self) { for _ in 1_usize..10_usize { } }
 }
 
-fn cat(in_x : uint, in_y : int) -> cat {
+fn cat(in_x : usize, in_y : isize) -> cat {
     cat {
         meows: in_x,
         how_hungry: in_y
@@ -33,6 +35,6 @@ fn cat(in_x : uint, in_y : int) -> cat {
 }
 
 pub fn main() {
-  let mut nyan : cat = cat(52u, 99);
+  let mut nyan : cat = cat(52_usize, 99);
   nyan.play();
 }

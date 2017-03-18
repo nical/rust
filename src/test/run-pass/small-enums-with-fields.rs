@@ -8,11 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(macro_rules)];
-
 use std::mem::size_of;
 
-#[deriving(Eq)]
+#[derive(PartialEq, Debug)]
 enum Either<T, U> { Left(T), Right(U) }
 
 macro_rules! check {
@@ -22,8 +20,8 @@ macro_rules! check {
             static S: $t = $e;
             let v: $t = $e;
             assert_eq!(S, v);
-            assert_eq!(format!("{:?}", v), ~$s);
-            assert_eq!(format!("{:?}", S), ~$s);
+            assert_eq!(format!("{:?}", v), $s);
+            assert_eq!(format!("{:?}", S), $s);
         });*
     }}
 }
@@ -31,14 +29,14 @@ macro_rules! check {
 pub fn main() {
     check!(Option<u8>, 2,
            None, "None",
-           Some(129u8), "Some(129u8)");
+           Some(129), "Some(129)");
     check!(Option<i16>, 4,
            None, "None",
-           Some(-20000i16), "Some(-20000i16)");
+           Some(-20000), "Some(-20000)");
     check!(Either<u8, i8>, 2,
-           Left(132u8), "Left(132u8)",
-           Right(-32i8), "Right(-32i8)");
+           Either::Left(132), "Left(132)",
+           Either::Right(-32), "Right(-32)");
     check!(Either<u8, i16>, 4,
-           Left(132u8), "Left(132u8)",
-           Right(-20000i16), "Right(-20000i16)");
+           Either::Left(132), "Left(132)",
+           Either::Right(-20000), "Right(-20000)");
 }

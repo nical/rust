@@ -8,13 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::libc;
+// pretty-expanded FIXME #23616
+
+#![feature(libc)]
+
+extern crate libc;
 
 extern {
     #[link_name = "malloc"]
-    fn malloc1(len: libc::c_int) -> *libc::c_void;
+    fn malloc1(len: libc::c_int) -> *const libc::c_void;
     #[link_name = "malloc"]
-    fn malloc2(len: libc::c_int, foo: libc::c_int) -> *libc::c_void;
+    fn malloc2(len: libc::c_int, foo: libc::c_int) -> *const libc::c_void;
 }
 
 pub fn main () {}

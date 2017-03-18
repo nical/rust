@@ -8,14 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 trait T {
     fn print(&self);
 }
 
+#[derive(Debug)]
 struct S {
-    s: int,
+    s: isize,
 }
 
 impl T for S {
@@ -33,9 +35,8 @@ fn print_s(s: &S) {
 }
 
 pub fn main() {
-    let s: @S = @S { s: 5 };
-    print_s(s);
-    let t: @T = s as @T;
-    print_t(t);
-
+    let s: Box<S> = box S { s: 5 };
+    print_s(&*s);
+    let t: Box<T> = s as Box<T>;
+    print_t(&*t);
 }

@@ -8,8 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct Foo(int, int, int, int);
-struct Bar{a: int, b: int, c: int, d: int}
+// pretty-expanded FIXME #23616
+
+#![feature(advanced_slice_patterns)]
+#![feature(slice_patterns)]
+
+struct Foo(isize, isize, isize, isize);
+struct Bar{a: isize, b: isize, c: isize, d: isize}
 
 pub fn main() {
     let Foo(..) = Foo(5, 5, 5, 5);

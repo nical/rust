@@ -8,13 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn takes_two(x: &int, y: &int) -> int { *x + *y }
 
-fn with<T>(f: |x: &int| -> T) -> T {
+fn takes_two(x: &isize, y: &isize) -> isize { *x + *y }
+
+fn with<T, F>(f: F) -> T where F: FnOnce(&isize) -> T {
     f(&20)
 }
 
-fn has_one<'a>(x: &'a int) -> int {
+fn has_one<'a>(x: &'a isize) -> isize {
     with(|y| takes_two(x, y))
 }
 

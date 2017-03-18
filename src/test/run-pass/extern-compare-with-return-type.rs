@@ -10,23 +10,25 @@
 
 // Tests that we can compare various kinds of extern fn signatures.
 
+
 extern fn voidret1() {}
 extern fn voidret2() {}
 
-extern fn uintret() -> uint { 22 }
+extern fn uintret() -> usize { 22 }
 
-extern fn uintvoidret(_x: uint) {}
+extern fn uintvoidret(_x: usize) {}
 
-extern fn uintuintuintuintret(x: uint, y: uint, z: uint) -> uint { x+y+z }
+extern fn uintuintuintuintret(x: usize, y: usize, z: usize) -> usize { x+y+z }
+type uintuintuintuintret = extern fn(usize,usize,usize) -> usize;
 
 pub fn main() {
-    assert_eq!(voidret1, voidret1);
-    assert!(voidret1 != voidret2);
+    assert!(voidret1 as extern fn() == voidret1 as extern fn());
+    assert!(voidret1 as extern fn() != voidret2 as extern fn());
 
-    assert_eq!(uintret, uintret);
+    assert!(uintret as extern fn() -> usize == uintret as extern fn() -> usize);
 
-    assert_eq!(uintvoidret, uintvoidret);
+    assert!(uintvoidret as extern fn(usize) == uintvoidret as extern fn(usize));
 
-    assert_eq!(uintuintuintuintret, uintuintuintuintret);
+    assert!(uintuintuintuintret as uintuintuintuintret ==
+            uintuintuintuintret as uintuintuintuintret);
 }
-

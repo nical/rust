@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,38 +8,36 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-pretty
-
-// (Closes #7911) Test that we can use the same self expression 
+// (Closes #7911) Test that we can use the same self expression
 // with different mutability in macro in two methods
 
-#[allow(unused_variable)]; // unused foobar_immut + foobar_mut
-#[feature(macro_rules)];
-
-trait FooBar {}
+#![allow(unused_variables)] // unused foobar_immut + foobar_mut
+trait FooBar {
+    fn dummy(&self) { }
+}
 struct Bar(i32);
 struct Foo { bar: Bar }
 
 impl FooBar for Bar {}
 
 trait Test {
-    fn get_immut<'r>(&'r self) -> &'r FooBar;
-    fn get_mut<'r>(&'r mut self) -> &'r mut FooBar;
+    fn get_immut(&self) -> &FooBar;
+    fn get_mut(&mut self) -> &mut FooBar;
 }
 
-macro_rules! generate_test(($type_:path, $field:expr) => (
+macro_rules! generate_test { ($type_:path, $slf:ident, $field:expr) => (
     impl Test for $type_ {
-        fn get_immut<'r>(&'r self) -> &'r FooBar {
+        fn get_immut(&$slf) -> &FooBar {
             &$field as &FooBar
         }
 
-        fn get_mut<'r>(&'r mut self) -> &'r mut FooBar {
+        fn get_mut(&mut $slf) -> &mut FooBar {
             &mut $field as &mut FooBar
         }
     }
-))
+)}
 
-generate_test!(Foo, self.bar)
+generate_test!(Foo, self, self.bar);
 
 pub fn main() {
     let mut foo: Foo = Foo { bar: Bar(42) };

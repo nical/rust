@@ -8,12 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::libc;
+#![feature(libc)]
+
+extern crate libc;
 
 mod rustrt {
-    use std::libc;
+    extern crate libc;
 
-    #[link(name = "rustrt")]
+    #[link(name = "rust_test_helpers", kind = "static")]
     extern {
         pub fn rust_dbg_call(cb: extern "C" fn(libc::uintptr_t) -> libc::uintptr_t,
                              data: libc::uintptr_t)
@@ -22,22 +24,22 @@ mod rustrt {
 }
 
 extern fn cb(data: libc::uintptr_t) -> libc::uintptr_t {
-    if data == 1u {
+    if data == 1 {
         data
     } else {
-        fact(data - 1u) * data
+        fact(data - 1) * data
     }
 }
 
-fn fact(n: uint) -> uint {
+fn fact(n: libc::uintptr_t) -> libc::uintptr_t {
     unsafe {
-        info!("n = {}", n);
+        println!("n = {}", n);
         rustrt::rust_dbg_call(cb, n)
     }
 }
 
 pub fn main() {
-    let result = fact(10u);
-    info!("result = {}", result);
-    assert_eq!(result, 3628800u);
+    let result = fact(10);
+    println!("result = {}", result);
+    assert_eq!(result, 3628800);
 }

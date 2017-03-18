@@ -8,12 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(struct_variant)];
+// pretty-expanded FIXME #23616
 
 enum Foo {
     Bar {
-        a: int,
-        b: int
+        a: isize,
+        b: isize
     },
     Baz {
         c: f64,
@@ -22,5 +22,5 @@ enum Foo {
 }
 
 pub fn main() {
-    let _x = Bar { a: 2, b: 3 };
+    let _x = Foo::Bar { a: 2, b: 3 };
 }

@@ -11,19 +11,18 @@
 // Testing guarantees provided by once functions.
 // This program would segfault if it were legal.
 
-#[feature(once_fns)];
-extern mod extra;
-use extra::arc;
+#![feature(once_fns)]
+use std::sync::Arc;
 
-fn foo(blk: proc()) {
+fn foo<F:FnOnce()>(blk: F) {
     blk();
     blk(); //~ ERROR use of moved value
 }
 
 fn main() {
-    let x = arc::Arc::new(true);
-    foo(proc() {
-        assert!(*x.get());
+    let x = Arc::new(true);
+    foo(move|| {
+        assert!(*x);
         drop(x);
     });
 }

@@ -8,9 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 fn bare() {}
 
-fn likes_block(f: ||) { f() }
+fn likes_block<F>(f: F) where F: FnOnce() { f() }
 
 pub fn main() {
     likes_block(bare);

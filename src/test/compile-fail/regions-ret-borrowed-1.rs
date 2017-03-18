@@ -12,17 +12,16 @@
 // some point regions-ret-borrowed reported an error but this file did
 // not, due to special hardcoding around the anonymous region.
 
-fn with<R>(f: <'a>|x: &'a int| -> R) -> R {
+fn with<R, F>(f: F) -> R where F: for<'a> FnOnce(&'a isize) -> R {
     f(&3)
 }
 
-fn return_it<'a>() -> &'a int {
-    with(|o| o) //~ ERROR mismatched types
-        //~^ ERROR lifetime of return value does not outlive the function call
-        //~^^ ERROR cannot infer an appropriate lifetime
+fn return_it<'a>() -> &'a isize {
+    with(|o| o)
+        //~^ ERROR cannot infer
 }
 
 fn main() {
     let x = return_it();
-    info!("foo={}", *x);
+    println!("foo={}", *x);
 }

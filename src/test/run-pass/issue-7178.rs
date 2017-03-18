@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,11 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
 // aux-build:issue-7178.rs
 
-extern mod cross_crate_self = "issue-7178";
+// pretty-expanded FIXME #23616
+
+extern crate issue_7178 as cross_crate_self;
 
 pub fn main() {
-    let _ = cross_crate_self::Foo::new(&1i);
+    let _ = cross_crate_self::Foo::new(&1);
 }

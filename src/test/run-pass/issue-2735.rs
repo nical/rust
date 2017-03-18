@@ -8,19 +8,24 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+// pretty-expanded FIXME #23616
 
-trait hax { }
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
+trait hax {
+    fn dummy(&self) { }
+}
 impl<A> hax for A { }
 
-fn perform_hax<T:'static>(x: @T) -> @hax {
-    @x as @hax
+fn perform_hax<T: 'static>(x: Box<T>) -> Box<hax+'static> {
+    box x as Box<hax+'static>
 }
 
 fn deadcode() {
-    perform_hax(@~"deadcode");
+    perform_hax(box "deadcode".to_string());
 }
 
 pub fn main() {
-    perform_hax(@42);
+    perform_hax(box 42);
 }

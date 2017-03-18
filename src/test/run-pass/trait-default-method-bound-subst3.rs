@@ -9,11 +9,12 @@
 // except according to those terms.
 
 
+
 trait A {
     fn g<T>(&self, x: T, y: T) -> (T, T) { (x, y) }
 }
 
-impl A for int { }
+impl A for isize { }
 
 fn f<T, V: A>(i: V, j: T, k: T) -> (T, T) {
     i.g(j, k)

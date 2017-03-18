@@ -8,8 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 struct socket {
-    sock: int,
+    sock: isize,
 
 }
 
@@ -29,8 +31,8 @@ fn socket() -> socket {
     }
 }
 
-fn closure(f: ||) { f() }
+fn closure<F>(f: F) where F: FnOnce() { f() }
 
-fn setsockopt_bytes(_sock: int) { }
+fn setsockopt_bytes(_sock: isize) { }
 
 pub fn main() {}

@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,68 +8,66 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
+#![feature(std_misc)]
 
-extern mod extra;
+// ignore-emscripten no threads support
 
-use std::task;
+use std::thread;
+use std::sync::mpsc::{channel, Sender};
 
-pub fn main() { info!("===== WITHOUT THREADS ====="); test00(); }
+pub fn main() { println!("===== WITHOUT THREADS ====="); test00(); }
 
-fn test00_start(ch: &SharedChan<int>, message: int, count: int) {
-    info!("Starting test00_start");
-    let mut i: int = 0;
+fn test00_start(ch: &Sender<isize>, message: isize, count: isize) {
+    println!("Starting test00_start");
+    let mut i: isize = 0;
     while i < count {
-        info!("Sending Message");
-        ch.send(message + 0);
+        println!("Sending Message");
+        ch.send(message + 0).unwrap();
         i = i + 1;
     }
-    info!("Ending test00_start");
+    println!("Ending test00_start");
 }
 
 fn test00() {
-    let number_of_tasks: int = 16;
-    let number_of_messages: int = 4;
+    let number_of_tasks: isize = 16;
+    let number_of_messages: isize = 4;
 
-    info!("Creating tasks");
+    println!("Creating tasks");
 
-    let (po, ch) = SharedChan::new();
+    let (tx, rx) = channel();
 
-    let mut i: int = 0;
+    let mut i: isize = 0;
 
-    // Create and spawn tasks...
-    let mut results = ~[];
+    // Create and spawn threads...
+    let mut results = Vec::new();
     while i < number_of_tasks {
-        let ch = ch.clone();
-        let mut builder = task::task();
-        results.push(builder.future_result());
-        builder.spawn({
-            let ch = ch;
+        let tx = tx.clone();
+        results.push(thread::spawn({
             let i = i;
-            proc() {
-                test00_start(&ch, i, number_of_messages)
+            move|| {
+                test00_start(&tx, i, number_of_messages)
             }
-        });
+        }));
         i = i + 1;
     }
 
-    // Read from spawned tasks...
+    // Read from spawned threads...
     let mut sum = 0;
-    for _r in results.iter() {
+    for _r in &results {
         i = 0;
         while i < number_of_messages {
-            let value = po.recv();
+            let value = rx.recv().unwrap();
             sum += value;
             i = i + 1;
         }
     }
 
-    // Join spawned tasks...
-    for r in results.iter() { r.recv(); }
+    // Join spawned threads...
+    for r in results { r.join(); }
 
-    info!("Completed: Final number is: ");
-    error!("{:?}", sum);
-    // assert (sum == (((number_of_tasks * (number_of_tasks - 1)) / 2) *
+    println!("Completed: Final number is: ");
+    println!("{}", sum);
+    // assert (sum == (((number_of_threads * (number_of_threads - 1)) / 2) *
     //       number_of_messages));
     assert_eq!(sum, 480);
 }

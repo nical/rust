@@ -8,13 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::task;
+// ignore-emscripten no threads support
+
+#![feature(std_misc)]
+
+use std::thread;
 
 pub fn main() { test00(); }
 
-fn start() { info!("Started / Finished task."); }
+fn start() { println!("Started / Finished task."); }
 
 fn test00() {
-    task::try(proc() start() );
-    info!("Completing.");
+    thread::spawn(move|| start() ).join();
+    println!("Completing.");
 }

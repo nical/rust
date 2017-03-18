@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deny(unnecessary_qualification)];
+#![deny(unused_qualifications)]
 
 mod foo {
     pub fn bar() {}
@@ -17,4 +17,13 @@ mod foo {
 fn main() {
     use foo::bar;
     foo::bar(); //~ ERROR: unnecessary qualification
+    bar();
+
+    let _ = || -> Result<(), ()> { try!(Ok(())); Ok(()) }; // issue #37345
+
+    macro_rules! m { () => {
+        $crate::foo::bar(); // issue #37357
+        ::foo::bar(); // issue #38682
+    } }
+    m!();
 }

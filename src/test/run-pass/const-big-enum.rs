@@ -8,31 +8,32 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 enum Foo {
     Bar(u32),
     Baz,
     Quux(u64, u16)
 }
 
-static X: Foo = Baz;
+static X: Foo = Foo::Baz;
 
 pub fn main() {
     match X {
-        Baz => {}
-        _ => fail!()
+        Foo::Baz => {}
+        _ => panic!()
     }
     match Y {
-        Bar(s) => assert!(s == 2654435769),
-        _ => fail!()
+        Foo::Bar(s) => assert_eq!(s, 2654435769),
+        _ => panic!()
     }
     match Z {
-        Quux(d,h) => {
+        Foo::Quux(d,h) => {
             assert_eq!(d, 0x123456789abcdef0);
             assert_eq!(h, 0x1234);
         }
-        _ => fail!()
+        _ => panic!()
     }
 }
 
-static Y: Foo = Bar(2654435769);
-static Z: Foo = Quux(0x123456789abcdef0, 0x1234);
+static Y: Foo = Foo::Bar(2654435769);
+static Z: Foo = Foo::Quux(0x123456789abcdef0, 0x1234);

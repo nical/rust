@@ -8,11 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn f<'a>(x : &'a int) -> &'a int {
+fn f(x: &isize) -> &isize {
     return &*x;
 }
 
 pub fn main() {
     let three = &3;
-    error!("{}", *f(three));
+    println!("{}", *f(three));
 }

@@ -10,11 +10,11 @@
 
 
 
+
 fn test_fn() {
-    type t = 'static || -> int;
-    fn ten() -> int { return 10; }
-    let rs: t = ten;
-    assert!((rs() == 10));
+    fn ten() -> isize { return 10; }
+    let rs = ten;
+    assert_eq!(rs(), 10);
 }
 
 pub fn main() { test_fn(); }

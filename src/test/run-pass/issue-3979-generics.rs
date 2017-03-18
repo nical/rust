@@ -8,30 +8,33 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+use std::ops::Add;
+
 trait Positioned<S> {
   fn SetX(&mut self, S);
   fn X(&self) -> S;
 }
 
-trait Movable<S: Add<S, S>>: Positioned<S> {
+trait Movable<S: Add<Output=S>>: Positioned<S> {
   fn translate(&mut self, dx: S) {
     let x = self.X() + dx;
     self.SetX(x);
   }
 }
 
-struct Point { x: int, y: int }
+struct Point { x: isize, y: isize }
 
-impl Positioned<int> for Point {
-    fn SetX(&mut self, x: int) {
+impl Positioned<isize> for Point {
+    fn SetX(&mut self, x: isize) {
         self.x = x;
     }
-    fn X(&self) -> int {
+    fn X(&self) -> isize {
         self.x
     }
 }
 
-impl Movable<int> for Point {}
+impl Movable<isize> for Point {}
 
 pub fn main() {
     let mut p = Point{ x: 1, y: 2};

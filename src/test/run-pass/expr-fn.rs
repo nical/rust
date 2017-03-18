@@ -8,14 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+
 fn test_int() {
-    fn f() -> int { 10 }
+    fn f() -> isize { 10 }
     assert_eq!(f(), 10);
 }
 
 fn test_vec() {
-    fn f() -> ~[int] { ~[10, 11] }
-    assert_eq!(f()[1], 11);
+    fn f() -> Vec<isize> { vec![10, 11] }
+    let vect = f();
+    assert_eq!(vect[1], 11);
 }
 
 fn test_generic() {
@@ -24,22 +27,22 @@ fn test_generic() {
 }
 
 fn test_alt() {
-    fn f() -> int { match true { false => { 10 } true => { 20 } } }
+    fn f() -> isize { match true { false => { 10 } true => { 20 } } }
     assert_eq!(f(), 20);
 }
 
 fn test_if() {
-    fn f() -> int { if true { 10 } else { 20 } }
+    fn f() -> isize { if true { 10 } else { 20 } }
     assert_eq!(f(), 10);
 }
 
 fn test_block() {
-    fn f() -> int { { 10 } }
+    fn f() -> isize { { 10 } }
     assert_eq!(f(), 10);
 }
 
 fn test_ret() {
-    fn f() -> int {
+    fn f() -> isize {
         return 10 // no semi
 
     }
@@ -49,7 +52,7 @@ fn test_ret() {
 
 // From issue #372
 fn test_372() {
-    fn f() -> int { let x = { 3 }; x }
+    fn f() -> isize { let x = { 3 }; x }
     assert_eq!(f(), 3);
 }
 

@@ -1,9 +1,9 @@
 -include ../tools.mk
 
-all: $(call STATICLIB,cfoo)
-	$(RUSTC) foo.rs
+all: $(call NATIVE_STATICLIB,cfoo)
+	$(RUSTC) foo.rs -C prefer-dynamic
 	$(RUSTC) bar.rs
-	rm $(TMPDIR)/$(call STATICLIB_GLOB,cfoo)
+	rm $(call NATIVE_STATICLIB,cfoo)
 	$(call RUN,bar)
-	rm $(TMPDIR)/$(call DYLIB_GLOB,foo)
+	$(call REMOVE_DYLIBS,foo)
 	$(call FAIL,bar)

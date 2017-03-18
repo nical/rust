@@ -1,5 +1,5 @@
 /**
- * Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+ * Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
  * file at the top-level directory of this distribution and at
  * http://rust-lang.org/COPYRIGHT.
  * With elements taken from Bootstrap v3.0.2 (MIT licensed).
@@ -10,16 +10,65 @@
  * option. This file may not be copied, modified, or distributed
  * except according to those terms.
  */
-/* Global page semantics
-   ========================================================================== */
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Fira Sans'), url("FiraSans-Regular.woff") format('woff');
+}
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 500;
+    src: local('Fira Sans Medium'), url("FiraSans-Medium.woff") format('woff');
+}
+@font-face {
+    font-family: 'Source Serif Pro';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Source Serif Pro'), url("SourceSerifPro-Regular.woff") format('woff');
+}
+@font-face {
+    font-family: 'Source Serif Pro';
+    font-style: italic;
+    font-weight: 400;
+    src: url("Heuristica-Italic.woff") format('woff');
+}
+@font-face {
+    font-family: 'Source Serif Pro';
+    font-style: normal;
+    font-weight: 700;
+    src: local('Source Serif Pro Bold'), url("SourceSerifPro-Bold.woff") format('woff');
+}
+@font-face {
+    font-family: 'Source Code Pro';
+    font-style: normal;
+    font-weight: 400;
+    /* Avoid using locally installed font because bad versions are in circulation:
+     * see https://github.com/rust-lang/rust/issues/24355 */
+    src: url("SourceCodePro-Regular.woff") format('woff');
+}
+
+*:not(body) {
+  -webkit-box-sizing: border-box;
+     -moz-box-sizing: border-box;
+          box-sizing: border-box;
+}
+
+/* General structure */
+
 body {
+    background-color: white;
     margin: 0 auto;
     padding: 0 15px;
-    margin-bottom: 4em;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 14px;
+    font-family: "Source Serif Pro", Georgia, Times, "Times New Roman", serif;
+    font-size: 18px;
     color: #333;
     line-height: 1.428571429;
+
+    -webkit-font-feature-settings: "kern", "liga";
+    -moz-font-feature-settings: "kern", "liga";
+    font-feature-settings: "kern", "liga";
 }
 @media (min-width: 768px) {
     body {
@@ -27,33 +76,41 @@ body {
     }
 }
 
+h1, h2, h3, h4, h5, h6, nav, #versioninfo {
+    font-family: "Fira Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
 h1, h2, h3, h4, h5, h6 {
     color: black;
-    font-weight: 500;
+    font-weight: 400;
     line-height: 1.1;
 }
 h1, h2, h3 {
     margin-top: 20px;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
+}
+h1 {
+    margin-bottom: 20px;
 }
 h4, h5, h6 {
     margin-top: 12px;
     margin-bottom: 10px;
-    padding: .2em .8em;
+    padding: 5px 10px;
+}
+h5, h6 {
     text-decoration: underline;
 }
 
 h1 {
-    font-size: 36px;
+    font-size: 28px;
+    font-weight: 500;
     padding: .1em .4em;
-    margin: 0.67em 0;
     border-bottom: 2px solid #ddd;
 }
 h1.title {
     line-height: 1.5em;
 }
 h2 {
-    font-size: 30px;
+    font-size: 26px;
     padding: .2em .5em;
     border-bottom: 1px solid #ddd;
 }
@@ -63,21 +120,56 @@ h3 {
     border-bottom: 1px solid #DDE8FC;
 }
 h4 {
-    font-size: 18px;
+    font-size: 22px;
 }
 h5 {
-    font-size: 16px;
+    font-size: 20px;
 }
 h6 {
-    font-size: 14px;
+    font-size: 18px;
+}
+@media (min-width: 992px) {
+    h1 {
+        font-size: 36px;
+    }
+    h2 {
+        font-size: 30px;
+    }
+    h3 {
+        font-size: 26px;
+    }
 }
 
+nav {
+    column-count: 2;
+    -moz-column-count: 2;
+    -webkit-column-count: 2;
+    font-size: 15px;
+    margin: 0 0 1em 0;
+}
 p {
-    margin: 0 0 10px;
+    margin: 0 0 1em 0;
 }
 
-/* Links layout
-   ========================================================================== */
+strong {
+    font-weight: bold;
+}
+
+em {
+    font-style: italic;
+}
+
+footer {
+    border-top: 1px solid #ddd;
+    font-size: 14px;
+    font-style: italic;
+    padding-top: 5px;
+    margin-top: 3em;
+    margin-bottom: 1em;
+}
+
+/* Links layout */
+
 a {
     text-decoration: none;
     color: #428BCA;
@@ -99,70 +191,63 @@ a:hover, a:active {
 h1 a:link, h1 a:visited, h2 a:link, h2 a:visited,
 h3 a:link, h3 a:visited, h4 a:link, h4 a:visited,
 h5 a:link, h5 a:visited {color: black;}
+h1 a:hover, h2 a:hover, h3 a:hover, h4 a:hover,
+h5 a:hover {text-decoration: none;}
 
-/* Code
-   ========================================================================== */
+/* Code */
+
 pre, code {
-    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-    border-radius: 4px;
-}
-pre {
-    background-color: #F5F5F5;
-    border: 1px solid #CCC;
-    border-radius: 0.5em;
-    white-space: pre-wrap;
-    padding: 9.5px;
-    margin: 10px 0;
-    font-size: 13px;
-    word-break: break-all;
+    font-family: "Source Code Pro", Menlo, Monaco, Consolas, "DejaVu Sans Mono", monospace;
     word-wrap: break-word;
 }
+pre {
+    border-left: 2px solid #eee;
+    white-space: pre-wrap;
+    padding: 14px;
+    padding-right: 0;
+    margin: 20px 0;
+    font-size: 13px;
+    word-break: break-all;
+}
 code {
-    padding: 2px 4px;
-    font-size: 90%;
-    color: #C7254E;
-    background-color: #F9F2F4;
-    white-space: nowrap;
+    padding: 0 2px;
+    color: #8D1A38;
 }
 pre code {
     padding: 0;
     font-size: inherit;
     color: inherit;
-    white-space: pre-wrap;
-    background-color: transparent;
-    border-radius: 0;
+}
+
+a > code {
+    color: #428BCA;
+}
+
+.section-header > a > code {
+    color: #8D1A38;
 }
 
 /* Code highlighting */
-.cm-s-default span.cm-keyword {color: #803C8D;}
-.cm-s-default span.cm-atom {color: #219;}
-.cm-s-default span.cm-number {color: #2AA198;}
-.cm-s-default span.cm-def {color: #256EB8;}
-.cm-s-default span.cm-variable {color: black;}
-.cm-s-default span.cm-variable-2 {color: #817E61;}
-.cm-s-default span.cm-variable-3 {color: #085;}
-.cm-s-default span.cm-property {color: black;}
-.cm-s-default span.cm-operator {color: black;}
-.cm-s-default span.cm-comment {color: #A82323;}
-.cm-s-default span.cm-string {color: #866544;}
-.cm-s-default span.cm-string-2 {color: #F50;}
-.cm-s-default span.cm-meta {color: #555;}
-/*.cm-s-default span.cm-error {color: #F00;}*/
-.cm-s-default span.cm-qualifier {color: #555;}
-.cm-s-default span.cm-builtin {color: #30A;}
-.cm-s-default span.cm-bracket {color: #CC7;}
-.cm-s-default span.cm-tag {color: #170;}
-.cm-s-default span.cm-attribute {color: #00C;}
+pre.rust .kw { color: #8959A8; }
+pre.rust .kw-2, pre.rust .prelude-ty { color: #4271AE; }
+pre.rust .number, pre.rust .string { color: #718C00; }
+pre.rust .self, pre.rust .bool-val, pre.rust .prelude-val,
+pre.rust .attribute, pre.rust .attribute .ident { color: #C82829; }
+pre.rust .comment { color: #8E908C; }
+pre.rust .doccomment { color: #4D4D4C; }
+pre.rust .macro, pre.rust .macro-nonterminal { color: #3E999F; }
+pre.rust .lifetime { color: #B76514; }
 
-/* The rest
-   ========================================================================== */
+/* The rest */
+
 #versioninfo {
     text-align: center;
     margin: 0.5em;
     font-size: 1.1em;
 }
-@media (min-width: 768px) {
+@media (min-width: 992px) {
     #versioninfo {
+        font-size: 0.8em;
         position: fixed;
         bottom: 0px;
         right: 0px;
@@ -171,38 +256,35 @@ pre code {
         background-color: #fff;
         margin: 2px;
         padding: 0 2px;
-        border-radius: .3em;
+        border-radius: .2em;
     }
 }
 #versioninfo a.hash {
     color: gray;
-    font-size: 70%;
+    font-size: 80%;
 }
 
 blockquote {
-    color: black;
-    border-left: 5px solid #eee;
-    margin: 0 0 20px;
-    padding: 10px 20px;
+    color: #000;
+    margin: 20px 0;
+    padding: 15px 20px;
+    background-color: #f2f7f9;
+    border-top: .1em solid #e5eef2;
+    border-bottom: .1em solid #e5eef2;
 }
 blockquote p {
     font-size: 17px;
     font-weight: 300;
-    line-height: 1.25;
+    line-height: 1.4;
 }
 blockquote p:last-child {
     margin-bottom: 0;
 }
 
-ul,
-ol {
-    margin-top: 0;
-    margin-bottom: 10px;
+ul, ol {
+    padding-left: 25px;
 }
-ul ul,
-ol ul,
-ul ol,
-ol ol {
+ul ul, ol ul, ul ol, ol ol {
     margin-bottom: 0;
 }
 dl {
@@ -212,13 +294,14 @@ dd {
     margin-left: 0;
 }
 
-#TOC ul {
+nav ul {
     list-style-type: none;
+    margin: 0;
     padding-left: 0px;
 }
 
 /* Only display one level of hierarchy in the TOC */
-#TOC ul ul {
+nav ul ul {
     display: none;
 }
 
@@ -239,6 +322,8 @@ hr {
 table {
     border-collapse: collapse;
     border-spacing: 0;
+    overflow-x: auto;
+    display: block;
 }
 
 table tr.odd {
@@ -251,6 +336,36 @@ table th {
     padding: 5px;
 }
 
+/* Code snippets */
+
+pre.rust { position: relative; }
+a.test-arrow {
+    background-color: rgba(78, 139, 202, 0.2);
+    display: inline-block;
+    position: absolute;
+    color: #f5f5f5;
+    padding: 5px 10px 5px 10px;
+    border-radius: 5px;
+    font-size: 130%;
+    top: 5px;
+    right: 5px;
+}
+a.test-arrow:hover{
+    background-color: #4e8bca;
+    text-decoration: none;
+}
+
+.unstable-feature {
+    border: 2px solid red;
+    padding: 5px;
+}
+
+@media (min-width: 1170px) {
+    pre {
+        font-size: 15px;
+    }
+}
+
 @media print {
     * {
         text-shadow: none !important;
@@ -261,8 +376,11 @@ table th {
     a, a:visited {
         text-decoration: underline;
     }
-    a[href]:after {
+    p a[href]:after {
         content: " (" attr(href) ")";
+    }
+    footer a[href]:after {
+        content: "";
     }
     a[href^="javascript:"]:after, a[href^="#"]:after {
         content: "";
@@ -273,6 +391,9 @@ table th {
     }
     @page {
         margin: 2cm .5cm;
+    }
+    h1:not(.title), h2, h3 {
+        border-bottom: 0px none;
     }
     p, h2, h3 {
         orphans: 3;
@@ -287,4 +408,11 @@ table th {
     table td, table th {
         background-color: #fff !important;
     }
+}
+
+#keyword-table-marker + table thead { display: none; }
+#keyword-table-marker + table td { border: none; }
+#keyword-table-marker + table {
+    margin-left: 2em;
+    margin-bottom: 1em;
 }

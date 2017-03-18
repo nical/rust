@@ -8,13 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![feature(fn_traits)]
+
 fn id<T>(t: T) -> T { t }
 
-fn f<'r, T>(v: &'r T) -> 'r || -> T {
-    id(|| *v) //~ ERROR cannot infer an appropriate lifetime
+fn f<'r, T>(v: &'r T) -> Box<FnMut() -> T + 'r> {
+    id(Box::new(|| *v))
+        //~^ ERROR E0373
+        //~| NOTE `v` is borrowed here
+        //~| NOTE may outlive borrowed value `v`
+        //~| ERROR E0507
+        //~| NOTE cannot move out of borrowed content
 }
 
 fn main() {
     let v = &5;
-    println!("{}", f(v)());
+    println!("{}", f(v).call_mut(()));
 }

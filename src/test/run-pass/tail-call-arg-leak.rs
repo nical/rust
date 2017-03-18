@@ -12,6 +12,10 @@
 
 
 // use of tail calls causes arg slot leaks, issue #160.
-fn inner(dummy: ~str, b: bool) { if b { return inner(dummy, false); } }
+// pretty-expanded FIXME #23616
 
-pub fn main() { inner(~"hi", true); }
+fn inner(dummy: String, b: bool) { if b { return inner(dummy, false); } }
+
+pub fn main() {
+    inner("hi".to_string(), true);
+}

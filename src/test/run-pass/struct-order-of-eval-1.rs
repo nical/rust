@@ -8,9 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct S { f0: ~str, f1: int }
+
+struct S { f0: String, f1: isize }
 
 pub fn main() {
-    let s = ~"Hello, world!";
-    let _s = S { f0: s.to_owned(), ..S { f0: s, f1: 23 } };
+    let s = "Hello, world!".to_string();
+    let s = S {
+        f0: s.to_string(),
+        ..S {
+            f0: s,
+            f1: 23
+        }
+    };
+    assert_eq!(s.f0, "Hello, world!");
 }

@@ -8,30 +8,27 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
-
 use std::cell::Cell;
 
 // This test should behave exactly like issue-2735-2
-struct defer {
-    b: @Cell<bool>,
+struct defer<'a> {
+    b: &'a Cell<bool>,
 }
 
-#[unsafe_destructor]
-impl Drop for defer {
+impl<'a> Drop for defer<'a> {
     fn drop(&mut self) {
         self.b.set(true);
     }
 }
 
-fn defer(b: @Cell<bool>) -> defer {
+fn defer(b: &Cell<bool>) -> defer {
     defer {
         b: b
     }
 }
 
 pub fn main() {
-    let dtor_ran = @Cell::new(false);
+    let dtor_ran = &Cell::new(false);
     defer(dtor_ran);
     assert!(dtor_ran.get());
 }

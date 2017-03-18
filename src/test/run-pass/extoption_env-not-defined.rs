@@ -8,6 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 pub fn main() {
     assert!(option_env!("__HOPEFULLY_DOESNT_EXIST__").is_none());
 }

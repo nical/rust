@@ -8,23 +8,28 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// ignore-emscripten no threads support
+
 // Make sure the destructor is run for unit-like structs.
 
-use std::task;
+
+#![feature(alloc)]
+
+use std::thread;
 
 struct Foo;
 
 impl Drop for Foo {
     fn drop(&mut self) {
-        fail!("This failure should happen.");
+        panic!("This panic should happen.");
     }
 }
 
 pub fn main() {
-    let x = task::try(proc() {
+    let x = thread::spawn(move|| {
         let _b = Foo;
-    });
+    }).join();
 
-    let s = x.unwrap_err().move::<&'static str>().unwrap();
-    assert_eq!(s.as_slice(), "This failure should happen.");
+    let s = x.unwrap_err().downcast::<&'static str>().unwrap();
+    assert_eq!(&**s, "This panic should happen.");
 }

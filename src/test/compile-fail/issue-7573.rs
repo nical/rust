@@ -8,37 +8,38 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 pub struct CrateId {
-    local_path: ~str,
-    junk: ~str
+    local_path: String,
+    junk: String
 }
 
 impl CrateId {
     fn new(s: &str) -> CrateId {
         CrateId {
-            local_path: s.to_owned(),
-            junk: ~"wutevs"
+            local_path: s.to_string(),
+            junk: "wutevs".to_string()
         }
     }
 }
 
 pub fn remove_package_from_database() {
-    let mut lines_to_use: ~[&CrateId] = ~[]; //~ ERROR cannot infer an appropriate lifetime
+    let mut lines_to_use: Vec<&CrateId> = Vec::new(); //~ ERROR E0495
     let push_id = |installed_id: &CrateId| {
         lines_to_use.push(installed_id);
     };
     list_database(push_id);
 
-    for l in lines_to_use.iter() {
+    for l in &lines_to_use {
         println!("{}", l.local_path);
     }
 
 }
 
-pub fn list_database(f: |&CrateId|) {
+pub fn list_database<F>(mut f: F) where F: FnMut(&CrateId) {
     let stuff = ["foo", "bar"];
 
-    for l in stuff.iter() {
+    for l in &stuff {
         f(&CrateId::new(*l));
     }
 }

@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,11 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::os;
+// pretty-expanded FIXME #23616
+
+use std::env;
 
 pub fn main() {
-    let x = os::args();
-    for arg in x.iter() {
+    for arg in env::args() {
         match arg.clone() {
             _s => { }
         }

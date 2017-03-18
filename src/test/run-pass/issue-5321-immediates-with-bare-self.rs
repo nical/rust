@@ -7,14 +7,15 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+//
 
 trait Fooable {
     fn yes(self);
 }
 
-impl Fooable for uint {
+impl Fooable for usize {
     fn yes(self) {
-        for _ in range(0, self) { println!("yes"); }
+        for _ in 0..self { println!("yes"); }
     }
 }
 

@@ -10,8 +10,9 @@
 
 // Regression test for issue #377
 
-struct A { a: int }
-struct V { v: int }
+
+struct A { a: isize }
+struct V { v: isize }
 
 pub fn main() {
     let a = { let b = A {a: 3}; b };

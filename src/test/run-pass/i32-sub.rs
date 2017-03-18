@@ -11,4 +11,5 @@
 
 
 
-pub fn main() { let mut x: i32 = -400_i32; x = 0_i32 - x; assert!((x == 400_i32)); }
+
+pub fn main() { let mut x: i32 = -400; x = 0 - x; assert_eq!(x, 400); }

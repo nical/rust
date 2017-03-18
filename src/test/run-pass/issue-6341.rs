@@ -8,8 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deriving(Eq)]
-struct A { x: uint }
+// pretty-expanded FIXME #23616
+
+#[derive(PartialEq)]
+struct A { x: usize }
 
 impl Drop for A {
     fn drop(&mut self) {}

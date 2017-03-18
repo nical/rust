@@ -8,38 +8,31 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::rc::Rc;
-use std::cell::RefCell;
+#![feature(box_syntax)]
 
-trait Foo
-{
+use std::cell::RefCell;
+use std::rc::Rc;
+
+trait Foo {
     fn set(&mut self, v: Rc<RefCell<A>>);
 }
 
-struct B
-{
+struct B {
     v: Option<Rc<RefCell<A>>>
 }
 
-impl Foo for B
-{
+impl Foo for B {
     fn set(&mut self, v: Rc<RefCell<A>>)
     {
         self.v = Some(v);
     }
 }
 
-struct A
-{
-    v: ~Foo,
+struct A {
+    v: Box<Foo + Send>,
 }
 
-fn main()
-{
-    let a = A {v: ~B{v: None} as ~Foo}; //~ ERROR cannot pack type `~B`, which does not fulfill `Send`
-    let v = Rc::new(RefCell::new(a));
-    let w = v.clone();
-    let b = v.borrow();
-    let mut b = b.borrow_mut();
-    b.get().v.set(w.clone());
+fn main() {
+    let a = A {v: box B{v: None} as Box<Foo+Send>};
+    //~^ ERROR `std::rc::Rc<std::cell::RefCell<A>>: std::marker::Send` is not satisfied
 }

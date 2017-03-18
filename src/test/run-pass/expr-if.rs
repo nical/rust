@@ -13,6 +13,7 @@
 
 
 // Tests for if as expressions
+
 fn test_if() { let rs: bool = if true { true } else { false }; assert!((rs)); }
 
 fn test_else() {

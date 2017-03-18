@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,40 +8,38 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
+// ignore-emscripten no threads support
 
-extern mod extra;
+#![feature(std_misc)]
 
-use std::task;
+use std::thread;
+use std::sync::mpsc::{channel, Sender};
 
 pub fn main() { test00(); }
 
-fn test00_start(c: &Chan<int>, number_of_messages: int) {
-    let mut i: int = 0;
-    while i < number_of_messages { c.send(i + 0); i += 1; }
+fn test00_start(c: &Sender<isize>, number_of_messages: isize) {
+    let mut i: isize = 0;
+    while i < number_of_messages { c.send(i + 0).unwrap(); i += 1; }
 }
 
 fn test00() {
-    let r: int = 0;
-    let mut sum: int = 0;
-    let (p, ch) = Chan::new();
-    let number_of_messages: int = 10;
+    let r: isize = 0;
+    let mut sum: isize = 0;
+    let (tx, rx) = channel();
+    let number_of_messages: isize = 10;
 
-    let mut builder = task::task();
-    let result = builder.future_result();
-    builder.spawn(proc() {
-        let mut ch = ch;
-        test00_start(&mut ch, number_of_messages);
+    let result = thread::spawn(move|| {
+        test00_start(&tx, number_of_messages);
     });
 
-    let mut i: int = 0;
+    let mut i: isize = 0;
     while i < number_of_messages {
-        sum += p.recv();
-        info!("{:?}", r);
+        sum += rx.recv().unwrap();
+        println!("{}", r);
         i += 1;
     }
 
-    result.recv();
+    result.join();
 
     assert_eq!(sum, number_of_messages * (number_of_messages - 1) / 2);
 }

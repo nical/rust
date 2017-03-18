@@ -8,6 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 trait Panda<T> {
     fn chomp(&self, bamboo: &T) -> T;
 }
@@ -16,9 +17,9 @@ trait Add<RHS,Result>: Panda<RHS> {
     fn add(&self, rhs: &RHS) -> Result;
 }
 
-trait MyNum : Add<Self,Self> { }
+trait MyNum : Sized + Add<Self,Self> { }
 
-struct MyInt { val: int }
+struct MyInt { val: isize }
 
 impl Panda<MyInt> for MyInt {
     fn chomp(&self, bamboo: &MyInt) -> MyInt {
@@ -36,7 +37,7 @@ fn f<T:MyNum>(x: T, y: T) -> T {
     return x.add(&y).chomp(&y);
 }
 
-fn mi(v: int) -> MyInt { MyInt { val: v } }
+fn mi(v: isize) -> MyInt { MyInt { val: v } }
 
 pub fn main() {
     let (x, y) = (mi(3), mi(5));

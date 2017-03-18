@@ -8,10 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-static mut destructions : int = 3;
+static mut destructions : isize = 3;
 
 pub fn foo() {
-    #[unsafe_no_drop_flag]
     struct Foo;
 
     impl Drop for Foo {
@@ -25,5 +24,5 @@ pub fn foo() {
 
 pub fn main() {
   foo();
-  assert!((unsafe { destructions } == 0));
+  assert_eq!(unsafe { destructions }, 0);
 }

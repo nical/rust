@@ -10,6 +10,7 @@
 
 // Why one-tuples? Because macros.
 
+
 pub fn main() {
     match ('c',) {
         (x,) => {

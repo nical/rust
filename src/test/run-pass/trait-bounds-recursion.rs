@@ -8,13 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 trait I { fn i(&self) -> Self; }
 
 trait A<T:I> {
     fn id(x:T) -> T { x.i() }
 }
 
-trait J<T> { fn j(&self) -> Self; }
+trait J<T> { fn j(&self) -> T; }
 
 trait B<T:J<T>> {
     fn id(x:T) -> T { x.j() }

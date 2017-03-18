@@ -8,11 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 pub fn main() {
     enum State { BadChar, BadSyntax }
 
-    match BadChar {
-        _ if true => BadChar,
-        BadChar | BadSyntax => fail!() ,
+    match State::BadChar {
+        _ if true => State::BadChar,
+        State::BadChar | State::BadSyntax => panic!() ,
     };
 }

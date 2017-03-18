@@ -10,7 +10,11 @@
 
 // Regression test for issue #4968
 
-static A: (int,int) = (4,2);
+const A: (isize,isize) = (4,2);
 fn main() {
-    match 42 { A => () } //~ ERROR mismatched types: expected `<generic integer #0>` but found `(int,int)` (expected integral variable but found tuple)
+    match 42 { A => () }
+    //~^ ERROR mismatched types
+    //~| expected type `{integer}`
+    //~| found type `(isize, isize)`
+    //~| expected integral variable, found tuple
 }

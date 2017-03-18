@@ -8,12 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(default_type_params)];
+use std::marker;
 
 struct Heap;
 
-struct Vec<T, A = Heap>;
+struct Vec<T, A = Heap>(
+    marker::PhantomData<(T,A)>);
 
 fn main() {
-    let _: Vec<int, Heap, bool>; //~ ERROR wrong number of type arguments: expected at most 2 but found 3
+    let _: Vec<isize, Heap, bool>;
+    //~^ ERROR wrong number of type arguments: expected at most 2, found 3 [E0244]
+    //~| NOTE expected at most 2 type arguments
 }

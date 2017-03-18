@@ -8,12 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(default_type_params)];
-
 struct Heap;
 
-struct Vec<A = Heap, T>; //~ ERROR type parameters with a default must be trailing
+struct Vec<A = Heap, T>(A, T);
+//~^ ERROR type parameters with a default must be trailing
 
-struct Foo<A, B = Vec<C>, C>; //~ ERROR type parameters with a default must be trailing
+struct Foo<A, B = Vec<C>, C>(A, B, C);
+//~^ ERROR type parameters with a default must be trailing
+//~| ERROR type parameters with a default cannot use forward declared identifiers
 
 fn main() {}

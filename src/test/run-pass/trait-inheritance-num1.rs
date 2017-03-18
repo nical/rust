@@ -8,10 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::cmp::Ord;
-use std::num::NumCast;
+// pretty-expanded FIXME #23616
 
-pub trait NumExt: Num + NumCast + Ord { }
+pub trait NumCast: Sized {
+    fn from(i: i32) -> Option<Self>;
+}
+
+pub trait NumExt: NumCast + PartialOrd { }
 
 fn greater_than_one<T:NumExt>(n: &T) -> bool {
     *n > NumCast::from(1).unwrap()

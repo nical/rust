@@ -8,8 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::cast;
-use std::libc;
+// pretty-expanded FIXME #23616
+
+#![feature(libc)]
+
+extern crate libc;
 use std::mem;
 
 struct arena(());
@@ -24,12 +27,12 @@ struct Fcx<'a> {
 }
 
 struct Ccx {
-    x: int
+    x: isize
 }
 
 fn alloc<'a>(_bcx : &'a arena) -> &'a Bcx<'a> {
     unsafe {
-        cast::transmute(libc::malloc(mem::size_of::<Bcx<'a>>()
+        mem::transmute(libc::malloc(mem::size_of::<Bcx<'a>>()
             as libc::size_t))
     }
 }
@@ -42,7 +45,7 @@ fn g(fcx : &Fcx) {
     let bcx = Bcx { fcx: fcx };
     let bcx2 = h(&bcx);
     unsafe {
-        libc::free(cast::transmute(bcx2));
+        libc::free(mem::transmute(bcx2));
     }
 }
 

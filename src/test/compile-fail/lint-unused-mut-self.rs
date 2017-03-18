@@ -8,15 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(dead_assignment)];
-#[allow(unused_variable)];
-#[allow(dead_code)];
-#[deny(unused_mut)];
+#![allow(unused_assignments)]
+#![allow(unused_variables)]
+#![allow(dead_code)]
+#![deny(unused_mut)]
 
 struct Foo;
 impl Foo {
     fn foo(mut self) {} //~ ERROR: variable does not need to be mutable
-    fn bar(mut ~self) {} //~ ERROR: variable does not need to be mutable
+    fn bar(mut self: Box<Foo>) {} //~ ERROR: variable does not need to be mutable
 }
 
 fn main() {}

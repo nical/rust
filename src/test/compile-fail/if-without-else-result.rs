@@ -8,9 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// error-pattern:mismatched types: expected `()` but found `bool`
-
 fn main() {
     let a = if true { true };
-    info!("{:?}", a);
+    //~^ ERROR if may be missing an else clause [E0317]
+    //~| expected type `()`
+    //~| found type `bool`
+    //~| expected (), found bool
+    println!("{}", a);
 }

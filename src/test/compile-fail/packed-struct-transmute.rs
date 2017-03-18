@@ -13,25 +13,26 @@
 // the error points to the start of the file, not the line with the
 // transmute
 
-// error-pattern: transmute called on types with different size
+// error-pattern: transmute called with differently sized types
 
-use std::cast;
+use std::mem;
 
-#[packed]
+#[repr(packed)]
 struct Foo {
     bar: u8,
-    baz: uint
+    baz: usize
 }
 
+#[derive(Debug)]
 struct Oof {
     rab: u8,
-    zab: uint
+    zab: usize
 }
 
 fn main() {
     let foo = Foo { bar: 1, baz: 10 };
     unsafe {
-        let oof: Oof = cast::transmute(foo);
-        info!("{:?}", oof);
+        let oof: Oof = mem::transmute(foo);
+        println!("{:?}", oof);
     }
 }

@@ -8,10 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-mod foo {
-    use std::libc::c_int;
 
-    #[nolink]
+// pretty-expanded FIXME #23616
+
+#![feature(libc)]
+
+extern crate libc;
+
+mod foo {
+    use libc::c_int;
+
     extern {
         pub static errno: c_int;
     }

@@ -8,44 +8,41 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// aux-build:struct-field-privacy.rs
+// aux-build:struct_field_privacy.rs
 
-extern mod xc = "struct-field-privacy";
+extern crate struct_field_privacy as xc;
 
 struct A {
-    a: int,
+    a: isize,
 }
 
 mod inner {
-    struct A {
-        a: int,
-        pub b: int,
-        priv c: int, //~ ERROR: unnecessary `priv` visibility
+    pub struct A {
+        a: isize,
+        pub b: isize,
     }
     pub struct B {
-        a: int,
-        priv b: int,
-        pub c: int, //~ ERROR: unnecessary `pub` visibility
+        pub a: isize,
+        b: isize,
     }
+    pub struct Z(pub isize, isize);
 }
 
-fn test(a: A, b: inner::A, c: inner::B, d: xc::A, e: xc::B) {
-    //~^ ERROR: type `A` is private
-    //~^^ ERROR: struct `A` is private
-
+fn test(a: A, b: inner::A, c: inner::B, d: xc::A, e: xc::B, z: inner::Z) {
     a.a;
-    b.a; //~ ERROR: field `a` is private
+    b.a; //~ ERROR: field `a` of struct `inner::A` is private
     b.b;
-    b.c; //~ ERROR: field `c` is private
     c.a;
-    c.b; //~ ERROR: field `b` is private
-    c.c;
+    c.b; //~ ERROR: field `b` of struct `inner::B` is private
 
-    d.a; //~ ERROR: field `a` is private
+    d.a; //~ ERROR: field `a` of struct `xc::A` is private
     d.b;
 
     e.a;
-    e.b; //~ ERROR: field `b` is private
+    e.b; //~ ERROR: field `b` of struct `xc::B` is private
+
+    z.0;
+    z.1; //~ ERROR: field `1` of struct `inner::Z` is private
 }
 
 fn main() {}

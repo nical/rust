@@ -8,13 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn with_int(f: |x: &int|) {
+fn with_int<F>(f: F) where F: FnOnce(&isize) {
     let x = 3;
     f(&x);
 }
 
 fn main() {
     let mut x = None;
-         //~^ ERROR lifetime of variable does not enclose its declaration
     with_int(|y| x = Some(y));
+         //~^ ERROR cannot infer
 }

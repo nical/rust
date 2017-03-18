@@ -10,11 +10,11 @@
 
 // see #9186
 
-enum Bar<T> { What }
+enum Bar<T> { What } //~ ERROR parameter `T` is never used
 
 fn foo<T>() {
-    static a: Bar<T> = What;
-    //~^ ERROR: cannot use an outer type parameter in this context
+    static a: Bar<T> = Bar::What;
+    //~^ ERROR cannot use an outer type parameter in this context
 }
 
 fn main() {

@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,17 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast - check-fast doesn't understand aux-build
 // aux-build:trait_inheritance_overloading_xc.rs
 
-extern mod trait_inheritance_overloading_xc;
+
+extern crate trait_inheritance_overloading_xc;
 use trait_inheritance_overloading_xc::{MyNum, MyInt};
 
 fn f<T:MyNum>(x: T, y: T) -> (T, T, T) {
-    return (x + y, x - y, x * y);
+    return (x.clone() + y.clone(), x.clone() - y.clone(), x * y);
 }
 
-fn mi(v: int) -> MyInt { MyInt { val: v } }
+fn mi(v: isize) -> MyInt { MyInt { val: v } }
 
 pub fn main() {
     let (x, y) = (mi(3), mi(5));

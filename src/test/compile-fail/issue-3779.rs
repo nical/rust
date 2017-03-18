@@ -8,7 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct S { //~ ERROR illegal recursive struct type; wrap the inner value in a box to make it representable
+struct S { //~ ERROR E0072
+           //~| NOTE recursive type has infinite size
     element: Option<S>
 }
 

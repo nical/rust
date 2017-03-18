@@ -10,10 +10,11 @@
 
 // error-pattern:non-scalar cast
 
+#[derive(Debug)]
 struct foo {
-    x:int
+    x: isize
 }
 
 fn main() {
-    info!("{:?}", foo{ x: 1 } as int);
+    println!("{}", foo{ x: 1 } as isize);
 }

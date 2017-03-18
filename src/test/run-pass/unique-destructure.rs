@@ -8,9 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct Foo { a: int, b: int }
+
+#![allow(unknown_features)]
+#![feature(box_patterns)]
+#![feature(box_syntax)]
+
+struct Foo { a: isize, b: isize }
 
 pub fn main() {
-    let ~Foo{a, b} = ~Foo{a: 100, b: 200};
+    let box Foo{a, b} = box Foo{a: 100, b: 200};
     assert_eq!(a + b, 300);
 }

@@ -1,6 +1,4 @@
-// xfail-fast
-
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -15,12 +13,12 @@
 
 // Modified to not use export since it's going away. --pcw
 
-#[feature(globs)];
+// pretty-expanded FIXME #23616
 
 mod foo {
     use foo::bar::*;
     pub mod bar {
-        pub static a : int = 10;
+        pub static a : isize = 10;
     }
     pub fn zum() {
         let _b = a;

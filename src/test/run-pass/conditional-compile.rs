@@ -1,6 +1,4 @@
-// xfail-fast
-
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -11,6 +9,7 @@
 // except according to those terms.
 
 // Crate use statements
+
 #[cfg(bogus)]
 use flippity;
 
@@ -31,7 +30,7 @@ mod rustrt {
 }
 
 #[cfg(bogus)]
-type t = int;
+type t = isize;
 
 type t = bool;
 
@@ -42,21 +41,21 @@ enum tg { bar, }
 
 #[cfg(bogus)]
 struct r {
-  i: int,
+  i: isize,
 }
 
 #[cfg(bogus)]
-fn r(i:int) -> r {
+fn r(i:isize) -> r {
     r {
         i: i
     }
 }
 
 struct r {
-  i: int,
+  i: isize,
 }
 
-fn r(i:int) -> r {
+fn r(i:isize) -> r {
     r {
         i: i
     }
@@ -81,27 +80,27 @@ mod m {
 // Since the bogus configuration isn't defined main will just be
 // parsed, but nothing further will be done with it
 #[cfg(bogus)]
-pub fn main() { fail!() }
+pub fn main() { panic!() }
 
 pub fn main() {
     // Exercise some of the configured items in ways that wouldn't be possible
     // if they had the bogus definition
     assert!((b));
     let _x: t = true;
-    let _y: tg = bar;
+    let _y: tg = tg::bar;
 
     test_in_fn_ctxt();
 }
 
 fn test_in_fn_ctxt() {
     #[cfg(bogus)]
-    fn f() { fail!() }
+    fn f() { panic!() }
     fn f() { }
     f();
 
     #[cfg(bogus)]
-    static i: int = 0;
-    static i: int = 1;
+    static i: isize = 0;
+    static i: isize = 1;
     assert_eq!(i, 1);
 }
 
@@ -109,8 +108,8 @@ mod test_foreign_items {
     pub mod rustrt {
         extern {
             #[cfg(bogus)]
-            pub fn write() -> ~str;
-            pub fn write() -> ~str;
+            pub fn write() -> String;
+            pub fn write() -> String;
         }
     }
 }
@@ -122,7 +121,7 @@ mod test_use_statements {
 
 mod test_methods {
     struct Foo {
-        bar: uint
+        bar: usize
     }
 
     impl Fooable for Foo {
@@ -149,3 +148,6 @@ mod test_methods {
         fn the(&self);
     }
 }
+
+#[cfg(any())]
+mod nonexistent_file; // Check that unconfigured non-inline modules are not loaded or parsed.

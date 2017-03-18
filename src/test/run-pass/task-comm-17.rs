@@ -8,17 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// ignore-emscripten no threads support
+// pretty-expanded FIXME #23616
+
+#![feature(std_misc)]
+
 // Issue #922
 
 // This test is specifically about spawning temporary closures.
 
-extern mod extra;
-
-use std::task;
+use std::thread;
 
 fn f() {
 }
 
 pub fn main() {
-    task::spawn(proc() f() );
+    thread::spawn(move|| f() ).join();
 }

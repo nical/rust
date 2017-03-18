@@ -8,20 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::task;
+// ignore-emscripten no threads support
+
+use std::thread;
 
 pub fn main() {
-    let mut builder = task::task();
-    let mut result = builder.future_result();
-    builder.spawn(child);
-    error!("1");
-    task::deschedule();
-    error!("2");
-    task::deschedule();
-    error!("3");
-    result.recv();
+    let mut result = thread::spawn(child);
+    println!("1");
+    thread::yield_now();
+    println!("2");
+    thread::yield_now();
+    println!("3");
+    result.join();
 }
 
 fn child() {
-    error!("4"); task::deschedule(); error!("5"); task::deschedule(); error!("6");
+    println!("4"); thread::yield_now(); println!("5"); thread::yield_now(); println!("6");
 }

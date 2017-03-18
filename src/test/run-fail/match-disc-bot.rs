@@ -9,6 +9,15 @@
 // except according to those terms.
 
 // error-pattern:quux
-fn f() -> ! { fail!("quux") }
-fn g() -> int { match f() { true => { 1 } false => { 0 } } }
-fn main() { g(); }
+fn f() -> ! {
+    panic!("quux")
+}
+fn g() -> isize {
+    match f() {
+        true => 1,
+        false => 0,
+    }
+}
+fn main() {
+    g();
+}

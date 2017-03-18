@@ -11,82 +11,88 @@
 // Test lifetimes are linked properly when we create dependent region pointers.
 // Issue #3148.
 
+
+#![allow(unknown_features)]
+#![feature(box_patterns)]
+#![feature(box_syntax)]
+
 struct A {
     value: B
 }
 
 struct B {
-    v1: int,
-    v2: [int, ..3],
-    v3: ~[int],
+    v1: isize,
+    v2: [isize; 3],
+    v3: Vec<isize> ,
     v4: C,
-    v5: ~C,
+    v5: Box<C>,
     v6: Option<C>
 }
 
+#[derive(Copy, Clone)]
 struct C {
-    f: int
+    f: isize
 }
 
-fn get_v1<'v>(a: &'v A) -> &'v int {
+fn get_v1(a: &A) -> &isize {
     // Region inferencer must deduce that &v < L2 < L1
     let foo = &a.value; // L1
     &foo.v1             // L2
 }
 
-fn get_v2<'v>(a: &'v A, i: uint) -> &'v int {
+fn get_v2(a: &A, i: usize) -> &isize {
     let foo = &a.value;
     &foo.v2[i]
 }
 
-fn get_v3<'v>(a: &'v A, i: uint) -> &'v int {
+fn get_v3(a: &A, i: usize) -> &isize {
     let foo = &a.value;
     &foo.v3[i]
 }
 
-fn get_v4<'v>(a: &'v A, _i: uint) -> &'v int {
+fn get_v4(a: &A, _i: usize) -> &isize {
     let foo = &a.value;
     &foo.v4.f
 }
 
-fn get_v5<'v>(a: &'v A, _i: uint) -> &'v int {
+fn get_v5(a: &A, _i: usize) -> &isize {
     let foo = &a.value;
     &foo.v5.f
 }
 
-fn get_v6_a<'v>(a: &'v A, _i: uint) -> &'v int {
+fn get_v6_a(a: &A, _i: usize) -> &isize {
     match a.value.v6 {
         Some(ref v) => &v.f,
-        None => fail!()
+        None => panic!()
     }
 }
 
-fn get_v6_b<'v>(a: &'v A, _i: uint) -> &'v int {
+fn get_v6_b(a: &A, _i: usize) -> &isize {
     match *a {
         A { value: B { v6: Some(ref v), .. } } => &v.f,
-        _ => fail!()
+        _ => panic!()
     }
 }
 
-fn get_v6_c<'v>(a: &'v A, _i: uint) -> &'v int {
+fn get_v6_c(a: &A, _i: usize) -> &isize {
     match a {
         &A { value: B { v6: Some(ref v), .. } } => &v.f,
-        _ => fail!()
+        _ => panic!()
     }
 }
 
-fn get_v5_ref<'v>(a: &'v A, _i: uint) -> &'v int {
+fn get_v5_ref(a: &A, _i: usize) -> &isize {
     match &a.value {
-        &B {v5: ~C {f: ref v}, ..} => v
+        &B {v5: box C {f: ref v}, ..} => v
     }
 }
 
 pub fn main() {
     let a = A {value: B {v1: 22,
                          v2: [23, 24, 25],
-                         v3: ~[26, 27, 28],
+                         v3: vec![26, 27, 28],
                          v4: C { f: 29 },
-                         v5: ~C { f: 30 },
+                         v5: box C { f: 30 },
                          v6: Some(C { f: 31 })}};
 
     let p = get_v1(&a);

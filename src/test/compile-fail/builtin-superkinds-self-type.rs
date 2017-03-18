@@ -11,16 +11,17 @@
 // Tests (negatively) the ability for the Self type in default methods
 // to use capabilities granted by builtin kinds as supertraits.
 
-trait Foo : Freeze {
-    fn foo(self, mut chan: Chan<Self>) {
-        chan.send(self); //~ ERROR does not fulfill `Send`
-    }
+use std::sync::mpsc::{channel, Sender};
+
+trait Foo : Sized+Sync+'static {
+    fn foo(self, mut chan: Sender<Self>) { }
 }
 
-impl <T: Freeze> Foo for T { }
+impl <T: Sync> Foo for T { }
+//~^ ERROR the parameter type `T` may not live long enough
 
 fn main() {
-    let (p,c) = Chan::new();
-    1193182.foo(c);
-    assert!(p.recv() == 1193182);
+    let (tx, rx) = channel();
+    1193182.foo(tx);
+    assert_eq!(rx.recv(), 1193182);
 }

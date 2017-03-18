@@ -1,6 +1,4 @@
-// xfail-fast
-
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -10,30 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(globs)];
-
-extern mod extra;
+#![feature(intrinsics)]
 
 mod rusti {
     extern "rust-intrinsic" {
-        pub fn ctpop8(x: i8) -> i8;
-        pub fn ctpop16(x: i16) -> i16;
-        pub fn ctpop32(x: i32) -> i32;
-        pub fn ctpop64(x: i64) -> i64;
-
-        pub fn ctlz8(x: i8) -> i8;
-        pub fn ctlz16(x: i16) -> i16;
-        pub fn ctlz32(x: i32) -> i32;
-        pub fn ctlz64(x: i64) -> i64;
-
-        pub fn cttz8(x: i8) -> i8;
-        pub fn cttz16(x: i16) -> i16;
-        pub fn cttz32(x: i32) -> i32;
-        pub fn cttz64(x: i64) -> i64;
-
-        pub fn bswap16(x: i16) -> i16;
-        pub fn bswap32(x: i32) -> i32;
-        pub fn bswap64(x: i64) -> i64;
+        pub fn ctpop<T>(x: T) -> T;
+        pub fn ctlz<T>(x: T) -> T;
+        pub fn cttz<T>(x: T) -> T;
+        pub fn bswap<T>(x: T) -> T;
     }
 }
 
@@ -41,83 +23,83 @@ pub fn main() {
     unsafe {
         use rusti::*;
 
-        assert_eq!(ctpop8(0i8), 0i8);
-        assert_eq!(ctpop16(0i16), 0i16);
-        assert_eq!(ctpop32(0i32), 0i32);
-        assert_eq!(ctpop64(0i64), 0i64);
+        assert_eq!(ctpop(0u8), 0); assert_eq!(ctpop(0i8), 0);
+        assert_eq!(ctpop(0u16), 0); assert_eq!(ctpop(0i16), 0);
+        assert_eq!(ctpop(0u32), 0); assert_eq!(ctpop(0i32), 0);
+        assert_eq!(ctpop(0u64), 0); assert_eq!(ctpop(0i64), 0);
 
-        assert_eq!(ctpop8(1i8), 1i8);
-        assert_eq!(ctpop16(1i16), 1i16);
-        assert_eq!(ctpop32(1i32), 1i32);
-        assert_eq!(ctpop64(1i64), 1i64);
+        assert_eq!(ctpop(1u8), 1); assert_eq!(ctpop(1i8), 1);
+        assert_eq!(ctpop(1u16), 1); assert_eq!(ctpop(1i16), 1);
+        assert_eq!(ctpop(1u32), 1); assert_eq!(ctpop(1i32), 1);
+        assert_eq!(ctpop(1u64), 1); assert_eq!(ctpop(1i64), 1);
 
-        assert_eq!(ctpop8(10i8), 2i8);
-        assert_eq!(ctpop16(10i16), 2i16);
-        assert_eq!(ctpop32(10i32), 2i32);
-        assert_eq!(ctpop64(10i64), 2i64);
+        assert_eq!(ctpop(10u8), 2); assert_eq!(ctpop(10i8), 2);
+        assert_eq!(ctpop(10u16), 2); assert_eq!(ctpop(10i16), 2);
+        assert_eq!(ctpop(10u32), 2); assert_eq!(ctpop(10i32), 2);
+        assert_eq!(ctpop(10u64), 2); assert_eq!(ctpop(10i64), 2);
 
-        assert_eq!(ctpop8(100i8), 3i8);
-        assert_eq!(ctpop16(100i16), 3i16);
-        assert_eq!(ctpop32(100i32), 3i32);
-        assert_eq!(ctpop64(100i64), 3i64);
+        assert_eq!(ctpop(100u8), 3); assert_eq!(ctpop(100i8), 3);
+        assert_eq!(ctpop(100u16), 3); assert_eq!(ctpop(100i16), 3);
+        assert_eq!(ctpop(100u32), 3); assert_eq!(ctpop(100i32), 3);
+        assert_eq!(ctpop(100u64), 3); assert_eq!(ctpop(100i64), 3);
 
-        assert_eq!(ctpop8(-1i8), 8i8);
-        assert_eq!(ctpop16(-1i16), 16i16);
-        assert_eq!(ctpop32(-1i32), 32i32);
-        assert_eq!(ctpop64(-1i64), 64i64);
+        assert_eq!(ctpop(-1i8 as u8), 8); assert_eq!(ctpop(-1i8), 8);
+        assert_eq!(ctpop(-1i16 as u16), 16); assert_eq!(ctpop(-1i16), 16);
+        assert_eq!(ctpop(-1i32 as u32), 32); assert_eq!(ctpop(-1i32), 32);
+        assert_eq!(ctpop(-1i64 as u64), 64); assert_eq!(ctpop(-1i64), 64);
 
-        assert_eq!(ctlz8(0i8), 8i8);
-        assert_eq!(ctlz16(0i16), 16i16);
-        assert_eq!(ctlz32(0i32), 32i32);
-        assert_eq!(ctlz64(0i64), 64i64);
+        assert_eq!(ctlz(0u8), 8); assert_eq!(ctlz(0i8), 8);
+        assert_eq!(ctlz(0u16), 16); assert_eq!(ctlz(0i16), 16);
+        assert_eq!(ctlz(0u32), 32); assert_eq!(ctlz(0i32), 32);
+        assert_eq!(ctlz(0u64), 64); assert_eq!(ctlz(0i64), 64);
 
-        assert_eq!(ctlz8(1i8), 7i8);
-        assert_eq!(ctlz16(1i16), 15i16);
-        assert_eq!(ctlz32(1i32), 31i32);
-        assert_eq!(ctlz64(1i64), 63i64);
+        assert_eq!(ctlz(1u8), 7); assert_eq!(ctlz(1i8), 7);
+        assert_eq!(ctlz(1u16), 15); assert_eq!(ctlz(1i16), 15);
+        assert_eq!(ctlz(1u32), 31); assert_eq!(ctlz(1i32), 31);
+        assert_eq!(ctlz(1u64), 63); assert_eq!(ctlz(1i64), 63);
 
-        assert_eq!(ctlz8(10i8), 4i8);
-        assert_eq!(ctlz16(10i16), 12i16);
-        assert_eq!(ctlz32(10i32), 28i32);
-        assert_eq!(ctlz64(10i64), 60i64);
+        assert_eq!(ctlz(10u8), 4); assert_eq!(ctlz(10i8), 4);
+        assert_eq!(ctlz(10u16), 12); assert_eq!(ctlz(10i16), 12);
+        assert_eq!(ctlz(10u32), 28); assert_eq!(ctlz(10i32), 28);
+        assert_eq!(ctlz(10u64), 60); assert_eq!(ctlz(10i64), 60);
 
-        assert_eq!(ctlz8(100i8), 1i8);
-        assert_eq!(ctlz16(100i16), 9i16);
-        assert_eq!(ctlz32(100i32), 25i32);
-        assert_eq!(ctlz64(100i64), 57i64);
+        assert_eq!(ctlz(100u8), 1); assert_eq!(ctlz(100i8), 1);
+        assert_eq!(ctlz(100u16), 9); assert_eq!(ctlz(100i16), 9);
+        assert_eq!(ctlz(100u32), 25); assert_eq!(ctlz(100i32), 25);
+        assert_eq!(ctlz(100u64), 57); assert_eq!(ctlz(100i64), 57);
 
-        assert_eq!(cttz8(-1i8), 0i8);
-        assert_eq!(cttz16(-1i16), 0i16);
-        assert_eq!(cttz32(-1i32), 0i32);
-        assert_eq!(cttz64(-1i64), 0i64);
+        assert_eq!(cttz(-1i8 as u8), 0); assert_eq!(cttz(-1i8), 0);
+        assert_eq!(cttz(-1i16 as u16), 0); assert_eq!(cttz(-1i16), 0);
+        assert_eq!(cttz(-1i32 as u32), 0); assert_eq!(cttz(-1i32), 0);
+        assert_eq!(cttz(-1i64 as u64), 0); assert_eq!(cttz(-1i64), 0);
 
-        assert_eq!(cttz8(0i8), 8i8);
-        assert_eq!(cttz16(0i16), 16i16);
-        assert_eq!(cttz32(0i32), 32i32);
-        assert_eq!(cttz64(0i64), 64i64);
+        assert_eq!(cttz(0u8), 8); assert_eq!(cttz(0i8), 8);
+        assert_eq!(cttz(0u16), 16); assert_eq!(cttz(0i16), 16);
+        assert_eq!(cttz(0u32), 32); assert_eq!(cttz(0i32), 32);
+        assert_eq!(cttz(0u64), 64); assert_eq!(cttz(0i64), 64);
 
-        assert_eq!(cttz8(1i8), 0i8);
-        assert_eq!(cttz16(1i16), 0i16);
-        assert_eq!(cttz32(1i32), 0i32);
-        assert_eq!(cttz64(1i64), 0i64);
+        assert_eq!(cttz(1u8), 0); assert_eq!(cttz(1i8), 0);
+        assert_eq!(cttz(1u16), 0); assert_eq!(cttz(1i16), 0);
+        assert_eq!(cttz(1u32), 0); assert_eq!(cttz(1i32), 0);
+        assert_eq!(cttz(1u64), 0); assert_eq!(cttz(1i64), 0);
 
-        assert_eq!(cttz8(10i8), 1i8);
-        assert_eq!(cttz16(10i16), 1i16);
-        assert_eq!(cttz32(10i32), 1i32);
-        assert_eq!(cttz64(10i64), 1i64);
+        assert_eq!(cttz(10u8), 1); assert_eq!(cttz(10i8), 1);
+        assert_eq!(cttz(10u16), 1); assert_eq!(cttz(10i16), 1);
+        assert_eq!(cttz(10u32), 1); assert_eq!(cttz(10i32), 1);
+        assert_eq!(cttz(10u64), 1); assert_eq!(cttz(10i64), 1);
 
-        assert_eq!(cttz8(100i8), 2i8);
-        assert_eq!(cttz16(100i16), 2i16);
-        assert_eq!(cttz32(100i32), 2i32);
-        assert_eq!(cttz64(100i64), 2i64);
+        assert_eq!(cttz(100u8), 2); assert_eq!(cttz(100i8), 2);
+        assert_eq!(cttz(100u16), 2); assert_eq!(cttz(100i16), 2);
+        assert_eq!(cttz(100u32), 2); assert_eq!(cttz(100i32), 2);
+        assert_eq!(cttz(100u64), 2); assert_eq!(cttz(100i64), 2);
 
-        assert_eq!(cttz8(-1i8), 0i8);
-        assert_eq!(cttz16(-1i16), 0i16);
-        assert_eq!(cttz32(-1i32), 0i32);
-        assert_eq!(cttz64(-1i64), 0i64);
-
-        assert_eq!(bswap16(0x0A0Bi16), 0x0B0Ai16);
-        assert_eq!(bswap32(0x0ABBCC0Di32), 0x0DCCBB0Ai32);
-        assert_eq!(bswap64(0x0122334455667708i64), 0x0877665544332201i64);
+        assert_eq!(bswap(0x0Au8), 0x0A); // no-op
+        assert_eq!(bswap(0x0Ai8), 0x0A); // no-op
+        assert_eq!(bswap(0x0A0Bu16), 0x0B0A);
+        assert_eq!(bswap(0x0A0Bi16), 0x0B0A);
+        assert_eq!(bswap(0x0ABBCC0Du32), 0x0DCCBB0A);
+        assert_eq!(bswap(0x0ABBCC0Di32), 0x0DCCBB0A);
+        assert_eq!(bswap(0x0122334455667708u64), 0x0877665544332201);
+        assert_eq!(bswap(0x0122334455667708i64), 0x0877665544332201);
     }
 }

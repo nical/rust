@@ -8,8 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(unused_variable)];
-#[allow(dead_assignment)];
+// pretty-expanded FIXME #23616
+
+#![allow(unused_variables)]
+#![allow(dead_assignment)]
 
 fn f(u: ()) { return u; }
 

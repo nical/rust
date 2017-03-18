@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 #[cfg(target_arch = "x86")]
 pub fn main() { }
 
@@ -15,4 +17,22 @@ pub fn main() { }
 pub fn main() { }
 
 #[cfg(target_arch = "arm")]
+pub fn main() { }
+
+#[cfg(target_arch = "aarch64")]
+pub fn main() { }
+
+#[cfg(target_arch = "mips")]
+pub fn main() { }
+
+#[cfg(target_arch = "mips64")]
+pub fn main() { }
+
+#[cfg(target_arch = "powerpc64")]
+pub fn main() { }
+
+#[cfg(target_arch = "s390x")]
+pub fn main() { }
+
+#[cfg(target_arch = "asmjs")]
 pub fn main() { }

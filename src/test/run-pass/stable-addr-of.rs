@@ -10,9 +10,8 @@
 
 // Issue #2040
 
-use std::ptr;
 
 pub fn main() {
-    let foo = 1;
-    assert_eq!(ptr::to_unsafe_ptr(&foo), ptr::to_unsafe_ptr(&foo));
+    let foo: isize = 1;
+    assert_eq!(&foo as *const isize, &foo as *const isize);
 }

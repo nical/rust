@@ -10,12 +10,15 @@
 
 
 
-fn altlit(f: int) -> int {
+fn altlit(f: isize) -> isize {
     match f {
-      10 => { info!("case 10"); return 20; }
-      11 => { info!("case 11"); return 22; }
-      _  => fail!("the impossible happened")
+      10 => { println!("case 10"); return 20; }
+      11 => { println!("case 11"); return 22; }
+      _  => panic!("the impossible happened")
     }
 }
 
-pub fn main() { assert!((altlit(10) == 20)); assert!((altlit(11) == 22)); }
+pub fn main() {
+    assert_eq!(altlit(10), 20);
+    assert_eq!(altlit(11), 22);
+}

@@ -8,20 +8,30 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::hashmap::HashMap;
+
+#![allow(unknown_features)]
+#![feature(box_syntax, collections)]
+
+extern crate collections;
+
+use std::collections::HashMap;
 
 trait Graph<Node, Edge> {
     fn f(&self, Edge);
+    fn g(&self, Node);
 
 }
 
-impl<E> Graph<int, E> for HashMap<int, int> {
+impl<E> Graph<isize, E> for HashMap<isize, isize> {
     fn f(&self, _e: E) {
-        fail!();
+        panic!();
+    }
+    fn g(&self, _e: isize) {
+        panic!();
     }
 }
 
 pub fn main() {
-    let g : ~HashMap<int, int> = ~HashMap::new();
-    let _g2 : ~Graph<int,int> = g as ~Graph<int,int>;
+    let g : Box<HashMap<isize,isize>> = box HashMap::new();
+    let _g2 : Box<Graph<isize,isize>> = g as Box<Graph<isize,isize>>;
 }

@@ -8,17 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+// pretty-expanded FIXME #23616
+
 struct font<'a> {
-    fontbuf: &'a ~[u8],
+    fontbuf: &'a Vec<u8> ,
 }
 
 impl<'a> font<'a> {
-    pub fn buf(&self) -> &'a ~[u8] {
+    pub fn buf(&self) -> &'a Vec<u8> {
         self.fontbuf
     }
 }
 
-fn font<'r>(fontbuf: &'r ~[u8]) -> font<'r> {
+fn font(fontbuf: &Vec<u8> ) -> font {
     font {
         fontbuf: fontbuf
     }

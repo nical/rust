@@ -9,6 +9,6 @@
 // except according to those terms.
 
 fn main() {
-    let x: Option<&[u8]> = Some("foo").map(std::cast::transmute);
-    //~^ ERROR: mismatched types
+    let x: Option<&[u8]> = Some("foo").map(std::mem::transmute);
+    //~^ ERROR E0277
 }

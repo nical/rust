@@ -9,20 +9,27 @@
 // except according to those terms.
 
 
-use std::cast::transmute;
-use std::libc::c_void;
+// pretty-expanded FIXME #23616
 
-struct NonCopyable(*c_void);
+#![allow(unknown_features)]
+#![feature(box_syntax, libc)]
+
+extern crate libc;
+
+use std::mem::transmute;
+use libc::c_void;
+
+struct NonCopyable(*const c_void);
 
 impl Drop for NonCopyable {
     fn drop(&mut self) {
         let NonCopyable(p) = *self;
-        let _v = unsafe { transmute::<*c_void, ~int>(p) };
+        let _v = unsafe { transmute::<*const c_void, Box<isize>>(p) };
     }
 }
 
 pub fn main() {
-    let t = ~0;
-    let p = unsafe { transmute::<~int, *c_void>(t) };
+    let t = box 0;
+    let p = unsafe { transmute::<Box<isize>, *const c_void>(t) };
     let _z = NonCopyable(p);
 }

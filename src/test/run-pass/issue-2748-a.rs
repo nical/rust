@@ -8,11 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 struct CMap<'a> {
     buf: &'a [u8],
 }
 
-fn CMap<'r>(buf: &'r [u8]) -> CMap<'r> {
+fn CMap(buf: &[u8]) -> CMap {
     CMap {
         buf: buf
     }

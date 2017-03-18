@@ -8,8 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deny(ctypes)];
-#[allow(dead_code)];
+#![deny(improper_ctypes)]
+#![allow(dead_code)]
 
 enum Z { }
 enum U { A }
@@ -18,9 +18,9 @@ enum T { E, F, G }
 
 extern {
    fn zf(x: Z);
-   fn uf(x: U);
-   fn bf(x: B); //~ ERROR found enum type without foreign-function-safe
-   fn tf(x: T); //~ ERROR found enum type without foreign-function-safe
+   fn uf(x: U); //~ ERROR found enum without foreign-function-safe
+   fn bf(x: B); //~ ERROR found enum without foreign-function-safe
+   fn tf(x: T); //~ ERROR found enum without foreign-function-safe
 }
 
 pub fn main() { }

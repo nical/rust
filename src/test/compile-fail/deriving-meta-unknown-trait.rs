@@ -8,7 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deriving(Eqr)] //~ ERROR unknown `deriving` trait: `Eqr`
+// ignore-tidy-linelength
+
+#[derive(Eqr)]
+//~^ ERROR cannot find derive macro `Eqr` in this scope
 struct Foo;
 
 pub fn main() {}

@@ -8,14 +8,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern mod extra;
+// ignore-emscripten no threads support
 
-use std::task;
+#![feature(std_misc)]
+
+use std::thread;
 
 pub fn main() {
     let mut i = 10;
-    while i > 0 { task::spawn({let i = i; proc() child(i)}); i = i - 1; }
-    info!("main thread exiting");
+    while i > 0 {
+        thread::spawn({let i = i; move|| child(i)}).join();
+        i = i - 1;
+    }
+    println!("main thread exiting");
 }
 
-fn child(x: int) { info!("{}", x); }
+fn child(x: isize) { println!("{}", x); }

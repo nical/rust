@@ -8,8 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 mod x {
-    pub fn g() -> uint {14}
+    pub fn g() -> usize {14}
 }
 
 pub fn main(){

@@ -8,17 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+#![feature(box_syntax)]
 
-use std::io;
+use std::io::{self, Write};
 
 trait Trait {
     fn f(&self);
 }
 
+#[derive(Copy, Clone)]
 struct Struct {
-    x: int,
-    y: int,
+    x: isize,
+    y: isize,
 }
 
 impl Trait for Struct {
@@ -27,25 +28,15 @@ impl Trait for Struct {
     }
 }
 
-fn f(x: @Trait) {
-    x.f();
-}
-
-fn foo(mut a: ~Writer) {
-    a.write(bytes!("Hello\n"));
-}
+fn foo(mut a: Box<Write>) {}
 
 pub fn main() {
     let a = Struct { x: 1, y: 2 };
-    let b: @Trait = @a;
+    let b: Box<Trait> = Box::new(a);
     b.f();
-    let c: ~Trait = ~a;
+    let c: &Trait = &a;
     c.f();
-    let d: &Trait = &a;
-    d.f();
-    f(@a);
 
     let out = io::stdout();
-    foo(~out);
+    foo(Box::new(out));
 }
-

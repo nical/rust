@@ -8,6 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(unused_mut)];
+// pretty-expanded FIXME #23616
 
-pub fn main() { let mut _v: ~[int] = ~[]; }
+#![allow(unused_mut)]
+
+
+pub fn main() { let mut _v: Vec<isize> = Vec::new(); }

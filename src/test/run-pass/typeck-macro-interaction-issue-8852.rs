@@ -1,24 +1,38 @@
-#[feature(macro_rules)];
+// Copyright 2014 The Rust Project Developers. See the COPYRIGHT
+// file at the top-level directory of this distribution and at
+// http://rust-lang.org/COPYRIGHT.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
 
 enum T {
-    A(int),
+    A(isize),
     B(f64)
 }
 
-macro_rules! test(
-    ($e:expr) => (
+// after fixing #9384 and implementing hygiene for match bindings,
+// this now fails because the insertion of the 'y' into the match
+// doesn't cause capture. Making this macro hygienic (as I've done)
+// could very well make this test case completely pointless....
+
+macro_rules! test {
+    ($id1:ident, $id2:ident, $e:expr) => (
         fn foo(a:T, b:T) -> T {
             match (a, b) {
-                (A(x), A(y)) => A($e),
-                (B(x), B(y)) => B($e),
-                _ => fail!()
+                (T::A($id1), T::A($id2)) => T::A($e),
+                (T::B($id1), T::B($id2)) => T::B($e),
+                _ => panic!()
             }
         }
     )
-)
+}
 
-test!(x + y)
+test!(x,y,x + y);
 
 pub fn main() {
-    foo(A(1), A(2));
+    foo(T::A(1), T::A(2));
 }

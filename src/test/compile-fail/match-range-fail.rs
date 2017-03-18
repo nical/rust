@@ -8,22 +8,26 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//error-pattern: lower range bound
-//error-pattern: non-numeric
-//error-pattern: mismatched types
-
 fn main() {
-    match 5u {
-      6u .. 1u => { }
-      _ => { }
+    match "wow" {
+        "bar" ... "foo" => { }
     };
+    //~^^ ERROR only char and numeric types are allowed in range
+    //~| start type: &'static str
+    //~| end type: &'static str
 
     match "wow" {
-      "bar" .. "foo" => { }
+        10 ... "what" => ()
     };
+    //~^^ ERROR only char and numeric types are allowed in range
+    //~| start type: {integer}
+    //~| end type: &'static str
 
-    match 5u {
-      'c' .. 100u => { }
-      _ => { }
+    match 5 {
+        'c' ... 100 => { }
+        _ => { }
     };
+    //~^^^ ERROR mismatched types
+    //~| expected type `{integer}`
+    //~| found type `char`
 }

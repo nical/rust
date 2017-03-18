@@ -8,8 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(globs)];
-
 // ensures that 'use foo:*' doesn't import non-public item
 
 use m1::*;
@@ -20,12 +18,12 @@ mod foo {
 mod a {
     pub mod b {
         use foo::foo;
-        type bar = int;
+        type bar = isize;
     }
     pub mod sub {
         use a::b::*;
         fn sub() -> bar { 1 }
-        //~^ ERROR: undeclared type name
+        //~^ ERROR cannot find type `bar` in this scope
     }
 }
 
@@ -34,6 +32,5 @@ mod m1 {
 }
 
 fn main() {
-    foo(); //~ ERROR: unresolved name
+    foo(); //~ ERROR expected function, found module `foo`
 }
-

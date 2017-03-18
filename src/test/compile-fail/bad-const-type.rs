@@ -8,7 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// error-pattern:expected `~str` but found `int`
-
-static i: ~str = 10i;
-fn main() { info!("{:?}", i); }
+static i: String = 10;
+//~^ ERROR mismatched types
+//~| expected type `std::string::String`
+//~| found type `{integer}`
+//~| expected struct `std::string::String`, found integral variable
+fn main() { println!("{}", i); }

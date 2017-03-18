@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,28 +8,29 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
+
+
 
 trait vec_monad<A> {
-    fn bind<B>(&self, f: |&A| -> ~[B]) -> ~[B];
+    fn bind<B, F>(&self, f: F ) -> Vec<B> where F: FnMut(&A) -> Vec<B> ;
 }
 
-impl<A> vec_monad<A> for ~[A] {
-    fn bind<B>(&self, f: |&A| -> ~[B]) -> ~[B] {
-        let mut r = ~[];
-        for elt in self.iter() {
-            r.push_all_move(f(elt));
+impl<A> vec_monad<A> for Vec<A> {
+    fn bind<B, F>(&self, mut f: F) -> Vec<B> where F: FnMut(&A) -> Vec<B> {
+        let mut r = Vec::new();
+        for elt in self {
+            r.extend(f(elt));
         }
         r
     }
 }
 
 trait option_monad<A> {
-    fn bind<B>(&self, f: |&A| -> Option<B>) -> Option<B>;
+    fn bind<B, F>(&self, f: F) -> Option<B> where F: FnOnce(&A) -> Option<B>;
 }
 
 impl<A> option_monad<A> for Option<A> {
-    fn bind<B>(&self, f: |&A| -> Option<B>) -> Option<B> {
+    fn bind<B, F>(&self, f: F) -> Option<B> where F: FnOnce(&A) -> Option<B> {
         match *self {
             Some(ref a) => { f(a) }
             None => { None }
@@ -37,15 +38,18 @@ impl<A> option_monad<A> for Option<A> {
     }
 }
 
-fn transform(x: Option<int>) -> Option<~str> {
-    x.bind(|n| Some(*n + 1) ).bind(|n| Some(n.to_str()) )
+fn transform(x: Option<isize>) -> Option<String> {
+    x.bind(|n| Some(*n + 1) ).bind(|n| Some(n.to_string()) )
 }
 
 pub fn main() {
-    assert_eq!(transform(Some(10)), Some(~"11"));
+    assert_eq!(transform(Some(10)), Some("11".to_string()));
     assert_eq!(transform(None), None);
-    assert!((~[~"hi"])
-        .bind(|x| ~[x.clone(), *x + "!"] )
-        .bind(|x| ~[x.clone(), *x + "?"] ) ==
-        ~[~"hi", ~"hi?", ~"hi!", ~"hi!?"]);
+    assert_eq!((vec!["hi".to_string()])
+        .bind(|x| vec![x.clone(), format!("{}!", x)] )
+        .bind(|x| vec![x.clone(), format!("{}?", x)] ),
+        ["hi".to_string(),
+         "hi?".to_string(),
+         "hi!".to_string(),
+         "hi!?".to_string()]);
 }

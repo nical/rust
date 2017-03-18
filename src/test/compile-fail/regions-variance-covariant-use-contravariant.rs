@@ -18,12 +18,12 @@
 // Covariant<'foo> <: Covariant<'static> because
 // 'foo <= 'static
 struct Covariant<'a> {
-    f: extern "Rust" fn(&'a int)
+    f: extern "Rust" fn(&'a isize)
 }
 
 fn use_<'short,'long>(c: Covariant<'long>,
-                      s: &'short int,
-                      l: &'long int,
+                      s: &'short isize,
+                      l: &'long isize,
                       _where:Option<&'short &'long ()>) {
 
     // Test whether Covariant<'long> <: Covariant<'short>.  Since
@@ -31,7 +31,6 @@ fn use_<'short,'long>(c: Covariant<'long>,
     // contravariant with respect to its parameter 'a.
 
     let _: Covariant<'short> = c; //~ ERROR mismatched types
-    //~^ ERROR  cannot infer an appropriate lifetime
 }
 
 fn main() {}

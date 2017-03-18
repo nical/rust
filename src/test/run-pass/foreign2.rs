@@ -8,27 +8,30 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+// pretty-expanded FIXME #23616
+
+#![feature(libc)]
+
+extern crate libc;
+
 mod bar {
-    #[nolink]
     extern {}
 }
 
 mod zed {
-    #[nolink]
     extern {}
 }
 
-mod libc {
-    use std::libc::{c_int, c_void, size_t, ssize_t};
+mod mlibc {
+    use libc::{c_int, c_void, size_t, ssize_t};
 
-    #[nolink]
     extern {
-        pub fn write(fd: c_int, buf: *c_void, count: size_t) -> ssize_t;
+        pub fn write(fd: c_int, buf: *const c_void, count: size_t) -> ssize_t;
     }
 }
 
 mod baz {
-    #[nolink]
     extern {}
 }
 

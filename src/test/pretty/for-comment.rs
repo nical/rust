@@ -8,13 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// compile-flags: --crate-type=lib
+
 // pp-exact
 
-fn f(v: &[int]) -> int {
+fn f(v: &[isize]) -> isize {
     let mut n = 0;
-    for e in v.iter() {
+    for e in v {
         n = *e; // This comment once triggered pretty printer bug
     }
-
     n
 }

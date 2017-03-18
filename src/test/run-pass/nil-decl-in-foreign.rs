@@ -9,8 +9,9 @@
 // except according to those terms.
 
 // Issue #901
+// pretty-expanded FIXME #23616
+
 mod libc {
-    #[nolink]
     extern {
         pub fn printf(x: ());
     }

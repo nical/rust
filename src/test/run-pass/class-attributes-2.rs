@@ -7,9 +7,11 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+#![allow(unused_attribute)]
+#![feature(custom_attribute)]
 
 struct cat {
-  name: ~str,
+  name: String,
 }
 
 impl Drop for cat {
@@ -18,7 +20,7 @@ impl Drop for cat {
        Actually, cats don't always land on their feet when you drop them.
     */
     fn drop(&mut self) {
-        error!("{} landed on hir feet", self.name);
+        println!("{} landed on hir feet", self.name);
     }
 }
 
@@ -26,12 +28,12 @@ impl Drop for cat {
 /**
 Maybe it should technically be a kitten_maker.
 */
-fn cat(name: ~str) -> cat {
+fn cat(name: String) -> cat {
     cat {
         name: name
     }
 }
 
 pub fn main() {
-  let _kitty = cat(~"Spotty");
+  let _kitty = cat("Spotty".to_string());
 }

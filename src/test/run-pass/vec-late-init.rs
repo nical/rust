@@ -9,9 +9,8 @@
 // except according to those terms.
 
 
-
 pub fn main() {
-    let mut later: ~[int];
-    if true { later = ~[1]; } else { later = ~[2]; }
-    info!("{}", later[0]);
+    let mut later: Vec<isize> ;
+    if true { later = vec![1]; } else { later = vec![2]; }
+    println!("{}", later[0]);
 }

@@ -7,47 +7,36 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+//
 
-extern mod extra;
+#![feature(collections, core, str_char)]
 
 use std::str;
 
 pub fn main() {
     // Chars of 1, 2, 3, and 4 bytes
-    let chs: ~[char] = ~['e', 'é', '€', '\U00010000'];
-    let s: ~str = str::from_chars(chs);
-    let schs: ~[char] = s.chars().collect();
+    let chs: Vec<char> = vec!['e', 'é', '€', '\u{10000}'];
+    let s: String = chs.iter().cloned().collect();
+    let schs: Vec<char> = s.chars().collect();
 
-    assert!(s.len() == 10u);
-    assert!(s.char_len() == 4u);
-    assert!(schs.len() == 4u);
-    assert!(str::from_chars(schs) == s);
-    assert!(s.char_at(0u) == 'e');
-    assert!(s.char_at(1u) == 'é');
+    assert_eq!(s.len(), 10);
+    assert_eq!(s.chars().count(), 4);
+    assert_eq!(schs.len(), 4);
+    assert_eq!(schs.iter().cloned().collect::<String>(), s);
 
-    assert!((str::is_utf8(s.as_bytes())));
+    assert!((str::from_utf8(s.as_bytes()).is_ok()));
     // invalid prefix
-    assert!((!str::is_utf8([0x80_u8])));
+    assert!((!str::from_utf8(&[0x80]).is_ok()));
     // invalid 2 byte prefix
-    assert!((!str::is_utf8([0xc0_u8])));
-    assert!((!str::is_utf8([0xc0_u8, 0x10_u8])));
+    assert!((!str::from_utf8(&[0xc0]).is_ok()));
+    assert!((!str::from_utf8(&[0xc0, 0x10]).is_ok()));
     // invalid 3 byte prefix
-    assert!((!str::is_utf8([0xe0_u8])));
-    assert!((!str::is_utf8([0xe0_u8, 0x10_u8])));
-    assert!((!str::is_utf8([0xe0_u8, 0xff_u8, 0x10_u8])));
+    assert!((!str::from_utf8(&[0xe0]).is_ok()));
+    assert!((!str::from_utf8(&[0xe0, 0x10]).is_ok()));
+    assert!((!str::from_utf8(&[0xe0, 0xff, 0x10]).is_ok()));
     // invalid 4 byte prefix
-    assert!((!str::is_utf8([0xf0_u8])));
-    assert!((!str::is_utf8([0xf0_u8, 0x10_u8])));
-    assert!((!str::is_utf8([0xf0_u8, 0xff_u8, 0x10_u8])));
-    assert!((!str::is_utf8([0xf0_u8, 0xff_u8, 0xff_u8, 0x10_u8])));
-
-    let mut stack = ~"a×c€";
-    assert_eq!(stack.pop_char(), '€');
-    assert_eq!(stack.pop_char(), 'c');
-    stack.push_char('u');
-    assert!(stack == ~"a×u");
-    assert_eq!(stack.shift_char(), 'a');
-    assert_eq!(stack.shift_char(), '×');
-    stack.unshift_char('ß');
-    assert!(stack == ~"ßu");
+    assert!((!str::from_utf8(&[0xf0]).is_ok()));
+    assert!((!str::from_utf8(&[0xf0, 0x10]).is_ok()));
+    assert!((!str::from_utf8(&[0xf0, 0xff, 0x10]).is_ok()));
+    assert!((!str::from_utf8(&[0xf0, 0xff, 0xff, 0x10]).is_ok()));
 }

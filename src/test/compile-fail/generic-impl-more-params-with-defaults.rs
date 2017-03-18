@@ -8,17 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(default_type_params)];
+use std::marker;
 
 struct Heap;
 
-struct Vec<T, A = Heap>;
+struct Vec<T, A = Heap>(
+    marker::PhantomData<(T,A)>);
 
 impl<T, A = Heap> Vec<T, A> {
-    fn new() -> Vec<T, A> {Vec}
+    fn new() -> Vec<T, A> {Vec(marker::PhantomData)}
 }
 
 fn main() {
-    Vec::<int, Heap, bool>::new(); //~ ERROR the impl referenced by this path needs at most 2 type parameters, but 3 type parameters were supplied
-    //~^ ERROR too many type parameters provided: expected at most 2, found 3
+    Vec::<isize, Heap, bool>::new();
+    //~^ ERROR wrong number of type arguments
 }

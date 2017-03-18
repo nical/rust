@@ -8,16 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 struct A<'a> {
-    a: &'a [~str],
-    b: Option<&'a [~str]>,
+    a: &'a [String],
+    b: Option<&'a [String]>,
 }
 
 pub fn main() {
-    let b = &[~"foo"];
+    let b: &[String] = &["foo".to_string()];
     let a = A {
-        a: &[~"test"],
+        a: &["test".to_string()],
         b: Some(b),
     };
-    assert_eq!(a.b.get_ref()[0].as_slice(), "foo");
+    assert_eq!(a.b.as_ref().unwrap()[0], "foo");
 }

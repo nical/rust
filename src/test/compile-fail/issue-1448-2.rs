@@ -10,8 +10,8 @@
 
 // Regression test for issue #1448 and #1386
 
-fn foo(a: uint) -> uint { a }
+fn foo(a: u32) -> u32 { a }
 
 fn main() {
-    info!("{:u}", foo(10i)); //~ ERROR mismatched types
+    println!("{}", foo(10i32)); //~ ERROR mismatched types
 }

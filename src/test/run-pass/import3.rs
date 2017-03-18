@@ -1,6 +1,4 @@
-// xfail-fast
-
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -10,14 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(unused_imports)];
+#![allow(unused_imports)]
 
 use baz::zed;
 use baz::zed::bar;
 
 mod baz {
     pub mod zed {
-        pub fn bar() { info!("bar2"); }
+        pub fn bar() { println!("bar2"); }
     }
 }
 

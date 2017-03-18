@@ -8,9 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-static a: &'static str = &"foo";
-static b: *u8 = a as *u8; //~ ERROR non-scalar cast
-static c: *u8 = &a as *u8; //~ ERROR mismatched types
+static a: &'static str = "foo";
+static b: *const u8 = a as *const u8; //~ ERROR casting
+static c: *const u8 = &a as *const u8; //~ ERROR casting
 
 fn main() {
 }

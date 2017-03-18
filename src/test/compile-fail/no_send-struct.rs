@@ -8,16 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::kinds::marker;
+#![feature(optin_builtin_traits)]
+
+use std::marker::Send;
 
 struct Foo {
-    a: int,
-    ns: marker::NoSend
+    a: isize,
 }
+
+impl !Send for Foo {}
 
 fn bar<T: Send>(_: T) {}
 
 fn main() {
-    let x = Foo { a: 5, ns: marker::NoSend };
-    bar(x); //~ ERROR instantiating a type parameter with an incompatible type `Foo`, which does not fulfill `Send`
+    let x = Foo { a: 5 };
+    bar(x);
+    //~^ ERROR `Foo: std::marker::Send` is not satisfied
 }

@@ -9,7 +9,7 @@
 // except according to those terms.
 
 struct Foo {
-      baz: uint
+      baz: usize
 }
 
 impl Foo {
@@ -17,7 +17,7 @@ impl Foo {
         Foo { baz: 0 }.bar();
     }
 
-    fn bar() { //~ ERROR duplicate definition of value `bar`
+    fn bar() { //~ ERROR duplicate definitions
     }
 }
 

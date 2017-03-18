@@ -8,20 +8,23 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::task;
+#![feature(std_misc)]
 
-fn user(_i: int) {}
+use std::thread;
+
+fn user(_i: isize) {}
 
 fn foo() {
     // Here, i is *copied* into the proc (heap closure).
     // Requires allocation.  The proc's copy is not mutable.
     let mut i = 0;
-    task::spawn(proc() {
+    let t = thread::spawn(move|| {
         user(i);
         println!("spawned {}", i)
     });
     i += 1;
-    println!("original {}", i)
+    println!("original {}", i);
+    t.join();
 }
 
 fn bar() {
@@ -29,10 +32,11 @@ fn bar() {
     // mutable outside of the proc.
     let mut i = 0;
     while i < 10 {
-        task::spawn(proc() {
+        let t = thread::spawn(move|| {
             user(i);
         });
         i += 1;
+        t.join();
     }
 }
 
@@ -40,14 +44,14 @@ fn car() {
     // Here, i must be shadowed in the proc to be mutable.
     let mut i = 0;
     while i < 10 {
-        task::spawn(proc() {
+        let t = thread::spawn(move|| {
             let mut i = i;
             i += 1;
             user(i);
         });
         i += 1;
+        t.join();
     }
 }
 
 pub fn main() {}
-

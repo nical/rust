@@ -8,13 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-enum E { V, VV(int) }
-static C: E = V;
+
+enum E { V, VV(isize) }
+static C: E = E::V;
 
 fn f(a: &E) {
     match *a {
-        V => {}
-        VV(..) => fail!()
+        E::V => {}
+        E::VV(..) => panic!()
     }
 }
 

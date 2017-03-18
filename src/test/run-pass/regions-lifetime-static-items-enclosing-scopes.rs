@@ -11,18 +11,18 @@
 // This test verifies that temporary lifetime is correctly computed
 // for static objects in enclosing scopes.
 
-extern mod extra;
-use std::cmp::Eq;
 
-fn f<T:Eq>(o: &mut Option<T>) {
-    assert!(*o == None);
+use std::cmp::PartialEq;
+
+fn f<T:PartialEq+std::fmt::Debug>(o: &mut Option<T>) {
+    assert_eq!(*o, None);
 }
 
 pub fn main() {
     mod t {
         enum E {V=1, A=0}
-        static C: E = V;
+        static C: E = E::V;
     }
 
-    f::<int>(&mut None);
+    f::<isize>(&mut None);
 }

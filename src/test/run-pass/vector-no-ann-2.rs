@@ -8,6 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+// pretty-expanded FIXME #23616
 
-pub fn main() { let _quux: @~[uint] = @~[]; }
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
+pub fn main() { let _quux: Box<Vec<usize>> = box Vec::new(); }

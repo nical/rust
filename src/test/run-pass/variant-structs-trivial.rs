@@ -8,11 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(struct_variant)];
+// pretty-expanded FIXME #23616
 
 enum Foo {
-    Bar { x: int },
-    Baz { y: int }
+    Bar { x: isize },
+    Baz { y: isize }
 }
 
 pub fn main() { }

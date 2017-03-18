@@ -9,17 +9,20 @@
 // except according to those terms.
 
 struct closure_box<'a> {
-    cl: 'a ||,
+    cl: Box<FnMut() + 'a>,
 }
 
-fn box_it<'r>(x: 'r ||) -> closure_box<'r> {
+fn box_it<'a>(x: Box<FnMut() + 'a>) -> closure_box<'a> {
     closure_box {cl: x}
 }
 
 pub fn main() {
     let mut i = 3;
-    let cl_box = box_it(|| i += 1);
     assert_eq!(i, 3);
-    (cl_box.cl)();
+    {
+        let cl = || i += 1;
+        let mut cl_box = box_it(Box::new(cl));
+        (cl_box.cl)();
+    }
     assert_eq!(i, 4);
 }

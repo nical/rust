@@ -8,14 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn a(x: ~str) -> ~str {
+fn a(x: String) -> String {
     format!("First function with {}", x)
 }
 
-fn a(x: ~str, y: ~str) -> ~str { //~ ERROR duplicate definition of value `a`
+fn a(x: String, y: String) -> String { //~ ERROR a value named `a` has already been defined
     format!("Second function with {} and {}", x, y)
 }
 
 fn main() {
-    info!("Result: ");
+    println!("Result: ");
 }

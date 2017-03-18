@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,28 +8,29 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-test #7340 fails on 32-bit linux
-use std::ptr;
 
-enum a_tag {
-    a_tag(u64)
+use std::mem;
+
+enum Tag {
+    TagInner(u64)
 }
 
-struct t_rec {
+struct Rec {
     c8: u8,
-    t: a_tag
+    t: Tag
 }
 
-fn mk_rec() -> t_rec {
-    return t_rec { c8:0u8, t:a_tag(0u64) };
+fn mk_rec() -> Rec {
+    return Rec { c8:0, t:Tag::TagInner(0) };
 }
 
-fn is_8_byte_aligned(u: &a_tag) -> bool {
-    let p = ptr::to_unsafe_ptr(u) as u64;
-    return (p & 7u64) == 0u64;
+fn is_u64_aligned(u: &Tag) -> bool {
+    let p: usize = unsafe { mem::transmute(u) };
+    let u64_align = std::mem::min_align_of::<u64>();
+    return (p & (u64_align - 1)) == 0;
 }
 
 pub fn main() {
     let x = mk_rec();
-    assert!(is_8_byte_aligned(&x.t));
+    assert!(is_u64_aligned(&x.t));
 }

@@ -10,15 +10,16 @@
 
 // Test the uninit() construct returning various empty types.
 
-use std::vec;
-use std::unstable::intrinsics;
+// pretty-expanded FIXME #23616
 
-#[deriving(Clone)]
+use std::mem;
+
+#[derive(Clone)]
 struct Foo;
 
 pub fn main() {
     unsafe {
-        let _x: Foo = intrinsics::uninit();
-        let _x: [Foo, ..2] = intrinsics::uninit();
+        let _x: Foo = mem::uninitialized();
+        let _x: [Foo; 2] = mem::uninitialized();
     }
 }

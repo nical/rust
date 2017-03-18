@@ -8,8 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct A { a: int }
 
-fn a(a: A) -> int { return a.a; }
+struct A { a: isize }
 
-pub fn main() { let x: A = A {a: 1}; assert!((a(x) == 1)); }
+fn a(a: A) -> isize { return a.a; }
+
+pub fn main() { let x: A = A {a: 1}; assert_eq!(a(x), 1); }

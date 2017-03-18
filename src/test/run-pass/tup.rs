@@ -8,9 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-type point = (int, int);
 
-fn f(p: point, x: int, y: int) {
+type point = (isize, isize);
+
+fn f(p: point, x: isize, y: isize) {
     let (a, b) = p;
     assert_eq!(a, x);
     assert_eq!(b, y);

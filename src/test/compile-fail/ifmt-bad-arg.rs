@@ -17,62 +17,43 @@ fn main() {
                             //~^ ERROR: argument never used
     format!("{foo}");         //~ ERROR: no argument named `foo`
 
+    format!("", 1, 2);                 //~ ERROR: multiple unused formatting arguments
     format!("{}", 1, 2);               //~ ERROR: argument never used
     format!("{1}", 1, 2);              //~ ERROR: argument never used
     format!("{}", 1, foo=2);           //~ ERROR: named argument never used
     format!("{foo}", 1, foo=2);        //~ ERROR: argument never used
     format!("", foo=2);                //~ ERROR: named argument never used
 
-    format!("{0:d} {0:s}", 1);         //~ ERROR: redeclared with type `s`
-    format!("{foo:d} {foo:s}", foo=1); //~ ERROR: redeclared with type `s`
-
     format!("{foo}", foo=1, foo=2);    //~ ERROR: duplicate argument
-    format!("#");                      //~ ERROR: `#` reference used
     format!("", foo=1, 2);             //~ ERROR: positional arguments cannot follow
 
-    format!("{0, select, a{} a{} other{}}", "a");    //~ ERROR: duplicate selector
-    format!("{0, plural, =1{} =1{} other{}}", 1u);   //~ ERROR: duplicate selector
-    format!("{0, plural, one{} one{} other{}}", 1u); //~ ERROR: duplicate selector
+    // bad number of arguments, see #15780
+
+    format!("{0}");
+    //~^ ERROR invalid reference to argument `0` (no arguments given)
+
+    format!("{0} {1}", 1);
+    //~^ ERROR invalid reference to argument `1` (there is 1 argument)
+
+    format!("{0} {1} {2}", 1, 2);
+    //~^ ERROR invalid reference to argument `2` (there are 2 arguments)
+
+    format!("{0} {1}");
+    //~^ ERROR invalid reference to argument `0` (no arguments given)
+    //~^^ ERROR invalid reference to argument `1` (no arguments given)
+
+    // bad named arguments, #35082
+
+    format!("{valuea} {valueb}", valuea=5, valuec=7);
+    //~^ ERROR there is no argument named `valueb`
+    //~^^ ERROR named argument never used
 
     // bad syntax of the format string
 
-    format!("{"); //~ ERROR: expected `}` but string was terminated
-    format!("\\ "); //~ ERROR: invalid escape
-    format!("\\"); //~ ERROR: expected an escape
-
-    format!("{0, }", 1); //~ ERROR: expected method
-    format!("{0, foo}", 1); //~ ERROR: unknown method
-    format!("{0, select}", "a"); //~ ERROR: expected `,` but found `}`
-    format!("{0, plural}", 1); //~ ERROR: expected `,` but found `}`
-
-    format!("{0, select, a{{}", 1); //~ ERROR: expected `}` but string was terminated
-    format!("{0, select, {} other{}}", "a"); //~ ERROR: empty selector
-    format!("{0, select, other{} other{}}", "a"); //~ ERROR: multiple `other`
-    format!("{0, plural, offset: other{}}", "a"); //~ ERROR: must be an integer
-    format!("{0, plural, offset 1 other{}}", "a"); //~ ERROR: expected `:` but found `1`
-    format!("{0, plural, =a{} other{}}", "a"); //~ ERROR: followed by an integer
-    format!("{0, plural, a{} other{}}", "a"); //~ ERROR: unexpected plural
-    format!("{0, select, a{}}", "a"); //~ ERROR: must provide an `other`
-    format!("{0, plural, =1{}}", "a"); //~ ERROR: must provide an `other`
-
-    format!("{0, plural, other{{0:s}}}", "a"); //~ ERROR: previously used as
-    format!("{:s} {0, plural, other{}}", "a"); //~ ERROR: argument used to
-    format!("{0, select, other{}} \
-             {0, plural, other{}}", "a");
-    //~^ ERROR: declared with multiple formats
-
-    // It should be illegal to use implicit placement arguments nested inside of
-    // format strings because otherwise the "internal pointer of which argument
-    // is next" would be invalidated if different cases had different numbers of
-    // arguments.
-    format!("{1, select, other{{}}}", 1, "a"); //~ ERROR: cannot use implicit
-    format!("{1, plural, other{{}}}", 1, 1); //~ ERROR: cannot use implicit
-    format!("{0, plural, other{{1:.*d}}}", 1, 2); //~ ERROR: cannot use implicit
+    format!("{"); //~ ERROR: expected `'}'` but string was terminated
 
     format!("foo } bar"); //~ ERROR: unmatched `}` found
     format!("foo }"); //~ ERROR: unmatched `}` found
 
-    format!();          //~ ERROR: requires at least a format string argument
-    format!("" 1);      //~ ERROR: expected token: `,`
-    format!("", 1 1);   //~ ERROR: expected token: `,`
+    format!("foo %s baz", "bar"); //~ ERROR: argument never used
 }

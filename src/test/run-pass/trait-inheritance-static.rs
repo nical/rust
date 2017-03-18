@@ -8,16 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-trait MyNum {
-    fn from_int(int) -> Self;
+
+pub trait MyNum {
+    fn from_int(isize) -> Self;
 }
 
 pub trait NumExt: MyNum { }
 
-struct S { v: int }
+struct S { v: isize }
 
 impl MyNum for S {
-    fn from_int(i: int) -> S {
+    fn from_int(i: isize) -> S {
         S {
             v: i
         }

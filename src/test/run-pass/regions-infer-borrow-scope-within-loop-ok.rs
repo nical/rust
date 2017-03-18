@@ -8,14 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
 
-fn borrow<'r, T>(x: &'r T) -> &'r T {x}
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
+fn borrow<T>(x: &T) -> &T {x}
 
 pub fn main() {
-    let x = @3;
+    let x: Box<_> = box 3;
     loop {
-        let y = borrow(x);
+        let y = borrow(&*x);
         assert_eq!(*x, *y);
         break;
     }

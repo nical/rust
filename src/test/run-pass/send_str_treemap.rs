@@ -8,66 +8,60 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern mod extra;
+use std::collections::BTreeMap;
+use std::borrow::Cow;
 
-use std::clone::{Clone, DeepClone};
-use std::cmp::{TotalEq, Ord, TotalOrd, Equiv};
-use std::cmp::Equal;
-use std::container::{Container, Map, MutableMap};
-use std::default::Default;
-use std::send_str::{SendStr, SendStrOwned, SendStrStatic};
-use std::str::Str;
-use std::to_str::ToStr;
-use self::extra::treemap::TreeMap;
-use std::option::Some;
+use std::borrow::Cow::{Owned as O, Borrowed as B};
 
-pub fn main() {
-    let mut map: TreeMap<SendStr, uint> = TreeMap::new();
-    assert!(map.insert(SendStrStatic("foo"), 42));
-    assert!(!map.insert(SendStrOwned(~"foo"), 42));
-    assert!(!map.insert(SendStrStatic("foo"), 42));
-    assert!(!map.insert(SendStrOwned(~"foo"), 42));
+type SendStr = Cow<'static, str>;
 
-    assert!(!map.insert(SendStrStatic("foo"), 43));
-    assert!(!map.insert(SendStrOwned(~"foo"), 44));
-    assert!(!map.insert(SendStrStatic("foo"), 45));
-    assert!(!map.insert(SendStrOwned(~"foo"), 46));
+fn main() {
+    let mut map: BTreeMap<SendStr, usize> = BTreeMap::new();
+    assert!(map.insert(B("foo"), 42).is_none());
+    assert!(map.insert(O("foo".to_string()), 42).is_some());
+    assert!(map.insert(B("foo"), 42).is_some());
+    assert!(map.insert(O("foo".to_string()), 42).is_some());
+
+    assert!(map.insert(B("foo"), 43).is_some());
+    assert!(map.insert(O("foo".to_string()), 44).is_some());
+    assert!(map.insert(B("foo"), 45).is_some());
+    assert!(map.insert(O("foo".to_string()), 46).is_some());
 
     let v = 46;
 
-    assert_eq!(map.find(&SendStrOwned(~"foo")), Some(&v));
-    assert_eq!(map.find(&SendStrStatic("foo")), Some(&v));
+    assert_eq!(map.get(&O("foo".to_string())), Some(&v));
+    assert_eq!(map.get(&B("foo")), Some(&v));
 
     let (a, b, c, d) = (50, 51, 52, 53);
 
-    assert!(map.insert(SendStrStatic("abc"), a));
-    assert!(map.insert(SendStrOwned(~"bcd"), b));
-    assert!(map.insert(SendStrStatic("cde"), c));
-    assert!(map.insert(SendStrOwned(~"def"), d));
+    assert!(map.insert(B("abc"), a).is_none());
+    assert!(map.insert(O("bcd".to_string()), b).is_none());
+    assert!(map.insert(B("cde"), c).is_none());
+    assert!(map.insert(O("def".to_string()), d).is_none());
 
-    assert!(!map.insert(SendStrStatic("abc"), a));
-    assert!(!map.insert(SendStrOwned(~"bcd"), b));
-    assert!(!map.insert(SendStrStatic("cde"), c));
-    assert!(!map.insert(SendStrOwned(~"def"), d));
+    assert!(map.insert(B("abc"), a).is_some());
+    assert!(map.insert(O("bcd".to_string()), b).is_some());
+    assert!(map.insert(B("cde"), c).is_some());
+    assert!(map.insert(O("def".to_string()), d).is_some());
 
-    assert!(!map.insert(SendStrOwned(~"abc"), a));
-    assert!(!map.insert(SendStrStatic("bcd"), b));
-    assert!(!map.insert(SendStrOwned(~"cde"), c));
-    assert!(!map.insert(SendStrStatic("def"), d));
+    assert!(map.insert(O("abc".to_string()), a).is_some());
+    assert!(map.insert(B("bcd"), b).is_some());
+    assert!(map.insert(O("cde".to_string()), c).is_some());
+    assert!(map.insert(B("def"), d).is_some());
 
-    assert_eq!(map.find(&SendStrStatic("abc")), Some(&a));
-    assert_eq!(map.find(&SendStrStatic("bcd")), Some(&b));
-    assert_eq!(map.find(&SendStrStatic("cde")), Some(&c));
-    assert_eq!(map.find(&SendStrStatic("def")), Some(&d));
+    assert_eq!(map.get(&B("abc")), Some(&a));
+    assert_eq!(map.get(&B("bcd")), Some(&b));
+    assert_eq!(map.get(&B("cde")), Some(&c));
+    assert_eq!(map.get(&B("def")), Some(&d));
 
-    assert_eq!(map.find(&SendStrOwned(~"abc")), Some(&a));
-    assert_eq!(map.find(&SendStrOwned(~"bcd")), Some(&b));
-    assert_eq!(map.find(&SendStrOwned(~"cde")), Some(&c));
-    assert_eq!(map.find(&SendStrOwned(~"def")), Some(&d));
+    assert_eq!(map.get(&O("abc".to_string())), Some(&a));
+    assert_eq!(map.get(&O("bcd".to_string())), Some(&b));
+    assert_eq!(map.get(&O("cde".to_string())), Some(&c));
+    assert_eq!(map.get(&O("def".to_string())), Some(&d));
 
-    assert!(map.pop(&SendStrStatic("foo")).is_some());
-    assert_eq!(map.move_iter().map(|(k, v)| k.to_str() + v.to_str())
-                              .to_owned_vec()
+    assert!(map.remove(&B("foo")).is_some());
+    assert_eq!(map.into_iter().map(|(k, v)| format!("{}{}", k, v))
+                              .collect::<Vec<String>>()
                               .concat(),
-               ~"abc50bcd51cde52def53");
+               "abc50bcd51cde52def53".to_string());
 }

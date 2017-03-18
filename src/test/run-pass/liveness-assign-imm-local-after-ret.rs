@@ -8,13 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(unreachable_code)];
+// pretty-expanded FIXME #23616
+
+#![allow(dead_code)]
 
 fn test() {
-    let _v: int;
+    let _v: isize;
     _v = 1;
     return;
-    _v = 2; //~ WARNING: unreachable statement
+    _v = 2;
 }
 
 pub fn main() {

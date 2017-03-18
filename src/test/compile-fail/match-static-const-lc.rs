@@ -10,46 +10,48 @@
 
 // Issue #7526: lowercase static constants in patterns look like bindings
 
-#[allow(dead_code)];
-#[deny(non_uppercase_pattern_statics)];
+#![allow(dead_code)]
+#![deny(non_upper_case_globals)]
 
-pub static a : int = 97;
+#[allow(non_upper_case_globals)]
+pub const a : isize = 97;
 
 fn f() {
     let r = match (0,0) {
         (0, a) => 0,
-        //~^ ERROR static constant in pattern should be all caps
+        //~^ ERROR constant in pattern `a` should have an upper case name such as `A`
         (x, y) => 1 + x + y,
     };
-    assert!(r == 1);
+    assert_eq!(r, 1);
 }
 
 mod m {
-    pub static aha : int = 7;
+    #[allow(non_upper_case_globals)]
+    pub const aha : isize = 7;
 }
 
 fn g() {
     use self::m::aha;
     let r = match (0,0) {
         (0, aha) => 0,
-        //~^ ERROR static constant in pattern should be all caps
+        //~^ ERROR constant in pattern `aha` should have an upper case name such as `AHA`
         (x, y)   => 1 + x + y,
     };
-    assert!(r == 1);
+    assert_eq!(r, 1);
 }
 
 mod n {
-    pub static OKAY : int = 8;
+    pub const OKAY : isize = 8;
 }
 
 fn h() {
-    use not_okay = self::n::OKAY;
+    use self::n::OKAY as not_okay;
     let r = match (0,0) {
         (0, not_okay) => 0,
-        //~^ ERROR static constant in pattern should be all caps
+//~^ ERROR constant in pattern `not_okay` should have an upper case name such as `NOT_OKAY`
         (x, y)   => 1 + x + y,
     };
-    assert!(r == 1);
+    assert_eq!(r, 1);
 }
 
 fn main () {

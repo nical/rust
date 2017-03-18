@@ -1,6 +1,4 @@
-// xfail-fast
-
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -13,10 +11,14 @@
 // Minimized version of issue-2804.rs. Both check that callee IDs don't
 // clobber the previous node ID in a macro expr
 
-use std::hashmap::HashMap;
+#![feature(collections)]
 
-fn add_interfaces(managed_ip: ~str, device: HashMap<~str, int>)  {
-     error!("{}, {:?}", managed_ip, device.get(&~"interfaces"));
+extern crate collections;
+
+use std::collections::HashMap;
+
+fn add_interfaces(managed_ip: String, device: HashMap<String, isize>)  {
+     println!("{}, {}", managed_ip, device["interfaces"]);
 }
 
 pub fn main() {}

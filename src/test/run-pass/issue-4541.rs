@@ -8,21 +8,21 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn parse_args() -> ~str {
-    let args = ::std::os::args();
+fn parse_args() -> String {
+    let args: Vec<_> = ::std::env::args().collect();
     let mut n = 0;
 
     while n < args.len() {
-        match args[n].clone() {
-            ~"-v" => (),
+        match &*args[n] {
+            "-v" => (),
             s => {
-                return s;
+                return s.to_string();
             }
         }
         n += 1;
     }
 
-    return ~""
+    return "".to_string()
 }
 
 pub fn main() {

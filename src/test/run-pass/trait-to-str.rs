@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -7,34 +7,38 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+//
 
-// xfail-fast
 
 trait to_str {
-    fn to_string(&self) -> ~str;
+    fn to_string_(&self) -> String;
 }
 
-impl to_str for int {
-    fn to_string(&self) -> ~str { self.to_str() }
+impl to_str for isize {
+    fn to_string_(&self) -> String { self.to_string() }
 }
 
-impl<T:to_str> to_str for ~[T] {
-    fn to_string(&self) -> ~str {
-        format!("[{}]", self.iter().map(|e| e.to_string()).to_owned_vec().connect(", "))
+impl<T:to_str> to_str for Vec<T> {
+    fn to_string_(&self) -> String {
+        format!("[{}]",
+                self.iter()
+                    .map(|e| e.to_string_())
+                    .collect::<Vec<String>>()
+                    .join(", "))
     }
 }
 
 pub fn main() {
-    assert!(1.to_string() == ~"1");
-    assert!((~[2, 3, 4]).to_string() == ~"[2, 3, 4]");
+    assert_eq!(1.to_string_(), "1".to_string());
+    assert_eq!((vec![2, 3, 4]).to_string_(), "[2, 3, 4]".to_string());
 
-    fn indirect<T:to_str>(x: T) -> ~str {
-        x.to_string() + "!"
+    fn indirect<T:to_str>(x: T) -> String {
+        format!("{}!", x.to_string_())
     }
-    assert!(indirect(~[10, 20]) == ~"[10, 20]!");
+    assert_eq!(indirect(vec![10, 20]), "[10, 20]!".to_string());
 
-    fn indirect2<T:to_str>(x: T) -> ~str {
+    fn indirect2<T:to_str>(x: T) -> String {
         indirect(x)
     }
-    assert!(indirect2(~[1]) == ~"[1]!");
+    assert_eq!(indirect2(vec![1]), "[1]!".to_string());
 }

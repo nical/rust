@@ -8,10 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-enum PureCounter { PureCounter(uint) }
+// pretty-expanded FIXME #23616
 
-fn each(thing: PureCounter, blk: |v: &uint|) {
-    let PureCounter(ref x) = thing;
+enum PureCounter { PureCounterVariant(usize) }
+
+fn each<F>(thing: PureCounter, blk: F) where F: FnOnce(&usize) {
+    let PureCounter::PureCounterVariant(ref x) = thing;
     blk(x);
 }
 

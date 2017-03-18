@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,13 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
 
-fn test(f: |uint| -> uint) -> uint {
-    return f(22u);
+
+fn test<F>(f: F) -> usize where F: FnOnce(usize) -> usize {
+    return f(22);
 }
 
 pub fn main() {
-    let y = test(|x| 4u * x);
-    assert_eq!(y, 88u);
+    let y = test(|x| 4 * x);
+    assert_eq!(y, 88);
 }

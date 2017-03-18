@@ -10,12 +10,13 @@
 
 // Passing enums by value
 
+// pretty-expanded FIXME #23616
+
 pub enum void { }
 
 mod bindgen {
     use super::void;
 
-    #[nolink]
     extern {
         pub fn printf(v: void);
     }

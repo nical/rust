@@ -12,12 +12,14 @@
 // as a _|_-typed thing, not a str-typed thing
 // error-pattern:bye
 
-#[allow(unreachable_code)];
-#[allow(unused_variable)];
+#![allow(unreachable_code)]
+#![allow(unused_variables)]
 
-struct T { t: ~str }
+struct T {
+    t: String,
+}
 
 fn main() {
-    let pth = fail!("bye");
-    let _rs: T = T {t: pth};
+    let pth = panic!("bye");
+    let _rs: T = T { t: pth };
 }

@@ -8,28 +8,31 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern mod extra;
 
-mod libc {
-    use std::libc::{c_char, size_t};
 
-    #[nolink]
+#![feature(std_misc, libc)]
+
+extern crate libc;
+use std::ffi::CString;
+
+mod mlibc {
+    use libc::{c_char, size_t};
+
     extern {
         #[link_name = "strlen"]
-        pub fn my_strlen(str: *c_char) -> size_t;
+        pub fn my_strlen(str: *const c_char) -> size_t;
     }
 }
 
-fn strlen(str: ~str) -> uint {
+fn strlen(str: String) -> usize {
     // C string is terminated with a zero
-    str.with_c_str(|buf| {
-        unsafe {
-            libc::my_strlen(buf) as uint
-        }
-    })
+    let s = CString::new(str).unwrap();
+    unsafe {
+        mlibc::my_strlen(s.as_ptr()) as usize
+    }
 }
 
 pub fn main() {
-    let len = strlen(~"Rust");
-    assert_eq!(len, 4u);
+    let len = strlen("Rust".to_string());
+    assert_eq!(len, 4);
 }

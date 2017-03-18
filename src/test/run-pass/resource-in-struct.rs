@@ -8,22 +8,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
-
 // Ensures that class dtors run if the object is inside an enum
 // variant
 
 use std::cell::Cell;
 
-type closable = @Cell<bool>;
+type closable<'a> = &'a Cell<bool>;
 
-struct close_res {
-  i: closable,
+struct close_res<'a> {
+  i: closable<'a>,
 
 }
 
-#[unsafe_destructor]
-impl Drop for close_res {
+impl<'a> Drop for close_res<'a> {
     fn drop(&mut self) {
         self.i.set(false);
     }
@@ -40,8 +37,8 @@ enum option<T> { none, some(T), }
 fn sink(_res: option<close_res>) { }
 
 pub fn main() {
-    let c = @Cell::new(true);
-    sink(none);
-    sink(some(close_res(c)));
+    let c = &Cell::new(true);
+    sink(option::none);
+    sink(option::some(close_res(c)));
     assert!(!c.get());
 }

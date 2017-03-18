@@ -8,7 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::hashmap::HashMap;
+
+#![feature(collections)]
+
+extern crate collections;
+
+use std::collections::HashMap;
 
 // This is a fancy one: it uses an external iterator established
 // outside the loop, breaks, then _picks back up_ and continues
@@ -17,7 +22,7 @@ use std::hashmap::HashMap;
 pub fn main() {
     let mut h = HashMap::new();
     let kvs = [(1, 10), (2, 20), (3, 30)];
-    for &(k,v) in kvs.iter() {
+    for &(k,v) in &kvs {
         h.insert(k,v);
     }
     let mut x = 0;
@@ -25,7 +30,7 @@ pub fn main() {
 
     let mut i = h.iter();
 
-    for (&k,&v) in i {
+    for (&k,&v) in i.by_ref() {
         x += k;
         y += v;
         break;

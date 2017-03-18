@@ -8,17 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
-// xfail-android
+// ignore-cross-compile
+#![feature(quote, rustc_private)]
+#![deny(unused_variables)]
 
-#[deny(unused_variable)];
-
-extern mod syntax;
+extern crate syntax;
 
 use syntax::ext::base::ExtCtxt;
 
 fn test(cx: &mut ExtCtxt) {
-    let foo = 10i;
+    let foo = 10;
     let _e = quote_expr!(cx, $foo);
 }
 

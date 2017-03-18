@@ -10,56 +10,77 @@
 
 // When denying at the crate level, be sure to not get random warnings from the
 // injected intrinsics by the compiler.
-#[feature(struct_variant)];
-#[feature(globs)];
-#[deny(missing_doc)];
-#[allow(dead_code)];
+#![deny(missing_docs)]
+#![allow(dead_code)]
+#![feature(associated_type_defaults)]
 
 //! Some garbage docs for the crate here
-#[doc="More garbage"];
+#![doc="More garbage"]
+
+type Typedef = String;
+pub type PubTypedef = String; //~ ERROR: missing documentation for a type alias
 
 struct Foo {
-    a: int,
-    b: int,
+    a: isize,
+    b: isize,
 }
 
-pub struct PubFoo { //~ ERROR: missing documentation
-    a: int,      //~ ERROR: missing documentation
-    priv b: int,
+pub struct PubFoo { //~ ERROR: missing documentation for a struct
+    pub a: isize,      //~ ERROR: missing documentation for a struct field
+    b: isize,
 }
 
-#[allow(missing_doc)]
+#[allow(missing_docs)]
 pub struct PubFoo2 {
-    a: int,
-    c: int,
+    pub a: isize,
+    pub c: isize,
 }
 
 mod module_no_dox {}
-pub mod pub_module_no_dox {} //~ ERROR: missing documentation
+pub mod pub_module_no_dox {} //~ ERROR: missing documentation for a module
 
 /// dox
 pub fn foo() {}
-pub fn foo2() {} //~ ERROR: missing documentation
+pub fn foo2() {} //~ ERROR: missing documentation for a function
 fn foo3() {}
-#[allow(missing_doc)] pub fn foo4() {}
+#[allow(missing_docs)] pub fn foo4() {}
 
 /// dox
 pub trait A {
     /// dox
-    fn foo();
+    fn foo(&self);
     /// dox
-    fn foo_with_impl() {}
+    fn foo_with_impl(&self) {}
 }
-#[allow(missing_doc)]
+
+#[allow(missing_docs)]
 trait B {
-    fn foo();
-    fn foo_with_impl() {}
+    fn foo(&self);
+    fn foo_with_impl(&self) {}
 }
-pub trait C { //~ ERROR: missing documentation
-    fn foo(); //~ ERROR: missing documentation
-    fn foo_with_impl() {} //~ ERROR: missing documentation
+
+pub trait C { //~ ERROR: missing documentation for a trait
+    fn foo(&self); //~ ERROR: missing documentation for a trait method
+    fn foo_with_impl(&self) {} //~ ERROR: missing documentation for a trait method
 }
-#[allow(missing_doc)] pub trait D {}
+
+#[allow(missing_docs)]
+pub trait D {
+    fn dummy(&self) { }
+}
+
+/// dox
+pub trait E {
+    type AssociatedType; //~ ERROR: missing documentation for an associated type
+    type AssociatedTypeDef = Self; //~ ERROR: missing documentation for an associated type
+
+    /// dox
+    type DocumentedType;
+    /// dox
+    type DocumentedTypeDef = Self;
+    /// dox
+    fn dummy(&self) {}
+}
 
 impl Foo {
     pub fn foo() {}
@@ -67,14 +88,14 @@ impl Foo {
 }
 
 impl PubFoo {
-    pub fn foo() {} //~ ERROR: missing documentation
+    pub fn foo() {} //~ ERROR: missing documentation for a method
     /// dox
     pub fn foo1() {}
     fn foo2() {}
-    #[allow(missing_doc)] pub fn foo3() {}
+    #[allow(missing_docs)] pub fn foo3() {}
 }
 
-#[allow(missing_doc)]
+#[allow(missing_docs)]
 trait F {
     fn a();
     fn b(&self);
@@ -86,7 +107,7 @@ impl F for Foo {
     fn b(&self) {}
 }
 
-// It sure is nice if doc(hidden) implies allow(missing_doc), and that it
+// It sure is nice if doc(hidden) implies allow(missing_docs), and that it
 // applies recursively
 #[doc(hidden)]
 mod a {
@@ -98,19 +119,16 @@ mod a {
 
 enum Baz {
     BazA {
-        a: int,
-        b: int
+        a: isize,
+        b: isize
     },
     BarB
 }
 
-pub enum PubBaz { //~ ERROR: missing documentation
-    PubBazA { //~ ERROR: missing documentation
-        a: int, //~ ERROR: missing documentation
-        priv b: int
+pub enum PubBaz { //~ ERROR: missing documentation for an enum
+    PubBazA { //~ ERROR: missing documentation for a variant
+        a: isize, //~ ERROR: missing documentation for a struct field
     },
-
-    priv PubBazB
 }
 
 /// dox
@@ -118,42 +136,59 @@ pub enum PubBaz2 {
     /// dox
     PubBaz2A {
         /// dox
-        a: int,
-        priv b: int
+        a: isize,
     },
-    priv PubBaz2B
 }
 
-#[allow(missing_doc)]
+#[allow(missing_docs)]
 pub enum PubBaz3 {
     PubBaz3A {
-        a: int,
-        priv b: int
+        b: isize
     },
-    priv PubBaz3B
 }
 
 #[doc(hidden)]
 pub fn baz() {}
 
+
+const FOO: u32 = 0;
+/// dox
+pub const FOO1: u32 = 0;
+#[allow(missing_docs)]
+pub const FOO2: u32 = 0;
+#[doc(hidden)]
+pub const FOO3: u32 = 0;
+pub const FOO4: u32 = 0; //~ ERROR: missing documentation for a const
+
+
+static BAR: u32 = 0;
+/// dox
+pub static BAR1: u32 = 0;
+#[allow(missing_docs)]
+pub static BAR2: u32 = 0;
+#[doc(hidden)]
+pub static BAR3: u32 = 0;
+pub static BAR4: u32 = 0; //~ ERROR: missing documentation for a static
+
+
 mod internal_impl {
     /// dox
     pub fn documented() {}
-    pub fn undocumented1() {} //~ ERROR: missing documentation
-    pub fn undocumented2() {} //~ ERROR: missing documentation
+    pub fn undocumented1() {} //~ ERROR: missing documentation for a function
+    pub fn undocumented2() {} //~ ERROR: missing documentation for a function
     fn undocumented3() {}
     /// dox
     pub mod globbed {
         /// dox
         pub fn also_documented() {}
-        pub fn also_undocumented1() {} //~ ERROR: missing documentation
+        pub fn also_undocumented1() {} //~ ERROR: missing documentation for a function
         fn also_undocumented2() {}
     }
 }
 /// dox
 pub mod public_interface {
-    pub use foo = internal_impl::documented;
-    pub use bar = internal_impl::undocumented1;
+    pub use internal_impl::documented as foo;
+    pub use internal_impl::undocumented1 as bar;
     pub use internal_impl::{documented, undocumented2};
     pub use internal_impl::globbed::*;
 }

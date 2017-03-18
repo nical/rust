@@ -8,18 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
-
 use std::cell::Cell;
 
-struct dtor {
-    x: @Cell<int>,
+struct dtor<'a> {
+    x: &'a Cell<isize>,
 }
 
-#[unsafe_destructor]
-impl Drop for dtor {
+impl<'a> Drop for dtor<'a> {
     fn drop(&mut self) {
-        // abuse access to shared mutable state to write this code
         self.x.set(self.x.get() - 1);
     }
 }
@@ -27,12 +23,12 @@ impl Drop for dtor {
 fn unwrap<T>(o: Option<T>) -> T {
     match o {
       Some(v) => v,
-      None => fail!()
+      None => panic!()
     }
 }
 
 pub fn main() {
-    let x = @Cell::new(1);
+    let x = &Cell::new(1);
 
     {
         let b = Some(dtor { x:x });

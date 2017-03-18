@@ -8,34 +8,31 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
-
 use std::cell::Cell;
 
-struct shrinky_pointer {
-  i: @@Cell<int>,
+struct shrinky_pointer<'a> {
+  i: &'a Cell<isize>,
 }
 
-#[unsafe_destructor]
-impl Drop for shrinky_pointer {
+impl<'a> Drop for shrinky_pointer<'a> {
     fn drop(&mut self) {
-        error!("Hello!"); self.i.set(self.i.get() - 1);
+        println!("Hello!"); self.i.set(self.i.get() - 1);
     }
 }
 
-impl shrinky_pointer {
-    pub fn look_at(&self) -> int { return self.i.get(); }
+impl<'a> shrinky_pointer<'a> {
+    pub fn look_at(&self) -> isize { return self.i.get(); }
 }
 
-fn shrinky_pointer(i: @@Cell<int>) -> shrinky_pointer {
+fn shrinky_pointer(i: &Cell<isize>) -> shrinky_pointer {
     shrinky_pointer {
         i: i
     }
 }
 
 pub fn main() {
-    let my_total = @@Cell::new(10);
-    { let pt = shrinky_pointer(my_total); assert!((pt.look_at() == 10)); }
-    error!("my_total = {}", my_total.get());
+    let my_total = &Cell::new(10);
+    { let pt = shrinky_pointer(my_total); assert_eq!(pt.look_at(), 10); }
+    println!("my_total = {}", my_total.get());
     assert_eq!(my_total.get(), 9);
 }

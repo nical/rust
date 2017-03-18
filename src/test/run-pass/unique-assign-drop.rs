@@ -8,11 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(dead_assignment)];
+
+#![allow(dead_assignment)]
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 pub fn main() {
-    let i = ~1;
-    let mut j = ~2;
+    let i: Box<_> = box 1;
+    let mut j: Box<_> = box 2;
     // Should drop the previous value of j
     j = i;
     assert_eq!(*j, 1);

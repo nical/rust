@@ -8,9 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// error-pattern:this type cannot be instantiated
-struct t1 {
-    foo: int,
+struct t1 { //~ ERROR E0072
+            //~| NOTE recursive type has infinite size
+    foo: isize,
     foolish: t1
 }
 

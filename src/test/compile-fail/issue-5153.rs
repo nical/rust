@@ -8,18 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
-
-// error-pattern: type `@Foo:'static` does not implement any method in scope named `foo`
-
 trait Foo {
-    fn foo(~self);
+    fn foo(self: Box<Self>);
 }
 
-impl Foo for int {
-    fn foo(~self) { }
+impl Foo for isize {
+    fn foo(self: Box<isize>) { }
 }
 
 fn main() {
-    (@5 as @Foo).foo();
+    (&5isize as &Foo).foo();
+    //~^ ERROR: no method named `foo` found for type `&Foo` in the current scope
 }

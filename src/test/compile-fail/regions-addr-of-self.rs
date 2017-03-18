@@ -9,29 +9,29 @@
 // except according to those terms.
 
 struct dog {
-    cats_chased: uint,
+    cats_chased: usize,
 }
 
 impl dog {
     pub fn chase_cat(&mut self) {
-        let p: &'static mut uint = &mut self.cats_chased; //~ ERROR cannot infer an appropriate lifetime
-        *p += 1u;
+        let p: &'static mut usize = &mut self.cats_chased; //~ ERROR cannot infer
+        *p += 1;
     }
 
     pub fn chase_cat_2(&mut self) {
-        let p: &mut uint = &mut self.cats_chased;
-        *p += 1u;
+        let p: &mut usize = &mut self.cats_chased;
+        *p += 1;
     }
 }
 
 fn dog() -> dog {
     dog {
-        cats_chased: 0u
+        cats_chased: 0
     }
 }
 
 fn main() {
     let mut d = dog();
     d.chase_cat();
-    info!("cats_chased: {}", d.cats_chased);
+    println!("cats_chased: {}", d.cats_chased);
 }

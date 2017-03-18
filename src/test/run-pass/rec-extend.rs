@@ -11,7 +11,8 @@
 
 
 
-struct Point {x: int, y: int}
+
+struct Point {x: isize, y: isize}
 
 pub fn main() {
     let origin: Point = Point {x: 0, y: 0};

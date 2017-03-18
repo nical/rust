@@ -8,11 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// error-pattern:expected item
+// pretty-expanded FIXME #23616
+
+#![feature(custom_attribute, test)]
 
 mod m {
     #[foo = "bar"]
-    extern mod extra;
+    extern crate test;
 }
 
 pub fn main() {

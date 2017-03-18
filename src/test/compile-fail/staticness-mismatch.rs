@@ -8,13 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 trait foo {
+    fn dummy(&self) { }
     fn bar();
 }
 
-impl foo for int {
-    fn bar(&self) {} //~ ERROR method `bar` has a `&self` declaration in the impl, but not in the trait
+impl foo for isize {
+    fn bar(&self) {}
+    //~^ ERROR method `bar` has a `&self` declaration in the impl, but not in the trait
 }
 
 fn main() {}

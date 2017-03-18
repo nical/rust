@@ -8,35 +8,33 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
-
 use std::cell::Cell;
 
-struct r {
-    i: @Cell<int>,
+#[derive(Debug)]
+struct r<'a> {
+    i: &'a Cell<isize>,
 }
 
-#[unsafe_destructor]
-impl Drop for r {
+impl<'a> Drop for r<'a> {
     fn drop(&mut self) {
         self.i.set(self.i.get() + 1);
     }
 }
 
-fn r(i: @Cell<int>) -> r {
+fn r(i: &Cell<isize>) -> r {
     r {
         i: i
     }
 }
 
 pub fn main() {
-    let i = @Cell::new(0);
+    let i = &Cell::new(0);
     // Even though these look like copies, they are guaranteed not to be
     {
         let a = r(i);
         let b = (a, 10);
         let (c, _d) = b;
-        info!("{:?}", c);
+        println!("{:?}", c);
     }
     assert_eq!(i.get(), 1);
 }

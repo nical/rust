@@ -11,13 +11,13 @@
 trait A {}
 
 struct Struct {
-    r: A //~ ERROR reference to trait `A` where a type is expected
+    r: A+'static
 }
 
-fn new_struct(r: A) -> Struct { //~ ERROR reference to trait `A` where a type is expected
+fn new_struct(r: A+'static)
+    -> Struct { //~^  ERROR `A + 'static: std::marker::Sized` is not satisfied
+    //~^ ERROR `A + 'static: std::marker::Sized` is not satisfied
     Struct { r: r }
 }
 
-trait Curve {}
-enum E {X(Curve)} //~ ERROR reference to trait `Curve` where a type is expected
 fn main() {}

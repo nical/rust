@@ -10,17 +10,16 @@
 
 // regression test for issue #5625
 
-#[feature(struct_variant)];
 
 enum E {
-    Foo{f : int},
+    Foo{f : isize},
     Bar
 }
 
 pub fn main() {
-    let e = Bar;
+    let e = E::Bar;
     match e {
-        Foo{f: _f} => fail!(),
+        E::Foo{f: _f} => panic!(),
         _ => (),
     }
 }

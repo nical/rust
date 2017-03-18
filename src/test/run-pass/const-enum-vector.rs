@@ -8,16 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-enum E { V1(int), V0 }
-static C: [E, ..3] = [V0, V1(0xDEADBEE), V0];
+
+enum E { V1(isize), V0 }
+static C: [E; 3] = [E::V0, E::V1(0xDEADBEE), E::V0];
 
 pub fn main() {
     match C[1] {
-        V1(n) => assert!(n == 0xDEADBEE),
-        _ => fail!()
+        E::V1(n) => assert_eq!(n, 0xDEADBEE),
+        _ => panic!()
     }
     match C[2] {
-        V0 => (),
-        _ => fail!()
+        E::V0 => (),
+        _ => panic!()
     }
 }

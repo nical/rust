@@ -8,51 +8,42 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[repr(u8)] //~ NOTE discriminant type specified here
+
+#[repr(u8)]
 enum Eu8 {
     Au8 = 23,
     Bu8 = 223,
-    Cu8 = -23, //~ ERROR discriminant value outside specified type
+    Cu8 = -23,
+    //~^ ERROR cannot apply unary operator `-` to type `u8`
 }
 
-#[repr(i8)] //~ NOTE discriminant type specified here
-enum Ei8 {
-    Ai8 = 23,
-    Bi8 = -23,
-    Ci8 = 223, //~ ERROR discriminant value outside specified type
-}
-
-#[repr(u16)] //~ NOTE discriminant type specified here
+#[repr(u16)]
 enum Eu16 {
     Au16 = 23,
     Bu16 = 55555,
-    Cu16 = -22333, //~ ERROR discriminant value outside specified type
+    Cu16 = -22333,
+    //~^ ERROR cannot apply unary operator `-` to type `u16`
 }
 
-#[repr(i16)] //~ NOTE discriminant type specified here
-enum Ei16 {
-    Ai16 = 23,
-    Bi16 = -22333,
-    Ci16 = 55555, //~ ERROR discriminant value outside specified type
-}
-
-#[repr(u32)] //~ NOTE discriminant type specified here
+#[repr(u32)]
 enum Eu32 {
     Au32 = 23,
     Bu32 = 3_000_000_000,
-    Cu32 = -2_000_000_000, //~ ERROR discriminant value outside specified type
+    Cu32 = -2_000_000_000,
+    //~^ ERROR cannot apply unary operator `-` to type `u32`
 }
 
-#[repr(i32)] //~ NOTE discriminant type specified here
-enum Ei32 {
-    Ai32 = 23,
-    Bi32 = -2_000_000_000,
-    Ci32 = 3_000_000_000, //~ ERROR discriminant value outside specified type
+#[repr(u64)]
+enum Eu64 {
+    Au32 = 23,
+    Bu32 = 3_000_000_000,
+    Cu32 = -2_000_000_000,
+    //~^ ERROR cannot apply unary operator `-` to type `u64`
 }
 
 // u64 currently allows negative numbers, and i64 allows numbers greater than `1<<63`.  This is a
 // little counterintuitive, but since the discriminant can store all the bits, and extracting it
 // with a cast requires specifying the signedness, there is no loss of information in those cases.
-// This also applies to int and uint on 64-bit targets.
+// This also applies to isize and usize on 64-bit targets.
 
 pub fn main() { }

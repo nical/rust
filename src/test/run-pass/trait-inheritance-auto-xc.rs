@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,18 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
 // aux-build:trait_inheritance_auto_xc_aux.rs
 
-extern mod aux = "trait_inheritance_auto_xc_aux";
+
+extern crate trait_inheritance_auto_xc_aux as aux;
 
 use aux::{Foo, Bar, Baz, Quux};
 
-struct A { x: int }
+struct A { x: isize }
 
-impl Foo for A { fn f(&self) -> int { 10 } }
-impl Bar for A { fn g(&self) -> int { 20 } }
-impl Baz for A { fn h(&self) -> int { 30 } }
+impl Foo for A { fn f(&self) -> isize { 10 } }
+impl Bar for A { fn g(&self) -> isize { 20 } }
+impl Baz for A { fn h(&self) -> isize { 30 } }
 
 fn f<T:Quux>(a: &T) {
     assert_eq!(a.f(), 10);

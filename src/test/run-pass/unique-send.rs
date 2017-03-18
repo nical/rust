@@ -8,9 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
+use std::sync::mpsc::channel;
+
 pub fn main() {
-    let (p, c) = Chan::new();
-    c.send(~100);
-    let v = p.recv();
-    assert_eq!(v, ~100);
+    let (tx, rx) = channel::<Box<_>>();
+    tx.send(box 100).unwrap();
+    let v = rx.recv().unwrap();
+    assert_eq!(v, box 100);
 }

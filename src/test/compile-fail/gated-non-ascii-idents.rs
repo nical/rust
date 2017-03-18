@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,11 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast feature doesn't work.
+// gate-test-non_ascii_idents
 
-#[feature(struct_variant)];
-
-extern mod bäz; //~ ERROR non-ascii idents
+extern crate core as bäz; //~ ERROR non-ascii idents
 
 use föö::bar; //~ ERROR non-ascii idents
 
@@ -21,9 +19,9 @@ mod föö { //~ ERROR non-ascii idents
 }
 
 fn bär( //~ ERROR non-ascii idents
-    bäz: int //~ ERROR non-ascii idents
+    bäz: isize //~ ERROR non-ascii idents
     ) {
-    let _ö: int; //~ ERROR non-ascii idents
+    let _ö: isize; //~ ERROR non-ascii idents
 
     match (1, 2) {
         (_ä, _) => {} //~ ERROR non-ascii idents
@@ -31,12 +29,12 @@ fn bär( //~ ERROR non-ascii idents
 }
 
 struct Föö { //~ ERROR non-ascii idents
-    föö: int //~ ERROR non-ascii idents
+    föö: isize //~ ERROR non-ascii idents
 }
 
 enum Bär { //~ ERROR non-ascii idents
     Bäz { //~ ERROR non-ascii idents
-        qüx: int //~ ERROR non-ascii idents
+        qüx: isize //~ ERROR non-ascii idents
     }
 }
 

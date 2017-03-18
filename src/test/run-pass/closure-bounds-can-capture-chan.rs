@@ -8,16 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::comm;
+// pretty-expanded FIXME #23616
 
-fn foo(blk: proc()) {
+use std::sync::mpsc::channel;
+
+fn foo<F:FnOnce()+Send>(blk: F) {
     blk();
 }
 
 pub fn main() {
-    let (p,c) = Chan::new();
-    foo(proc() {
-        c.send(());
+    let (tx, rx) = channel();
+    foo(move || {
+        tx.send(()).unwrap();
     });
-    p.recv();
+    rx.recv().unwrap();
 }

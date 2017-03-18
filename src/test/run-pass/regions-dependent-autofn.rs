@@ -11,9 +11,11 @@
 // Test lifetimes are linked properly when we autoslice a vector.
 // Issue #3148.
 
-fn subslice<'r>(v: 'r ||) -> 'r || { v }
+// pretty-expanded FIXME #23616
 
-fn both<'r>(v: 'r ||) -> 'r || {
+fn subslice<F>(v: F) -> F where F: FnOnce() { v }
+
+fn both<F>(v: F) -> F where F: FnOnce() {
     subslice(subslice(v))
 }
 

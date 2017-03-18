@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(macro_rules)];
+// pretty-expanded FIXME #23616
 
 use std::default::Default;
 
@@ -17,7 +17,10 @@ pub struct X<T> {
 }
 
 // reordering these bounds stops the ICE
-impl<T: Default + Eq + Default> Default for X<T> {
+//
+// nmatsakis: This test used to have the bounds Default + PartialEq +
+// Default, but having duplicate bounds became illegal.
+impl<T: Default + PartialEq> Default for X<T> {
     fn default() -> X<T> {
         X { a: Default::default() }
     }
@@ -25,7 +28,7 @@ impl<T: Default + Eq + Default> Default for X<T> {
 
 macro_rules! constants {
     () => {
-        let _ : X<int> = Default::default();
+        let _ : X<isize> = Default::default();
     }
 }
 

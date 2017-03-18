@@ -8,14 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(unreachable_code)];
-#[allow(unused_variable)];
+
+#![allow(unused_variables)]
+#![allow(dead_code)]
 
 fn id(x: bool) -> bool { x }
 
 fn call_id() {
-    let c = fail!();
-    id(c); //~ WARNING unreachable statement
+    let c = panic!();
+    id(c);
 }
 
 fn call_id_3() { id(return) && id(return); }

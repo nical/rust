@@ -9,6 +9,4 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// pp-exact
-
 pub fn main() { println!("Hello World"); }

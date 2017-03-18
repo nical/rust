@@ -9,22 +9,22 @@
 // except according to those terms.
 
 struct X {
-    x: ~str,
+    x: String,
 }
 
 impl Drop for X {
     fn drop(&mut self) {
-        error!("value: {}", self.x);
+        println!("value: {}", self.x);
     }
 }
 
-fn unwrap(x: X) -> ~str {
+fn unwrap(x: X) -> String {
     let X { x: y } = x; //~ ERROR cannot move out of type
     y
 }
 
 fn main() {
-    let x = X { x: ~"hello" };
+    let x = X { x: "hello".to_string() };
     let y = unwrap(x);
-    error!("contents: {}", y);
+    println!("contents: {}", y);
 }

@@ -11,7 +11,9 @@
 // Test that the lambda kind is inferred correctly as a return
 // expression
 
-fn unique() -> proc() { return proc() (); }
+// pretty-expanded FIXME #23616
+
+fn unique() -> Box<FnMut()+'static> { return Box::new(|| ()); }
 
 pub fn main() {
 }

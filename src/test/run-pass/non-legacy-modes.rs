@@ -8,15 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 struct X {
-    repr: int
+    repr: isize
 }
 
-fn apply<T>(x: T, f: |T|) {
+fn apply<T, F>(x: T, f: F) where F: FnOnce(T) {
     f(x);
 }
 
-fn check_int(x: int) {
+fn check_int(x: isize) {
     assert_eq!(x, 22);
 }
 

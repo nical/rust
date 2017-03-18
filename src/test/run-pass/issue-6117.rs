@@ -8,13 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+// pretty-expanded FIXME #23616
 
 enum Either<T, U> { Left(T), Right(U) }
 
 pub fn main() {
-    match Left(@17) {
-        Right(()) => {}
+    match Either::Left(Box::new(17)) {
+        Either::Right(()) => {}
         _ => {}
     }
 }

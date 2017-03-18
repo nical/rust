@@ -8,8 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct foo(uint);
+struct foo(usize);
 
 fn main() {
-    let (foo, _) = (2, 3); //~ ERROR declaration of `foo` shadows
+    let (foo, _) = (2, 3); //~ ERROR let bindings cannot shadow tuple structs
 }

@@ -8,15 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn foo<T>() {
-    1u.bar::<T>(); //~ ERROR: does not fulfill `Send`
+fn foo<T:'static>() {
+    1.bar::<T>(); //~ ERROR `T: std::marker::Send` is not satisfied
 }
 
 trait bar {
     fn bar<T:Send>(&self);
 }
 
-impl bar for uint {
+impl bar for usize {
     fn bar<T:Send>(&self) {
     }
 }

@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,34 +8,27 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
+// ignore-emscripten
 
 // Make sure that if a process doesn't have its stdio/stderr descriptors set up
 // that we don't die in a large ball of fire
 
-use std::os;
-use std::io::process;
+use std::env;
+use std::process::{Command, Stdio};
 
 pub fn main () {
-    let args = os::args();
-    if args.len() > 1 && args[1] == ~"child" {
-        for _ in range(0, 1000) {
-            error!("hello?");
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 && args[1] == "child" {
+        for _ in 0..1000 {
+            println!("hello?");
         }
-        for _ in range(0, 1000) {
+        for _ in 0..1000 {
             println!("hello?");
         }
         return;
     }
 
-    let config = process::ProcessConfig {
-        program : args[0].as_slice(),
-        args : &[~"child"],
-        env : None,
-        cwd : None,
-        io : &[]
-    };
-
-    let mut p = process::Process::new(config).unwrap();
-    println!("{}", p.wait());
+    let mut p = Command::new(&args[0]);
+    p.arg("child").stdout(Stdio::null()).stderr(Stdio::null());
+    println!("{:?}", p.spawn().unwrap().wait());
 }

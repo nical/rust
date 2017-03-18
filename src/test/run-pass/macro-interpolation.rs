@@ -8,9 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(macro_rules)];
 
-macro_rules! overly_complicated (
+macro_rules! overly_complicated {
     ($fnname:ident, $arg:ident, $ty:ty, $body:block, $val:expr, $pat:pat, $res:path) =>
     ({
         fn $fnname($arg: $ty) -> Option<$ty> $body
@@ -18,13 +17,14 @@ macro_rules! overly_complicated (
           Some($pat) => {
             $res
           }
-          _ => { fail!(); }
+          _ => { panic!(); }
         }
     })
 
-)
+}
+
 pub fn main() {
-    assert!(overly_complicated!(f, x, Option<uint>, { return Some(x); },
-                               Some(8u), Some(y), y) == 8u)
+    assert!(overly_complicated!(f, x, Option<usize>, { return Some(x); },
+                               Some(8), Some(y), y) == 8)
 
 }

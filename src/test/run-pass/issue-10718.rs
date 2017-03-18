@@ -8,11 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn f(p: proc()) {
+// pretty-expanded FIXME #23616
+
+fn f<F:FnOnce()>(p: F) {
     p();
 }
 
 pub fn main() {
-    let p = proc() ();
+    let p = || ();
     f(p);
 }

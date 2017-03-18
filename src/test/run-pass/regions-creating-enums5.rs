@@ -8,13 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 enum ast<'a> {
-    num(uint),
+    num(usize),
     add(&'a ast<'a>, &'a ast<'a>)
 }
 
 fn mk_add_ok<'a>(x: &'a ast<'a>, y: &'a ast<'a>, _z: &ast) -> ast<'a> {
-    add(x, y)
+    ast::add(x, y)
 }
 
 pub fn main() {

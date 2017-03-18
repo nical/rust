@@ -8,9 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[forbid(non_uppercase_statics)];
-#[allow(dead_code)];
+#![forbid(non_upper_case_globals)]
+#![allow(dead_code)]
 
-static foo: int = 1; //~ ERROR static constant should have an uppercase identifier
+static foo: isize = 1; //~ ERROR static variable `foo` should have an upper case name such as `FOO`
+
+static mut bar: isize = 1;
+        //~^ ERROR static variable `bar` should have an upper case name such as `BAR`
 
 fn main() { }

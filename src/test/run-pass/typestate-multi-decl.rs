@@ -8,8 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 pub fn main() {
     let (x, y) = (10, 20);
     let z = x + y;
-    assert!((z == 30));
+    assert_eq!(z, 30);
 }

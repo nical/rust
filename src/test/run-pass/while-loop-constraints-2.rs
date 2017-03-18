@@ -8,17 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(dead_assignment)];
-#[allow(unused_variable)];
+#![allow(dead_assignment)]
+#![allow(unused_variables)]
 
 pub fn main() {
-    let mut y: int = 42;
-    let mut z: int = 42;
-    let mut x: int;
+    let mut y: isize = 42;
+    let mut z: isize = 42;
+    let mut x: isize;
     while z < 50 {
         z += 1;
         while false { x = y; y = z; }
-        info!("{}", y);
+        println!("{}", y);
     }
     assert!((y == 42 && z == 50));
 }

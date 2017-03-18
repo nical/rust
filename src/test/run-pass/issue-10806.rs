@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,32 +8,33 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
 
-pub fn foo() -> int {
+// pretty-expanded FIXME #23616
+
+pub fn foo() -> isize {
     3
 }
-pub fn bar() -> int {
+pub fn bar() -> isize {
     4
 }
 
 pub mod baz {
     use {foo, bar};
-    pub fn quux() -> int {
+    pub fn quux() -> isize {
         foo() + bar()
     }
 }
 
 pub mod grault {
     use {foo};
-    pub fn garply() -> int {
+    pub fn garply() -> isize {
         foo()
     }
 }
 
 pub mod waldo {
     use {};
-    pub fn plugh() -> int {
+    pub fn plugh() -> isize {
         0
     }
 }

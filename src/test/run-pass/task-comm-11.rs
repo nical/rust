@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,21 +8,24 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
+// pretty-expanded FIXME #23616
+// ignore-emscripten no threads support
 
-extern mod extra;
+#![feature(std_misc)]
 
-use std::task;
+use std::sync::mpsc::{channel, Sender};
+use std::thread;
 
-fn start(c: &Chan<Chan<int>>) {
-    let (_p, ch) = Chan::new();
-    c.send(ch);
+fn start(tx: &Sender<Sender<isize>>) {
+    let (tx2, _rx) = channel();
+    tx.send(tx2).unwrap();
 }
 
 pub fn main() {
-    let (mut p, ch) = Chan::new();
-    let _child = task::spawn(proc() {
-        start(&ch)
+    let (tx, rx) = channel();
+    let child = thread::spawn(move|| {
+        start(&tx)
     });
-    let _c = p.recv();
+    let _tx = rx.recv().unwrap();
+    child.join();
 }

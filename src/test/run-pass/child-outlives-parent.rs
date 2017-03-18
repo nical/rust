@@ -10,10 +10,15 @@
 
 // Reported as issue #126, child leaks the string.
 
-use std::task;
+// pretty-expanded FIXME #23616
+// ignore-emscripten no threads support
 
-fn child2(_s: ~str) { }
+#![feature(std_misc)]
+
+use std::thread;
+
+fn child2(_s: String) { }
 
 pub fn main() {
-    let _x = task::spawn(proc() child2(~"hi"));
+    let _x = thread::spawn(move|| child2("hi".to_string()));
 }

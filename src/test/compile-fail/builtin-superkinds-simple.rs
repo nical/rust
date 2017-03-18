@@ -13,10 +13,7 @@
 
 trait Foo : Send { }
 
-impl <'a> Foo for &'a mut () { } //~ ERROR cannot implement this trait
-
-trait Bar : Freeze { }
-
-impl <'a> Bar for &'a mut () { } //~ ERROR cannot implement this trait
+impl Foo for std::rc::Rc<i8> { }
+//~^ ERROR `std::rc::Rc<i8>: std::marker::Send` is not satisfied
 
 fn main() { }

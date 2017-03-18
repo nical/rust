@@ -8,11 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-pub trait Foo<T> {
-    fn func1<U>(&self, t: U);
+// pretty-expanded FIXME #23616
 
-    fn func2<U>(&self, t: U) {
-        self.func1(t);
+pub trait Foo<T> {
+    fn func1<U>(&self, t: U, w: T);
+
+    fn func2<U>(&self, t: U, w: T) {
+        self.func1(t, w);
     }
 }
 

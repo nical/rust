@@ -9,9 +9,9 @@
 // except according to those terms.
 
 // compile-flags: -Z no-landing-pads
-// xfail-fast
+// ignore-emscripten no threads support
 
-use std::task;
+use std::thread;
 
 static mut HIT: bool = false;
 
@@ -24,9 +24,9 @@ impl Drop for A {
 }
 
 fn main() {
-    task::try::<()>(proc() {
+    thread::spawn(move|| -> () {
         let _a = A;
-        fail!();
-    });
+        panic!();
+    }).join().unwrap_err();
     assert!(unsafe { !HIT });
 }

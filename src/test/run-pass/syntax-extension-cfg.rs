@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,28 +8,26 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast compile-flags doesn't work with fast-check
-// compile-flags: --cfg foo --cfg bar(baz) --cfg qux="foo"
+// compile-flags: --cfg foo --cfg qux="foo"
+
 
 pub fn main() {
     // check
-    if ! cfg!(foo) { fail!() }
-    if   cfg!(not(foo)) { fail!() }
+    if ! cfg!(foo) { panic!() }
+    if   cfg!(not(foo)) { panic!() }
 
-    if ! cfg!(bar(baz)) { fail!() }
-    if   cfg!(not(bar(baz))) { fail!() }
+    if ! cfg!(qux="foo") { panic!() }
+    if   cfg!(not(qux="foo")) { panic!() }
 
-    if ! cfg!(qux="foo") { fail!() }
-    if   cfg!(not(qux="foo")) { fail!() }
+    if ! cfg!(all(foo, qux="foo")) { panic!() }
+    if   cfg!(not(all(foo, qux="foo"))) { panic!() }
+    if   cfg!(all(not(all(foo, qux="foo")))) { panic!() }
 
-    if ! cfg!(foo, bar(baz), qux="foo") { fail!() }
-    if   cfg!(not(foo, bar(baz), qux="foo")) { fail!() }
+    if cfg!(not_a_cfg) { panic!() }
+    if cfg!(all(not_a_cfg, foo, qux="foo")) { panic!() }
+    if cfg!(all(not_a_cfg, foo, qux="foo")) { panic!() }
+    if ! cfg!(any(not_a_cfg, foo)) { panic!() }
 
-    if cfg!(not_a_cfg) { fail!() }
-    if cfg!(not_a_cfg, foo, bar(baz), qux="foo") { fail!() }
-
-    if ! cfg!(not(not_a_cfg)) { fail!() }
-    if ! cfg!(not(not_a_cfg), foo, bar(baz), qux="foo") { fail!() }
-
-    if cfg!(trailing_comma, ) { fail!() }
+    if ! cfg!(not(not_a_cfg)) { panic!() }
+    if ! cfg!(all(not(not_a_cfg), foo, qux="foo")) { panic!() }
 }

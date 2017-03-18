@@ -8,6 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn f() -> int { { return 3; } }
 
-pub fn main() { assert!((f() == 3)); }
+fn f() -> isize { { return 3; } }
+
+pub fn main() { assert_eq!(f(), 3); }

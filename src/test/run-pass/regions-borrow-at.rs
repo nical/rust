@@ -8,15 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
-fn foo(x: &uint) -> uint {
+fn foo(x: &usize) -> usize {
     *x
 }
 
 pub fn main() {
-    let p = @22u;
-    let r = foo(p);
-    info!("r={}", r);
-    assert_eq!(r, 22u);
+    let p: Box<_> = box 22;
+    let r = foo(&*p);
+    println!("r={}", r);
+    assert_eq!(r, 22);
 }

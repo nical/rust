@@ -7,9 +7,10 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+//
 
 pub trait Clone2 {
-    /// Returns a copy of the value. The contents of owned pointers
+    /// Returns a copy of the value. The contents of boxes
     /// are copied to maintain uniqueness, while the contents of
     /// managed pointers are not copied.
     fn clone(&self) -> Self;
@@ -25,16 +26,16 @@ trait Getter<T: Clone> {
 
 }
 
-impl Getter<int> for int {
-    fn do_get(&self) -> int { *self }
+impl Getter<isize> for isize {
+    fn do_get(&self) -> isize { *self }
 }
 
 impl<T: Clone> Getter<T> for Option<T> {
-    fn do_get(&self) -> T { self.get_ref().clone() }
+    fn do_get(&self) -> T { self.as_ref().unwrap().clone() }
 }
 
 
 pub fn main() {
     assert_eq!(3.do_get2(), (3, 3));
-    assert_eq!(Some(~"hi").do_get2(), (~"hi", ~"hi"));
+    assert_eq!(Some("hi".to_string()).do_get2(), ("hi".to_string(), "hi".to_string()));
 }

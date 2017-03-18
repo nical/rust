@@ -8,11 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(dead_assignment)];
+#![allow(dead_assignment)]
 
 fn id<T>(x: T) -> T { return x; }
 
-struct Triple {x: int, y: int, z: int}
+#[derive(Copy, Clone)]
+struct Triple {x: isize, y: isize, z: isize}
 
 pub fn main() {
     let mut x = 62;
@@ -21,15 +22,15 @@ pub fn main() {
     let mut b = 'b';
     let p: Triple = Triple {x: 65, y: 66, z: 67};
     let mut q: Triple = Triple {x: 68, y: 69, z: 70};
-    y = id::<int>(x);
-    info!("{}", y);
+    y = id::<isize>(x);
+    println!("{}", y);
     assert_eq!(x, y);
     b = id::<char>(a);
-    info!("{}", b);
+    println!("{}", b);
     assert_eq!(a, b);
     q = id::<Triple>(p);
     x = p.z;
     y = q.z;
-    info!("{}", y);
+    println!("{}", y);
     assert_eq!(x, y);
 }

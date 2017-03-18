@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,23 +8,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// error-pattern: unresolved name
-
-#[feature(globs)];
-
 use module_of_many_things::*;
 
 mod module_of_many_things {
-    pub fn f1() { info!("f1"); }
-    pub fn f2() { info!("f2"); }
-    fn f3() { info!("f3"); }
-    pub fn f4() { info!("f4"); }
+    pub fn f1() { println!("f1"); }
+    pub fn f2() { println!("f2"); }
+    fn f3() { println!("f3"); }
+    pub fn f4() { println!("f4"); }
 }
 
 
 fn main() {
     f1();
     f2();
-    f999(); // 'export' currently doesn't work?
+    f999(); //~ ERROR cannot find function `f999` in this scope
     f4();
 }

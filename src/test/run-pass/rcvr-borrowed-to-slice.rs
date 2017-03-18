@@ -8,32 +8,33 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 trait sum {
-    fn sum_(self) -> int;
+    fn sum_(self) -> isize;
 }
 
 // Note: impl on a slice
-impl<'a> sum for &'a [int] {
-    fn sum_(self) -> int {
+impl<'a> sum for &'a [isize] {
+    fn sum_(self) -> isize {
         self.iter().fold(0, |a, &b| a + b)
     }
 }
 
-fn call_sum(x: &[int]) -> int { x.sum_() }
+fn call_sum(x: &[isize]) -> isize { x.sum_() }
 
 pub fn main() {
-    let x = ~[1, 2, 3];
-    let y = call_sum(x);
-    info!("y=={}", y);
+    let x = vec![1, 2, 3];
+    let y = call_sum(&x);
+    println!("y=={}", y);
     assert_eq!(y, 6);
 
-    let x = ~[1, 2, 3];
+    let x = vec![1, 2, 3];
     let y = x.sum_();
-    info!("y=={}", y);
+    println!("y=={}", y);
     assert_eq!(y, 6);
 
-    let x = ~[1, 2, 3];
+    let x = vec![1, 2, 3];
     let y = x.sum_();
-    info!("y=={}", y);
+    println!("y=={}", y);
     assert_eq!(y, 6);
 }

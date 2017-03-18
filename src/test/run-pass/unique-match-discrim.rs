@@ -10,8 +10,10 @@
 
 // Issue #961
 
+// pretty-expanded FIXME #23616
+
 fn altsimple() {
-    match ~true {
+    match Box::new(true) {
       _ => { }
     }
 }

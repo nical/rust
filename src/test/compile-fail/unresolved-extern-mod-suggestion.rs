@@ -8,7 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern mod extra;
-use extra; //~ ERROR unresolved import (maybe you meant `extra::*`?)
+extern crate core;
+use core;
+//~^ ERROR an extern crate named `core` has already been imported in this module
 
 fn main() {}

@@ -8,8 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
-
 struct Struct {
     person: &'static str
 }
@@ -25,8 +23,7 @@ impl Trait<&'static str> for Struct {
 }
 
 fn main() {
-    let s: @Trait<int> = @Struct { person: "Fred" };    //~ ERROR expected Trait<int>, but found Trait<&'static str>
-    //~^ ERROR expected Trait<int>, but found Trait<&'static str>
+    let s: Box<Trait<isize>> = Box::new(Struct { person: "Fred" });
+    //~^ ERROR `Struct: Trait<isize>` is not satisfied
     s.f(1);
 }
-

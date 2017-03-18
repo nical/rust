@@ -8,17 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast #[feature] doesn't work with check-fast
-#[feature(default_type_params)];
-
-#[allow(default_type_param_usage)];
-
-struct Foo<A = (int, char)> {
+struct Foo<A = (isize, char)> {
     a: A
 }
 
-impl Foo<int> {
-    fn bar_int(&self) -> int {
+impl Foo<isize> {
+    fn bar_int(&self) -> isize {
         self.a
     }
 }
@@ -31,7 +26,7 @@ impl Foo<char> {
 
 impl Foo {
     fn bar(&self) {
-        let (i, c): (int, char) = self.a;
+        let (i, c): (isize, char) = self.a;
         assert_eq!(Foo { a: i }.bar_int(), i);
         assert_eq!(Foo { a: c }.bar_char(), c);
     }
@@ -44,7 +39,7 @@ impl<A: Clone> Foo<A> {
 }
 
 fn default_foo(x: Foo) {
-    let (i, c): (int, char) = x.a;
+    let (i, c): (isize, char) = x.a;
     assert_eq!(i, 1);
     assert_eq!(c, 'a');
 
@@ -52,10 +47,10 @@ fn default_foo(x: Foo) {
     assert_eq!(x.baz(), (1, 'a'));
 }
 
-#[deriving(Eq)]
+#[derive(PartialEq, Debug)]
 struct BazHelper<T>(T);
 
-#[deriving(Eq)]
+#[derive(PartialEq, Debug)]
 // Ensure that we can use previous type parameters in defaults.
 struct Baz<T, U = BazHelper<T>, V = Option<U>>(T, U, V);
 

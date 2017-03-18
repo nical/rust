@@ -9,24 +9,24 @@
 // except according to those terms.
 
 pub fn main() {
-    let x = ~[1, 2, 3];
+    let x = vec![1, 2, 3];
     let mut y = 0;
-    for i in x.iter() { info!("{:?}", *i); y += *i; }
-    info!("{:?}", y);
+    for i in &x { println!("{}", *i); y += *i; }
+    println!("{}", y);
     assert_eq!(y, 6);
-    let s = ~"hello there";
-    let mut i: int = 0;
+    let s = "hello there".to_string();
+    let mut i: isize = 0;
     for c in s.bytes() {
-        if i == 0 { assert!((c == 'h' as u8)); }
-        if i == 1 { assert!((c == 'e' as u8)); }
-        if i == 2 { assert!((c == 'l' as u8)); }
-        if i == 3 { assert!((c == 'l' as u8)); }
-        if i == 4 { assert!((c == 'o' as u8)); }
+        if i == 0 { assert_eq!(c, 'h' as u8); }
+        if i == 1 { assert_eq!(c, 'e' as u8); }
+        if i == 2 { assert_eq!(c, 'l' as u8); }
+        if i == 3 { assert_eq!(c, 'l' as u8); }
+        if i == 4 { assert_eq!(c, 'o' as u8); }
         // ...
 
         i += 1;
-        info!("{:?}", i);
-        info!("{:?}", c);
+        println!("{}", i);
+        println!("{}", c);
     }
     assert_eq!(i, 11);
 }

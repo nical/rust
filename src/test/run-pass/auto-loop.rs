@@ -8,10 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 pub fn main() {
     let mut sum = 0;
-    let xs = ~[1, 2, 3, 4, 5];
-    for x in xs.iter() {
+    let xs = vec![1, 2, 3, 4, 5];
+    for x in &xs {
         sum += *x;
     }
     assert_eq!(sum, 15);

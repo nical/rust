@@ -11,8 +11,9 @@
 
 
 
-struct Point {x: int, y: int, z: int}
 
-fn f(p: Point) { assert!((p.z == 12)); }
+struct Point {x: isize, y: isize, z: isize}
+
+fn f(p: Point) { assert_eq!(p.z, 12); }
 
 pub fn main() { let x: Point = Point {x: 10, y: 11, z: 12}; f(x); }

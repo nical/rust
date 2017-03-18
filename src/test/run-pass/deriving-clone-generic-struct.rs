@@ -8,7 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deriving(Clone, DeepClone)]
+// pretty-expanded FIXME #23616
+
+#[derive(Clone)]
 struct S<T> {
     foo: (),
     bar: (),
@@ -16,5 +18,5 @@ struct S<T> {
 }
 
 pub fn main() {
-    let _ = S { foo: (), bar: (), baz: 1i }.clone().deep_clone();
+    let _ = S { foo: (), bar: (), baz: 1 }.clone();
 }

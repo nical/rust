@@ -8,14 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 pub fn main() {
-    let x = [1,..100];
+    let x = [1; 100];
     let mut y = 0;
-    for i in x.iter() {
+    for i in &x[..] {
         if y > 10 {
             break;
         }
         y += *i;
     }
-    assert!(y == 11);
+    assert_eq!(y, 11);
 }

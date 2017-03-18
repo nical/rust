@@ -8,14 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-trait clam<A> { }
+
+trait clam<A> {
+    fn get(self) -> A;
+}
+
 struct foo<A> {
     x: A,
 }
 
 impl<A> foo<A> {
    pub fn bar<B,C:clam<A>>(&self, _c: C) -> B {
-     fail!();
+     panic!();
    }
 }
 

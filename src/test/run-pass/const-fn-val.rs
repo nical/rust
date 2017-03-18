@@ -8,14 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn foo() -> int {
+
+fn foo() -> isize {
     return 0xca7f000d;
 }
 
-struct Bar<'a> { f: 'a || -> int }
+struct Bar<F> where F: FnMut() -> isize { f: F }
 
-static b : Bar<'static> = Bar { f: foo };
+static mut b : Bar<fn() -> isize> = Bar { f: foo as fn() -> isize};
 
 pub fn main() {
-    assert_eq!((b.f)(), 0xca7f000d);
+    unsafe { assert_eq!((b.f)(), 0xca7f000d); }
 }

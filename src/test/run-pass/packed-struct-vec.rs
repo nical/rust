@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,27 +8,44 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-android: FIXME(#9116) Bus error
-
+use std::fmt;
 use std::mem;
 
-#[packed]
-#[deriving(Eq)]
+#[repr(packed)]
+#[derive(Copy, Clone)]
 struct Foo {
     bar: u8,
     baz: u64
 }
 
+impl PartialEq for Foo {
+    fn eq(&self, other: &Foo) -> bool {
+        self.bar == other.bar && self.baz == other.baz
+    }
+}
+
+impl fmt::Debug for Foo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let bar = self.bar;
+        let baz = self.baz;
+
+        f.debug_struct("Foo")
+            .field("bar", &bar)
+            .field("baz", &baz)
+            .finish()
+    }
+}
+
 pub fn main() {
-    let foos = [Foo { bar: 1, baz: 2 }, .. 10];
+    let foos = [Foo { bar: 1, baz: 2 }; 10];
 
-    assert_eq!(mem::size_of::<[Foo, .. 10]>(), 90);
+    assert_eq!(mem::size_of::<[Foo; 10]>(), 90);
 
-    for i in range(0u, 10) {
+    for i in 0..10 {
         assert_eq!(foos[i], Foo { bar: 1, baz: 2});
     }
 
-    for &foo in foos.iter() {
+    for &foo in &foos {
         assert_eq!(foo, Foo { bar: 1, baz: 2 });
     }
 }

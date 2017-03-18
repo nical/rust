@@ -10,8 +10,6 @@
 
 // A test of the macro system. Can we do HTML literals?
 
-#[feature(macro_rules)];
-
 /*
 
 This is an HTML parser written as a macro. It's all CPS, and we have
@@ -24,14 +22,15 @@ of children of the current node. The tokens are everything that's
 left.
 
 */
+use HTMLFragment::{tag, text};
 
-macro_rules! html (
+macro_rules! html {
     ( $($body:tt)* ) => (
         parse_node!( []; []; $($body)* )
     )
-)
+}
 
-macro_rules! parse_node (
+macro_rules! parse_node {
     (
         [:$head:ident ($(:$head_nodes:expr),*)
          $(:$tags:ident ($(:$tag_nodes:expr),*))*];
@@ -40,8 +39,8 @@ macro_rules! parse_node (
     ) => (
         parse_node!(
             [$(: $tags ($(:$tag_nodes),*))*];
-            [$(:$head_nodes,)* :tag(stringify!($head).to_owned(),
-                                    ~[$($nodes),*])];
+            [$(:$head_nodes,)* :tag(stringify!($head).to_string(),
+                                    vec![$($nodes),*])];
             $($rest)*
         )
     );
@@ -65,7 +64,7 @@ macro_rules! parse_node (
     ) => (
         parse_node!(
             [$(: $tags ($(:$tag_nodes),*))*];
-            [$(:$nodes,)* :text(~".")];
+            [$(:$nodes,)* :text(".".to_string())];
             $($rest)*
         )
     );
@@ -77,13 +76,13 @@ macro_rules! parse_node (
     ) => (
         parse_node!(
             [$(: $tags ($(:$tag_nodes),*))*];
-            [$(:$nodes,)* :text(stringify!($word).to_owned())];
+            [$(:$nodes,)* :text(stringify!($word).to_string())];
             $($rest)*
         )
     );
 
     ( []; [:$e:expr]; ) => ( $e );
-)
+}
 
 pub fn main() {
     let _page = html! (
@@ -97,6 +96,6 @@ pub fn main() {
 }
 
 enum HTMLFragment {
-    tag(~str, ~[HTMLFragment]),
-    text(~str),
+    tag(String, Vec<HTMLFragment> ),
+    text(String),
 }

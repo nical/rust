@@ -12,7 +12,8 @@
 // statement or end of block, as appropriate given the temporary
 // lifetime rules.
 
-#[feature(macro_rules)];
+#![feature(box_patterns)]
+#![feature(box_syntax)]
 
 use std::ops::Drop;
 
@@ -61,7 +62,7 @@ impl Drop for AddFlags {
     }
 }
 
-macro_rules! end_of_block(
+macro_rules! end_of_block {
     ($pat:pat, $expr:expr) => (
         {
             println!("end_of_block({})", stringify!({let $pat = $expr;}));
@@ -74,9 +75,9 @@ macro_rules! end_of_block(
             check_flags(1);
         }
     )
-)
+}
 
-macro_rules! end_of_stmt(
+macro_rules! end_of_stmt {
     ($pat:pat, $expr:expr) => (
         {
             println!("end_of_stmt({})", stringify!($expr));
@@ -91,7 +92,7 @@ macro_rules! end_of_stmt(
             check_flags(0);
         }
     )
-)
+}
 
 pub fn main() {
 
@@ -111,12 +112,11 @@ pub fn main() {
     end_of_block!(AddFlags { bits: ref _x }, AddFlags(1));
     end_of_block!(&AddFlags { bits }, &AddFlags(1));
     end_of_block!((_, ref _y), (AddFlags(1), 22));
-    end_of_block!(~ref _x, ~AddFlags(1));
-    end_of_block!(~_x, ~AddFlags(1));
+    end_of_block!(box ref _x, box AddFlags(1));
+    end_of_block!(box _x, box AddFlags(1));
     end_of_block!(_, { { check_flags(0); &AddFlags(1) } });
     end_of_block!(_, &((Box { f: AddFlags(1) }).f));
     end_of_block!(_, &(([AddFlags(1)])[0]));
-    end_of_block!(_, &((&~[AddFlags(1)])[0]));
 
     // LHS does not create a ref binding, so temporary lives as long
     // as statement, and we do not move the AddFlags out:

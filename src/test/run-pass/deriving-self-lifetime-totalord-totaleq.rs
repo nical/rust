@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,21 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::cmp::Ordering::{Less,Equal,Greater};
 
-// xfail-test FIXME #11820: & is unreliable in deriving
-
-use std::cmp::{Less,Equal,Greater};
-
-#[deriving(TotalEq,TotalOrd)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct A<'a> {
-    x: &'a int
+    x: &'a isize
 }
 pub fn main() {
     let (a, b) = (A { x: &1 }, A { x: &2 });
-
-    assert!(a.equals(&a));
-    assert!(b.equals(&b));
-
 
     assert_eq!(a.cmp(&a), Equal);
     assert_eq!(b.cmp(&b), Equal);

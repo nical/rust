@@ -1,4 +1,4 @@
-// Copyright 2012-2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,109 +8,83 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
 // compile-flags:--test
+// ignore-emscripten
 
 // NB: These tests kill child processes. Valgrind sees these children as leaking
 // memory, which makes for some *confusing* logs. That's why these are here
 // instead of in std.
 
-use std::libc;
-use std::run;
+#![reexport_test_harness_main = "test_main"]
+#![feature(libc, std_misc, duration)]
+
+extern crate libc;
+
+use std::process::{self, Command, Child, Output, Stdio};
 use std::str;
-use std::io;
+use std::sync::mpsc::channel;
+use std::thread;
+use std::time::Duration;
+
+macro_rules! t {
+    ($e:expr) => (match $e { Ok(e) => e, Err(e) => panic!("error: {}", e) })
+}
 
 #[test]
 fn test_destroy_once() {
-    #[cfg(not(target_os="android"))]
-    static PROG: &'static str = "echo";
-    #[cfg(target_os="android")]
-    static PROG: &'static str = "ls"; // android don't have echo binary
+    let mut p = sleeper();
+    t!(p.kill());
+}
 
-    let mut p = run::Process::new(PROG, [], run::ProcessOptions::new()).unwrap();
-    p.destroy(); // this shouldn't crash (and nor should the destructor)
+#[cfg(unix)]
+pub fn sleeper() -> Child {
+    t!(Command::new("sleep").arg("1000").spawn())
+}
+#[cfg(windows)]
+pub fn sleeper() -> Child {
+    // There's a `timeout` command on windows, but it doesn't like having
+    // its output piped, so instead just ping ourselves a few times with
+    // gaps in between so we're sure this process is alive for awhile
+    t!(Command::new("ping").arg("127.0.0.1").arg("-n").arg("1000").spawn())
 }
 
 #[test]
 fn test_destroy_twice() {
-    #[cfg(not(target_os="android"))]
-    static PROG: &'static str = "echo";
-    #[cfg(target_os="android")]
-    static PROG: &'static str = "ls"; // android don't have echo binary
-
-    let mut p = match run::Process::new(PROG, [], run::ProcessOptions::new()) {
-        Ok(p) => p,
-        Err(e) => fail!("wut: {}", e),
-    };
-    p.destroy(); // this shouldnt crash...
-    p.destroy(); // ...and nor should this (and nor should the destructor)
+    let mut p = sleeper();
+    t!(p.kill()); // this shouldn't crash...
+    let _ = p.kill(); // ...and nor should this (and nor should the destructor)
 }
 
-fn test_destroy_actually_kills(force: bool) {
-
-    #[cfg(unix,not(target_os="android"))]
-    static BLOCK_COMMAND: &'static str = "cat";
-
-    #[cfg(unix,target_os="android")]
-    static BLOCK_COMMAND: &'static str = "/system/bin/cat";
-
-    #[cfg(windows)]
-    static BLOCK_COMMAND: &'static str = "cmd";
-
-    #[cfg(unix,not(target_os="android"))]
-    fn process_exists(pid: libc::pid_t) -> bool {
-        let run::ProcessOutput {output, ..} = run::process_output("ps", [~"-p", pid.to_str()])
-            .unwrap();
-        str::from_utf8_owned(output).unwrap().contains(pid.to_str())
-    }
-
-    #[cfg(unix,target_os="android")]
-    fn process_exists(pid: libc::pid_t) -> bool {
-        let run::ProcessOutput {output, ..} = run::process_output("/system/bin/ps", [pid.to_str()])
-            .unwrap();
-        str::from_utf8_owned(output).unwrap().contains(~"root")
-    }
-
-    #[cfg(windows)]
-    fn process_exists(pid: libc::pid_t) -> bool {
-        use std::libc::types::os::arch::extra::DWORD;
-        use std::libc::funcs::extra::kernel32::{CloseHandle, GetExitCodeProcess, OpenProcess};
-        use std::libc::consts::os::extra::{FALSE, PROCESS_QUERY_INFORMATION, STILL_ACTIVE };
-
-        unsafe {
-            let process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid as DWORD);
-            if process.is_null() {
-                return false;
-            }
-            // process will be non-null if the process is alive, or if it died recently
-            let mut status = 0;
-            GetExitCodeProcess(process, &mut status);
-            CloseHandle(process);
-            return status == STILL_ACTIVE;
-        }
-    }
+#[test]
+fn test_destroy_actually_kills() {
+    let cmd = if cfg!(windows) {
+        "cmd"
+    } else if cfg!(target_os = "android") {
+        "/system/bin/cat"
+    } else {
+        "cat"
+    };
 
     // this process will stay alive indefinitely trying to read from stdin
-    let mut p = run::Process::new(BLOCK_COMMAND, [], run::ProcessOptions::new())
-        .unwrap();
+    let mut p = t!(Command::new(cmd)
+                           .stdin(Stdio::piped())
+                           .spawn());
 
-    assert!(process_exists(p.get_id()));
+    t!(p.kill());
 
-    if force {
-        p.force_destroy();
+    // Don't let this test time out, this should be quick
+    let (tx, rx) = channel();
+    thread::spawn(move|| {
+        thread::sleep_ms(1000);
+        if rx.try_recv().is_err() {
+            process::exit(1);
+        }
+    });
+    let code = t!(p.wait()).code();
+    if cfg!(windows) {
+        assert!(code.is_some());
     } else {
-        p.destroy();
+        assert!(code.is_none());
     }
-
-    assert!(!process_exists(p.get_id()));
-}
-
-#[test]
-fn test_unforced_destroy_actually_kills() {
-    test_destroy_actually_kills(false);
-}
-
-#[test]
-fn test_forced_destroy_actually_kills() {
-    test_destroy_actually_kills(true);
+    tx.send(());
 }

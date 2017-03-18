@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,20 +8,21 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
+// ignore-emscripten no threads support
 
-extern mod extra;
+#![feature(std_misc)]
 
-use std::task;
+use std::sync::mpsc::{channel, Sender};
+use std::thread;
 
-fn start(c: &Chan<int>, start: int, number_of_messages: int) {
-    let mut i: int = 0;
-    while i < number_of_messages { c.send(start + i); i += 1; }
+fn start(tx: &Sender<isize>, start: isize, number_of_messages: isize) {
+    let mut i: isize = 0;
+    while i< number_of_messages { tx.send(start + i).unwrap(); i += 1; }
 }
 
 pub fn main() {
-    info!("Check that we don't deadlock.");
-    let (_p, ch) = Chan::new();
-    task::try(proc() { start(&ch, 0, 10) });
-    info!("Joined task");
+    println!("Check that we don't deadlock.");
+    let (tx, rx) = channel();
+    let _ = thread::spawn(move|| { start(&tx, 0, 10) }).join();
+    println!("Joined task");
 }

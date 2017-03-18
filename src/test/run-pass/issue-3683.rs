@@ -7,17 +7,18 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+//
 
 
 trait Foo {
-    fn a(&self) -> int;
-    fn b(&self) -> int {
+    fn a(&self) -> isize;
+    fn b(&self) -> isize {
         self.a() + 2
     }
 }
 
-impl Foo for int {
-    fn a(&self) -> int {
+impl Foo for isize {
+    fn a(&self) -> isize {
         3
     }
 }

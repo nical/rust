@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,13 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
 
-fn region_identity<'r>(x: &'r uint) -> &'r uint { x }
 
-fn apply<T>(t: T, f: |T| -> T) -> T { f(t) }
+fn region_identity(x: &usize) -> &usize { x }
 
-fn parameterized(x: &uint) -> uint {
+fn apply<T, F>(t: T, f: F) -> T where F: FnOnce(T) -> T { f(t) }
+
+fn parameterized(x: &usize) -> usize {
     let z = apply(x, ({|y|
         region_identity(y)
     }));
@@ -22,6 +22,6 @@ fn parameterized(x: &uint) -> uint {
 }
 
 pub fn main() {
-    let x = 3u;
-    assert_eq!(parameterized(&x), 3u);
+    let x = 3;
+    assert_eq!(parameterized(&x), 3);
 }

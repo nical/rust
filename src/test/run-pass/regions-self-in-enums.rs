@@ -9,15 +9,15 @@
 // except according to those terms.
 
 enum int_wrapper<'a> {
-    int_wrapper_ctor(&'a int)
+    int_wrapper_ctor(&'a isize)
 }
 
 pub fn main() {
     let x = 3;
-    let y = int_wrapper_ctor(&x);
-    let mut z : &int;
+    let y = int_wrapper::int_wrapper_ctor(&x);
+    let mut z : &isize;
     match y {
-        int_wrapper_ctor(zz) => { z = zz; }
+        int_wrapper::int_wrapper_ctor(zz) => { z = zz; }
     }
-    info!("{:?}", *z);
+    println!("{}", *z);
 }

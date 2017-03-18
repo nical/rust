@@ -8,13 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::cmp::Eq;
+use std::cmp::PartialEq;
 
-trait MyNum : Eq { }
+trait MyNum : PartialEq { }
 
-struct MyInt { val: int }
+#[derive(Debug)]
+struct MyInt { val: isize }
 
-impl Eq for MyInt {
+impl PartialEq for MyInt {
     fn eq(&self, other: &MyInt) -> bool { self.val == other.val }
     fn ne(&self, other: &MyInt) -> bool { !self.eq(other) }
 }
@@ -25,7 +26,7 @@ fn f<T:MyNum>(x: T, y: T) -> bool {
     return x == y;
 }
 
-fn mi(v: int) -> MyInt { MyInt { val: v } }
+fn mi(v: isize) -> MyInt { MyInt { val: v } }
 
 pub fn main() {
     let (x, y, z) = (mi(3), mi(5), mi(3));

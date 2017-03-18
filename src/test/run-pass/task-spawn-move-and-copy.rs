@@ -8,20 +8,27 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::ptr;
-use std::task;
+// ignore-emscripten no threads support
+
+#![allow(unknown_features)]
+#![feature(box_syntax, std_misc)]
+
+use std::thread;
+use std::sync::mpsc::channel;
 
 pub fn main() {
-    let (p, ch) = Chan::<uint>::new();
+    let (tx, rx) = channel::<usize>();
 
-    let x = ~1;
-    let x_in_parent = ptr::to_unsafe_ptr(&(*x)) as uint;
+    let x: Box<isize> = box 1;
+    let x_in_parent = &(*x) as *const isize as usize;
 
-    task::spawn(proc() {
-        let x_in_child = ptr::to_unsafe_ptr(&(*x)) as uint;
-        ch.send(x_in_child);
+    let t = thread::spawn(move || {
+        let x_in_child = &(*x) as *const isize as usize;
+        tx.send(x_in_child).unwrap();
     });
 
-    let x_in_child = p.recv();
+    let x_in_child = rx.recv().unwrap();
     assert_eq!(x_in_parent, x_in_child);
+
+    t.join();
 }

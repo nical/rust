@@ -12,6 +12,6 @@
 
 trait Foo : Send { }
 
-impl <T: Freeze> Foo for T { } //~ ERROR cannot implement this trait
+impl <T: Sync+'static> Foo for T { } //~ ERROR `T: std::marker::Send` is not satisfied
 
 fn main() { }

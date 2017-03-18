@@ -13,8 +13,10 @@
 // preserved, and that the first outer item parsed in main is not
 // accidentally carried over to each inner function
 
+#![feature(custom_attribute)]
+
 fn main() {
-    #[inner_attr];
+    #![inner_attr]
     #[outer_attr]
     fn f() { }
 

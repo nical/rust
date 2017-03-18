@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,9 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//error-pattern:unresolved enum variant
-
 fn main() {
-    // a bug in the parser is allowing this:
-    let a() = 13;
+    let a(1) = 13; //~ ERROR cannot find tuple struct/variant `a` in this scope
 }

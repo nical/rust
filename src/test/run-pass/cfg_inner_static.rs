@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -9,9 +9,10 @@
 // except according to those terms.
 
 // aux-build:cfg_inner_static.rs
-// xfail-fast
 
-extern mod cfg_inner_static;
+// pretty-expanded FIXME #23616
+
+extern crate cfg_inner_static;
 
 pub fn main() {
     cfg_inner_static::foo();

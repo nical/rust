@@ -14,6 +14,10 @@
 // lifetime parameters must be early bound in the type of the
 // associated item.
 
+// pretty-expanded FIXME #23616
+
+use std::marker;
+
 pub enum Value<'v> {
     A(&'v str),
     B,
@@ -30,8 +34,8 @@ pub trait Decodable<'v, D: Decoder<'v>> {
 impl<'v, D: Decoder<'v>> Decodable<'v, D> for () {
     fn decode(d: &mut D) -> () {
         match d.read() {
-            A(..) => (),
-            B => Decodable::decode(d),
+            Value::A(..) => (),
+            Value::B => Decodable::decode(d),
         }
     }
 }

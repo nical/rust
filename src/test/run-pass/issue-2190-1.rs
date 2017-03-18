@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,17 +8,25 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-test
-static generations: uint = 1024+256+128+49;
+// pretty-expanded FIXME #23616
+// ignore-emscripten
 
-fn child_no(x: uint) -> proc() {
-     || {
+use std::thread::Builder;
+
+static generations: usize = 1024+256+128+49;
+
+fn spawn(mut f: Box<FnMut() + 'static + Send>) {
+    Builder::new().stack_size(32 * 1024).spawn(move|| f());
+}
+
+fn child_no(x: usize) -> Box<FnMut() + 'static + Send> {
+    Box::new(move|| {
         if x < generations {
-            task::spawn(child_no(x+1));
+            spawn(child_no(x+1));
         }
-    }
+    })
 }
 
 pub fn main() {
-    task::spawn(child_no(0));
+    spawn(child_no(0));
 }

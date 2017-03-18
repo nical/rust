@@ -8,11 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// Test default methods in Ord and Eq
+
+use std::cmp::Ordering;
+
+// Test default methods in PartialOrd and PartialEq
 //
+#[derive(Debug)]
 struct Fool(bool);
 
-impl Eq for Fool {
+impl PartialEq for Fool {
     fn eq(&self, other: &Fool) -> bool {
         let Fool(this) = *self;
         let Fool(other) = *other;
@@ -20,23 +24,39 @@ impl Eq for Fool {
     }
 }
 
-struct Int(int);
+struct Int(isize);
 
-impl Ord for Int {
-    fn lt(&self, other: &Int) -> bool {
+impl PartialEq for Int {
+    fn eq(&self, other: &Int) -> bool {
         let Int(this) = *self;
         let Int(other) = *other;
-        this < other
+        this == other
     }
 }
 
-struct RevInt(int);
+impl PartialOrd for Int {
+    fn partial_cmp(&self, other: &Int) -> Option<Ordering> {
+        let Int(this) = *self;
+        let Int(other) = *other;
+        this.partial_cmp(&other)
+    }
+}
 
-impl Ord for RevInt {
-    fn lt(&self, other: &RevInt) -> bool {
+struct RevInt(isize);
+
+impl PartialEq for RevInt {
+    fn eq(&self, other: &RevInt) -> bool {
         let RevInt(this) = *self;
         let RevInt(other) = *other;
-        this > other
+        this == other
+    }
+}
+
+impl PartialOrd for RevInt {
+    fn partial_cmp(&self, other: &RevInt) -> Option<Ordering> {
+        let RevInt(this) = *self;
+        let RevInt(other) = *other;
+        other.partial_cmp(&this)
     }
 }
 
@@ -55,8 +75,8 @@ pub fn main() {
     assert!(RevInt(1) >= RevInt(2));
     assert!(RevInt(1) >= RevInt(1));
 
-    assert!(Fool(true)  == Fool(false));
+    assert_eq!(Fool(true), Fool(false));
     assert!(Fool(true)  != Fool(true));
     assert!(Fool(false) != Fool(false));
-    assert!(Fool(false) == Fool(true));
+    assert_eq!(Fool(false), Fool(true));
 }

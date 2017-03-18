@@ -1,4 +1,4 @@
-// Copyright 2012-2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,21 +8,28 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast #[feature] doesn't work with check-fast
-#[feature(asm)];
+// ignore-s390x
+// ignore-emscripten
+// ignore-powerpc
 
-fn foo(x: int) { info!("{}", x); }
+#![feature(asm)]
 
-#[cfg(target_arch = "x86")]
-#[cfg(target_arch = "x86_64")]
-#[cfg(target_arch = "arm")]
+fn foo(x: isize) { println!("{}", x); }
+
+#[cfg(any(target_arch = "x86",
+          target_arch = "x86_64",
+          target_arch = "arm",
+          target_arch = "aarch64"))]
 pub fn main() {
-    let x: int;
+    let x: isize;
     unsafe {
-        asm!("mov $1, $0" : "r"(x) : "r"(5u)); //~ ERROR output operand constraint lacks '='
+        asm!("mov $1, $0" : "r"(x) : "r"(5)); //~ ERROR output operand constraint lacks '='
     }
     foo(x);
 }
 
-#[cfg(not(target_arch = "x86"), not(target_arch = "x86_64"), not(target_arch = "arm"))]
+#[cfg(not(any(target_arch = "x86",
+              target_arch = "x86_64",
+              target_arch = "arm",
+              target_arch = "aarch64")))]
 pub fn main() {}

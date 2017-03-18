@@ -8,16 +8,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+// pretty-expanded FIXME #23616
+
 struct Point {
-    x: int,
-    y: int
+    x: isize,
+    y: isize
 }
 
 struct Character {
-    pos: ~Point
+    pos: Box<Point>,
 }
 
-fn get_x<'r>(x: &'r Character) -> &'r int {
+fn get_x(x: &Character) -> &isize {
     // interesting case because the scope of this
     // borrow of the unique pointer is in fact
     // larger than the fn itself

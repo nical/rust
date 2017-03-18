@@ -11,12 +11,12 @@
 // Test for traits that inherit from multiple builtin kinds at once,
 // testing that all such kinds must be present on implementing types.
 
-trait Foo : Send+Freeze { }
+trait Foo : Send+Sync { }
 
-impl <T: Freeze> Foo for (T,) { } //~ ERROR cannot implement this trait
+impl <T: Sync+'static> Foo for (T,) { } //~ ERROR `T: std::marker::Send` is not satisfied
 
-impl <T: Send> Foo for (T,T) { } //~ ERROR cannot implement this trait
+impl <T: Send> Foo for (T,T) { } //~ ERROR `T: std::marker::Sync` is not satisfied
 
-impl <T: Send+Freeze> Foo for (T,T,T) { } // (ok)
+impl <T: Send+Sync> Foo for (T,T,T) { } // (ok)
 
 fn main() { }

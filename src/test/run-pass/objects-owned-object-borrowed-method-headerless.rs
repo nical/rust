@@ -9,31 +9,36 @@
 // except according to those terms.
 
 // Test invoked `&self` methods on owned objects where the values
-// closed over do not contain managed values, and thus the ~ boxes do
+// closed over do not contain managed values, and thus the boxes do
 // not have headers.
 
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
+
 trait FooTrait {
-    fn foo(&self) -> uint;
+    fn foo(&self) -> usize;
 }
 
 struct BarStruct {
-    x: uint
+    x: usize
 }
 
 impl FooTrait for BarStruct {
-    fn foo(&self) -> uint {
+    fn foo(&self) -> usize {
         self.x
     }
 }
 
 pub fn main() {
-    let foos: ~[ ~FooTrait ] = ~[
-        ~BarStruct{ x: 0 } as ~FooTrait,
-        ~BarStruct{ x: 1 } as ~FooTrait,
-        ~BarStruct{ x: 2 } as ~FooTrait
+    let foos: Vec<Box<FooTrait>> = vec![
+        box BarStruct{ x: 0 } as Box<FooTrait>,
+        box BarStruct{ x: 1 } as Box<FooTrait>,
+        box BarStruct{ x: 2 } as Box<FooTrait>
     ];
 
-    for i in range(0u, foos.len()) {
+    for i in 0..foos.len() {
         assert_eq!(i, foos[i].foo());
     }
 }

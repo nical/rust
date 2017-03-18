@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,31 +8,30 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
+// ignore-windows
+// ignore-emscripten no threads support
 // exec-env:RUST_LOG=debug
 
 use std::cell::Cell;
 use std::fmt;
+use std::thread;
 
-struct Foo(Cell<int>);
+struct Foo(Cell<isize>);
 
-impl fmt::Show for Foo {
-    fn fmt(f: &Foo, _fmt: &mut fmt::Formatter) -> fmt::Result {
-        let Foo(ref f) = *f;
-        assert!(f.get() == 0);
+impl fmt::Debug for Foo {
+    fn fmt(&self, _fmt: &mut fmt::Formatter) -> fmt::Result {
+        let Foo(ref f) = *self;
+        assert_eq!(f.get(), 0);
         f.set(1);
         Ok(())
     }
 }
 
 pub fn main() {
-    let (p,c) = Chan::new();
-    spawn(proc() {
+    thread::spawn(move|| {
         let mut f = Foo(Cell::new(0));
-        debug!("{}", f);
+        println!("{:?}", f);
         let Foo(ref mut f) = f;
-        assert!(f.get() == 1);
-        c.send(());
-    });
-    p.recv();
+        assert_eq!(f.get(), 1);
+    }).join().ok().unwrap();
 }

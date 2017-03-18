@@ -8,8 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct hello(int);
+struct hello(isize);
 
 fn main() {
-    let hello = 0; //~ERROR declaration of `hello` shadows
+    let hello = 0; //~ERROR let bindings cannot shadow tuple structs
 }

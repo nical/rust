@@ -12,17 +12,21 @@
 // nominal types (but not on other types) and that they are type
 // checked.
 
-struct an_enum<'a>(&'a int);
-struct a_class<'a> { x:&'a int }
+struct an_enum<'a>(&'a isize);
+struct a_class<'a> { x:&'a isize }
 
 fn a_fn1<'a,'b>(e: an_enum<'a>) -> an_enum<'b> {
-    return e; //~ ERROR mismatched types: expected `an_enum<'b>` but found `an_enum<'a>`
-    //~^ ERROR cannot infer an appropriate lifetime
+    return e; //~  ERROR mismatched types
+              //~| expected type `an_enum<'b>`
+              //~| found type `an_enum<'a>`
+              //~| lifetime mismatch
 }
 
 fn a_fn3<'a,'b>(e: a_class<'a>) -> a_class<'b> {
-    return e; //~ ERROR mismatched types: expected `a_class<'b>` but found `a_class<'a>`
-    //~^ ERROR cannot infer an appropriate lifetime
+    return e; //~  ERROR mismatched types
+              //~| expected type `a_class<'b>`
+              //~| found type `a_class<'a>`
+              //~| lifetime mismatch
 }
 
 fn main() { }

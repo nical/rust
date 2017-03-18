@@ -10,21 +10,18 @@
 
 // error-pattern: use of moved value
 
-extern mod extra;
-use extra::arc;
-
-use std::task;
+use std::sync::Arc;
+use std::thread;
 
 fn main() {
-    let v = ~[1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    let arc_v = arc::Arc::new(v);
+    let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let arc_v = Arc::new(v);
 
-    task::spawn(proc() {
-        let v = arc_v.get();
-        assert_eq!(v[3], 4);
+    thread::spawn(move|| {
+        assert_eq!((*arc_v)[3], 4);
     });
 
-    assert_eq!((arc_v.get())[2], 3);
+    assert_eq!((*arc_v)[2], 3);
 
-    info!("{:?}", arc_v);
+    println!("{:?}", *arc_v);
 }

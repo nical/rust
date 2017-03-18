@@ -9,16 +9,16 @@
 // except according to those terms.
 
 struct C {
-    x: int,
+    x: isize,
 }
 
 impl Drop for C {
     fn drop(&mut self) {
-        error!("dropping: {:?}", self.x);
+        println!("dropping: {}", self.x);
     }
 }
 
 fn main() {
     let c = C{ x: 2};
-    let _d = c.clone(); //~ ERROR does not implement any method in scope
+    let _d = c.clone(); //~ ERROR no method named `clone` found
 }

@@ -8,10 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct Foo { foo: bool, bar: Option<int>, baz: int }
+// pretty-expanded FIXME #23616
+
+struct Foo { foo: bool, bar: Option<isize>, baz: isize }
 
 pub fn main() {
-    match Foo{foo: true, bar: Some(10), baz: 20} {
+    match (Foo{foo: true, bar: Some(10), baz: 20}) {
       Foo{foo: true, bar: Some(_), ..} => {}
       Foo{foo: false, bar: None, ..} => {}
       Foo{foo: true, bar: None, ..} => {}

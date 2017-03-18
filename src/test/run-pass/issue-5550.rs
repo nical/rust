@@ -8,10 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(dead_assignment)];
+// pretty-expanded FIXME #23616
+
+#![allow(dead_assignment)]
 
 pub fn main() {
-    let s: ~str = ~"foobar";
-    let mut t: &str = s;
-    t = t.slice(0, 3); // for master: str::view(t, 0, 3) maybe
+    let s: String = "foobar".to_string();
+    let mut t: &str = &s;
+    t = &t[0..3]; // for master: str::view(t, 0, 3) maybe
 }

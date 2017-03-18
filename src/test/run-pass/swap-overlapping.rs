@@ -10,32 +10,34 @@
 
 // Issue #5041 - avoid overlapping memcpy when src and dest of a swap are the same
 
+// pretty-expanded FIXME #23616
+
 use std::ptr;
 
 pub fn main() {
     let mut test = TestDescAndFn {
         desc: TestDesc {
-            name: DynTestName(~"test"),
+            name: TestName::DynTestName("test".to_string()),
             should_fail: false
         },
-        testfn: DynTestFn(proc() ()),
+        testfn: TestFn::DynTestFn(22),
     };
     do_swap(&mut test);
 }
 
 fn do_swap(test: &mut TestDescAndFn) {
     unsafe {
-        ptr::swap_ptr(test, test);
+        ptr::swap(test, test);
     }
 }
 
 pub enum TestName {
-    DynTestName(~str)
+    DynTestName(String)
 }
 
 pub enum TestFn {
-    DynTestFn(proc()),
-    DynBenchFn(proc(&mut int))
+    DynTestFn(isize),
+    DynBenchFn(isize),
 }
 
 pub struct TestDesc {

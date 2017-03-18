@@ -10,11 +10,11 @@
 
 fn foo<T>() {
     struct foo {
-        x: T, //~ ERROR attempt to use a type argument out of scope
-        //~^ ERROR use of undeclared type name
+        x: T, //~ ERROR can't use type parameters from outer function;
     }
 
     impl<T> Drop for foo<T> {
+        //~^ ERROR wrong number of type arguments
         fn drop(&mut self) {}
     }
 }

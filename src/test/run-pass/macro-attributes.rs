@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,16 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-pretty - token trees can't pretty print
-
-#[feature(macro_rules)];
+#![feature(custom_attribute)]
 
 macro_rules! compiles_fine {
-    ($at:attr) => {
+    (#[$at:meta]) => {
         // test that the different types of attributes work
         #[attribute]
         /// Documentation!
-        $at
+        #[$at]
 
         // check that the attributes are recognised by requiring this
         // to be removed to avoid a compile error
@@ -27,7 +25,7 @@ macro_rules! compiles_fine {
 }
 
 // item
-compiles_fine!(#[foo])
+compiles_fine!(#[foo]);
 
 pub fn main() {
     // statement

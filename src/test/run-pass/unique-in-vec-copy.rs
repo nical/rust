@@ -8,8 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
 pub fn main() {
-    let mut a = ~[~10];
+    let mut a: Vec<Box<_>> = vec![box 10];
     let b = a.clone();
 
     assert_eq!(*a[0], 10);

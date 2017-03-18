@@ -1,0 +1,204 @@
+language: minimal
+sudo: required
+dist: trusty
+services:
+  - docker
+
+git:
+  depth: 1
+  submodules: false
+
+matrix:
+  fast_finish: true
+  include:
+    # Linux builders, all docker images
+    - env: IMAGE=arm-android
+    - env: IMAGE=armhf-gnu
+    - env: IMAGE=cross DEPLOY=1
+    - env: IMAGE=dist-android DEPLOY=1
+    - env: IMAGE=dist-arm-linux DEPLOY=1
+    - env: IMAGE=dist-armv7-aarch64-linux DEPLOY=1
+    - env: IMAGE=dist-freebsd DEPLOY=1
+    - env: IMAGE=dist-i586-gnu-i686-musl DEPLOY=1
+    - env: IMAGE=dist-fuchsia DEPLOY=1
+    - env: IMAGE=dist-mips-linux DEPLOY=1
+    - env: IMAGE=dist-mips64-linux DEPLOY=1
+    - env: IMAGE=dist-powerpc-linux DEPLOY=1
+    - env: IMAGE=dist-powerpc64-linux DEPLOY=1
+    - env: IMAGE=dist-s390x-linux-netbsd DEPLOY=1
+    - env: IMAGE=dist-x86-linux DEPLOY=1
+    - env: IMAGE=dist-x86_64-musl DEPLOY=1
+    - env: IMAGE=emscripten
+    - env: IMAGE=i686-gnu
+    - env: IMAGE=i686-gnu-nopt
+    - env: IMAGE=x86_64-gnu
+    - env: IMAGE=x86_64-gnu-full-bootstrap
+    - env: IMAGE=x86_64-gnu-aux
+    - env: IMAGE=x86_64-gnu-debug
+    - env: IMAGE=x86_64-gnu-nopt
+    - env: IMAGE=x86_64-gnu-llvm-3.7 ALLOW_PR=1 RUST_BACKTRACE=1
+    - env: IMAGE=x86_64-gnu-distcheck
+    - env: IMAGE=x86_64-gnu-incremental
+
+    # OSX builders
+    - env: >
+        RUST_CHECK_TARGET=check
+        RUST_CONFIGURE_ARGS=--build=x86_64-apple-darwin
+        SRC=.
+        RUSTC_RETRY_LINKER_ON_SEGFAULT=1
+        SCCACHE_ERROR_LOG=/tmp/sccache.log
+        RUST_LOG=sccache=debug
+      os: osx
+      osx_image: xcode8.2
+      install: &osx_install_sccache >
+        travis_retry curl -o /usr/local/bin/sccache https://s3.amazonaws.com/rust-lang-ci/rust-ci-mirror/2017-03-16-sccache-x86_64-apple-darwin &&
+          chmod +x /usr/local/bin/sccache
+    - env: >
+        RUST_CHECK_TARGET=check
+        RUST_CONFIGURE_ARGS=--build=i686-apple-darwin
+        SRC=.
+        RUSTC_RETRY_LINKER_ON_SEGFAULT=1
+        SCCACHE_ERROR_LOG=/tmp/sccache.log
+        RUST_LOG=sccache=debug
+      os: osx
+      osx_image: xcode8.2
+      install: *osx_install_sccache
+
+    - env: >
+        RUST_CHECK_TARGET=dist
+        RUST_CONFIGURE_ARGS="--build=i686-apple-darwin --enable-extended"
+        SRC=.
+        DEPLOY=1
+        RUSTC_RETRY_LINKER_ON_SEGFAULT=1
+        SCCACHE_ERROR_LOG=/tmp/sccache.log
+        RUST_LOG=sccache=debug
+      os: osx
+      osx_image: xcode8.2
+      install: >
+        travis_retry curl -o /usr/local/bin/sccache https://s3.amazonaws.com/rust-lang-ci/rust-ci-mirror/2017-03-16-sccache-x86_64-apple-darwin &&
+          chmod +x /usr/local/bin/sccache
+    - env: >
+        RUST_CHECK_TARGET=dist
+        RUST_CONFIGURE_ARGS="--target=aarch64-apple-ios,armv7-apple-ios,armv7s-apple-ios,i386-apple-ios,x86_64-apple-ios --enable-extended"
+        SRC=.
+        DEPLOY=1
+        RUSTC_RETRY_LINKER_ON_SEGFAULT=1
+        SCCACHE_ERROR_LOG=/tmp/sccache.log
+        RUST_LOG=sccache=debug
+      os: osx
+      osx_image: xcode8.2
+      install: *osx_install_sccache
+
+    # "alternate" deployments, these are "nightlies" but don't have assertions
+    # turned on, they're deployed to a different location primarily for projects
+    # which are stuck on nightly and don't want llvm assertions in the artifacts
+    # that they use.
+    - env: IMAGE=dist-x86-linux DEPLOY_ALT=1
+    - env: >
+        RUST_CHECK_TARGET=dist
+        RUST_CONFIGURE_ARGS="--enable-extended"
+        SRC=.
+        DEPLOY_ALT=1
+        RUSTC_RETRY_LINKER_ON_SEGFAULT=1
+        SCCACHE_ERROR_LOG=/tmp/sccache.log
+        RUST_LOG=sccache=debug
+      os: osx
+      osx_image: xcode8.2
+      install: *osx_install_sccache
+
+env:
+  global:
+    - SCCACHE_BUCKET=rust-lang-ci-sccache
+    - AWS_ACCESS_KEY_ID=AKIAIMX7VLAS3PZAVLUQ
+    # AWS_SECRET_ACCESS_KEY=...
+    - secure: "Pixhh0hXDqGCdOyLtGFjli3J2AtDWIpyb2btIrLe956nCBDRutRoMm6rv5DI9sFZN07Mms7VzNNvhc9wCW1y63JAm414d2Co7Ob8kWMZlz9l9t7ACHuktUiis8yr+S4Quq1Vqd6pqi7pf2J++UxC8R/uLeqVrubzr6+X7AbmEFE="
+
+before_script:
+  - >
+      echo "#### Disk usage before running script:";
+      df -h;
+      du . | sort -nr | head -n100
+
+script:
+  - >
+      if [ "$ALLOW_PR" = "" ] && [ "$TRAVIS_BRANCH" != "auto" ]; then
+          echo skipping, not a full build;
+      elif [ "$TRAVIS_OS_NAME" = "osx" ]; then
+          travis_retry sh -c 'git submodule deinit -f . && git submodule update --init' &&
+          src/ci/run.sh;
+      else
+          travis_retry sh -c 'git submodule deinit -f . && git submodule update --init' &&
+          src/ci/docker/run.sh $IMAGE;
+      fi
+
+after_success:
+  - >
+      echo "#### Build successful; Disk usage after running script:";
+      df -h;
+      du . | sort -nr | head -n100
+
+after_failure:
+  - >
+      echo "#### Build failed; Disk usage after running script:";
+      df -h;
+      du . | sort -nr | head -n100
+  - cat obj/tmp/sccache.log
+  - cat /tmp/sccache.log
+
+# Save tagged docker images we created and load them if they're available
+before_cache:
+  - docker history -q rust-ci |
+    grep -v missing |
+    xargs docker save |
+    gzip > $HOME/docker/rust-ci.tar.gz
+before_install:
+  - zcat $HOME/docker/rust-ci.tar.gz | docker load || true
+
+notifications:
+  email: false
+
+cache:
+  directories:
+    - $HOME/docker
+
+before_deploy:
+  - mkdir -p deploy/$TRAVIS_COMMIT
+  - >
+      if [ "$TRAVIS_OS_NAME" == "osx" ]; then
+          rm -rf build/dist/doc &&
+          cp -r build/dist/* deploy/$TRAVIS_COMMIT;
+      else
+          rm -rf obj/build/dist/doc &&
+          cp -r obj/build/dist/* deploy/$TRAVIS_COMMIT;
+      fi
+
+deploy:
+  - provider: s3
+    bucket: rust-lang-ci
+    skip_cleanup: true
+    local_dir: deploy
+    upload_dir: rustc-builds
+    acl: public_read
+    region: us-east-1
+    access_key_id: AKIAIPQVNYF2T3DTYIWQ
+    secret_access_key:
+      secure: "FBqDqOTeIPMu6v/WYPf4CFSlh9rLRZGKVtpLa5KkyuOhXRTrnEzBduEtS8/FMIxdQImvurhSvxWvqRybMOi4qoVfjMqqpHAI7uBbidbrvAcJoHNsx6BgUNVCIoH6a0UsAjTUtm6/YPIpzbHoLZXPL0GrHPMk6Mu04qVSmcYNWn4="
+    on:
+      branch: auto
+      condition: $DEPLOY = 1
+
+  # this is the same as the above deployment provider except that it uploads to
+  # a slightly different directory and has a different trigger
+  - provider: s3
+    bucket: rust-lang-ci
+    skip_cleanup: true
+    local_dir: deploy
+    upload_dir: rustc-builds-alt
+    acl: public_read
+    region: us-east-1
+    access_key_id: AKIAIPQVNYF2T3DTYIWQ
+    secret_access_key:
+      secure: "FBqDqOTeIPMu6v/WYPf4CFSlh9rLRZGKVtpLa5KkyuOhXRTrnEzBduEtS8/FMIxdQImvurhSvxWvqRybMOi4qoVfjMqqpHAI7uBbidbrvAcJoHNsx6BgUNVCIoH6a0UsAjTUtm6/YPIpzbHoLZXPL0GrHPMk6Mu04qVSmcYNWn4="
+    on:
+      branch: auto
+      condition: $DEPLOY_ALT = 1

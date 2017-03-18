@@ -8,321 +8,252 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use ast;
-use ast::{TokenTree, TTDelim, TTTok, TTSeq, TTNonterminal, Ident};
-use codemap::{Span, DUMMY_SP};
-use diagnostic::SpanHandler;
+use ast::Ident;
+use errors::Handler;
 use ext::tt::macro_parser::{NamedMatch, MatchedSeq, MatchedNonterminal};
-use parse::token::{EOF, INTERPOLATED, IDENT, Token, NtIdent};
-use parse::token;
-use parse::lexer::TokenAndSpan;
+use ext::tt::quoted;
+use parse::token::{self, SubstNt, Token, NtIdent, NtTT};
+use syntax_pos::{Span, DUMMY_SP};
+use tokenstream::{TokenStream, TokenTree, Delimited};
+use util::small_vector::SmallVector;
 
-use std::cell::{Cell, RefCell};
-use std::hashmap::HashMap;
-use std::option;
+use std::rc::Rc;
+use std::mem;
+use std::ops::Add;
+use std::collections::HashMap;
 
-///an unzipping of `TokenTree`s
-struct TtFrame {
-    forest: @~[ast::TokenTree],
-    idx: Cell<uint>,
-    dotdotdoted: bool,
-    sep: Option<Token>,
-    up: Option<@TtFrame>,
+// An iterator over the token trees in a delimited token tree (`{ ... }`) or a sequence (`$(...)`).
+enum Frame {
+    Delimited {
+        forest: Rc<quoted::Delimited>,
+        idx: usize,
+        span: Span,
+    },
+    Sequence {
+        forest: Rc<quoted::SequenceRepetition>,
+        idx: usize,
+        sep: Option<Token>,
+    },
 }
 
-pub struct TtReader {
-    sp_diag: @SpanHandler,
-    // the unzipped tree:
-    priv stack: RefCell<@TtFrame>,
-    /* for MBE-style macro transcription */
-    priv interpolations: RefCell<HashMap<Ident, @NamedMatch>>,
-    priv repeat_idx: RefCell<~[uint]>,
-    priv repeat_len: RefCell<~[uint]>,
-    /* cached: */
-    cur_tok: RefCell<Token>,
-    cur_span: RefCell<Span>,
-}
-
-/** This can do Macro-By-Example transcription. On the other hand, if
- *  `src` contains no `TTSeq`s and `TTNonterminal`s, `interp` can (and
- *  should) be none. */
-pub fn new_tt_reader(sp_diag: @SpanHandler,
-                     interp: Option<HashMap<Ident, @NamedMatch>>,
-                     src: ~[ast::TokenTree])
-                     -> @TtReader {
-    let r = @TtReader {
-        sp_diag: sp_diag,
-        stack: RefCell::new(@TtFrame {
-            forest: @src,
-            idx: Cell::new(0u),
-            dotdotdoted: false,
-            sep: None,
-            up: option::None
-        }),
-        interpolations: match interp { /* just a convienience */
-            None => RefCell::new(HashMap::new()),
-            Some(x) => RefCell::new(x),
-        },
-        repeat_idx: RefCell::new(~[]),
-        repeat_len: RefCell::new(~[]),
-        /* dummy values, never read: */
-        cur_tok: RefCell::new(EOF),
-        cur_span: RefCell::new(DUMMY_SP),
-    };
-    tt_next_token(r); /* get cur_tok and cur_span set up */
-    return r;
-}
-
-fn dup_tt_frame(f: @TtFrame) -> @TtFrame {
-    @TtFrame {
-        forest: @(*f.forest).clone(),
-        idx: f.idx.clone(),
-        dotdotdoted: f.dotdotdoted,
-        sep: f.sep.clone(),
-        up: match f.up {
-            Some(up_frame) => Some(dup_tt_frame(up_frame)),
-            None => None
-        }
+impl Frame {
+    fn new(tts: Vec<quoted::TokenTree>) -> Frame {
+        let forest = Rc::new(quoted::Delimited { delim: token::NoDelim, tts: tts });
+        Frame::Delimited { forest: forest, idx: 0, span: DUMMY_SP }
     }
 }
 
-pub fn dup_tt_reader(r: @TtReader) -> @TtReader {
-    @TtReader {
-        sp_diag: r.sp_diag,
-        stack: RefCell::new(dup_tt_frame(r.stack.get())),
-        repeat_idx: r.repeat_idx.clone(),
-        repeat_len: r.repeat_len.clone(),
-        cur_tok: r.cur_tok.clone(),
-        cur_span: r.cur_span.clone(),
-        interpolations: r.interpolations.clone(),
-    }
-}
+impl Iterator for Frame {
+    type Item = quoted::TokenTree;
 
-
-fn lookup_cur_matched_by_matched(r: &TtReader, start: @NamedMatch)
-                                 -> @NamedMatch {
-    fn red(ad: @NamedMatch, idx: &uint) -> @NamedMatch {
-        match *ad {
-            MatchedNonterminal(_) => {
-                // end of the line; duplicate henceforth
-                ad
+    fn next(&mut self) -> Option<quoted::TokenTree> {
+        match *self {
+            Frame::Delimited { ref forest, ref mut idx, .. } => {
+                *idx += 1;
+                forest.tts.get(*idx - 1).cloned()
             }
-            MatchedSeq(ref ads, _) => ads[*idx]
-        }
-    }
-    let repeat_idx = r.repeat_idx.borrow();
-    repeat_idx.get().iter().fold(start, red)
-}
-
-fn lookup_cur_matched(r: &TtReader, name: Ident) -> @NamedMatch {
-    let matched_opt = {
-        let interpolations = r.interpolations.borrow();
-        interpolations.get().find_copy(&name)
-    };
-    match matched_opt {
-        Some(s) => lookup_cur_matched_by_matched(r, s),
-        None => {
-            let name_string = token::get_ident(name.name);
-            r.sp_diag.span_fatal(r.cur_span.get(),
-                                 format!("unknown macro variable `{}`",
-                                         name_string.get()));
-        }
-    }
-}
-
-#[deriving(Clone)]
-enum LockstepIterSize {
-    LisUnconstrained,
-    LisConstraint(uint, Ident),
-    LisContradiction(~str),
-}
-
-fn lis_merge(lhs: LockstepIterSize, rhs: LockstepIterSize) -> LockstepIterSize {
-    match lhs {
-        LisUnconstrained => rhs.clone(),
-        LisContradiction(_) => lhs.clone(),
-        LisConstraint(l_len, ref l_id) => match rhs {
-            LisUnconstrained => lhs.clone(),
-            LisContradiction(_) => rhs.clone(),
-            LisConstraint(r_len, _) if l_len == r_len => lhs.clone(),
-            LisConstraint(r_len, ref r_id) => {
-                let l_n = token::get_ident(l_id.name);
-                let r_n = token::get_ident(r_id.name);
-                LisContradiction(format!("Inconsistent lockstep iteration: \
-                                          '{}' has {} items, but '{}' has {}",
-                                          l_n.get(), l_len, r_n.get(), r_len))
+            Frame::Sequence { ref forest, ref mut idx, .. } => {
+                *idx += 1;
+                forest.tts.get(*idx - 1).cloned()
             }
         }
     }
 }
 
-fn lockstep_iter_size(t: &TokenTree, r: &TtReader) -> LockstepIterSize {
-    match *t {
-        TTDelim(ref tts) | TTSeq(_, ref tts, _, _) => {
-            tts.iter().fold(LisUnconstrained, |lis, tt| {
-                lis_merge(lis, lockstep_iter_size(tt, r))
-            })
-        }
-        TTTok(..) => LisUnconstrained,
-        TTNonterminal(_, name) => match *lookup_cur_matched(r, name) {
-            MatchedNonterminal(_) => LisUnconstrained,
-            MatchedSeq(ref ads, _) => LisConstraint(ads.len(), name)
-        }
-    }
-}
+/// This can do Macro-By-Example transcription. On the other hand, if
+/// `src` contains no `TokenTree::{Sequence, Match}`s, or `SubstNt`s, `interp` can
+/// (and should) be None.
+pub fn transcribe(sp_diag: &Handler,
+                  interp: Option<HashMap<Ident, Rc<NamedMatch>>>,
+                  src: Vec<quoted::TokenTree>)
+                  -> TokenStream {
+    let mut stack = SmallVector::one(Frame::new(src));
+    let interpolations = interp.unwrap_or_else(HashMap::new); /* just a convenience */
+    let mut repeats = Vec::new();
+    let mut result: Vec<TokenStream> = Vec::new();
+    let mut result_stack = Vec::new();
 
-// return the next token from the TtReader.
-// EFFECT: advances the reader's token field
-pub fn tt_next_token(r: &TtReader) -> TokenAndSpan {
-    // FIXME(pcwalton): Bad copy?
-    let ret_val = TokenAndSpan {
-        tok: r.cur_tok.get(),
-        sp: r.cur_span.get(),
-    };
     loop {
-        {
-            let mut stack = r.stack.borrow_mut();
-            if stack.get().idx.get() < stack.get().forest.len() {
-                break;
-            }
-        }
-
-        /* done with this set; pop or repeat? */
-        if !r.stack.get().dotdotdoted || {
-                let repeat_idx = r.repeat_idx.borrow();
-                let repeat_len = r.repeat_len.borrow();
-                *repeat_idx.get().last().unwrap() ==
-                *repeat_len.get().last().unwrap() - 1
-            } {
-
-            match r.stack.get().up {
-              None => {
-                r.cur_tok.set(EOF);
-                return ret_val;
-              }
-              Some(tt_f) => {
-                if r.stack.get().dotdotdoted {
-                    {
-                        let mut repeat_idx = r.repeat_idx.borrow_mut();
-                        let mut repeat_len = r.repeat_len.borrow_mut();
-                        repeat_idx.get().pop().unwrap();
-                        repeat_len.get().pop().unwrap();
+        let tree = if let Some(tree) = stack.last_mut().unwrap().next() {
+            tree
+        } else {
+            if let Frame::Sequence { ref mut idx, ref sep, .. } = *stack.last_mut().unwrap() {
+                let (ref mut repeat_idx, repeat_len) = *repeats.last_mut().unwrap();
+                *repeat_idx += 1;
+                if *repeat_idx < repeat_len {
+                    *idx = 0;
+                    if let Some(sep) = sep.clone() {
+                        // repeat same span, I guess
+                        let prev_span = match result.last() {
+                            Some(stream) => stream.trees().next().unwrap().span(),
+                            None => DUMMY_SP,
+                        };
+                        result.push(TokenTree::Token(prev_span, sep).into());
                     }
+                    continue
                 }
-
-                r.stack.set(tt_f);
-                r.stack.get().idx.set(r.stack.get().idx.get() + 1u);
-              }
             }
 
-        } else { /* repeat */
-            r.stack.get().idx.set(0u);
-            {
-                let mut repeat_idx = r.repeat_idx.borrow_mut();
-                repeat_idx.get()[repeat_idx.get().len() - 1u] += 1u;
-            }
-            match r.stack.get().sep.clone() {
-              Some(tk) => {
-                r.cur_tok.set(tk); /* repeat same span, I guess */
-                return ret_val;
-              }
-              None => ()
-            }
-        }
-    }
-    loop { /* because it's easiest, this handles `TTDelim` not starting
-    with a `TTTok`, even though it won't happen */
-        // FIXME(pcwalton): Bad copy.
-        match r.stack.get().forest[r.stack.get().idx.get()].clone() {
-          TTDelim(tts) => {
-            r.stack.set(@TtFrame {
-                forest: tts,
-                idx: Cell::new(0u),
-                dotdotdoted: false,
-                sep: None,
-                up: option::Some(r.stack.get())
-            });
-            // if this could be 0-length, we'd need to potentially recur here
-          }
-          TTTok(sp, tok) => {
-            r.cur_span.set(sp);
-            r.cur_tok.set(tok);
-            r.stack.get().idx.set(r.stack.get().idx.get() + 1u);
-            return ret_val;
-          }
-          TTSeq(sp, tts, sep, zerok) => {
-            // FIXME(pcwalton): Bad copy.
-            let t = TTSeq(sp, tts, sep.clone(), zerok);
-            match lockstep_iter_size(&t, r) {
-              LisUnconstrained => {
-                r.sp_diag.span_fatal(
-                    sp, /* blame macro writer */
-                      "attempted to repeat an expression \
-                       containing no syntax \
-                       variables matched as repeating at this depth");
-                  }
-                  LisContradiction(ref msg) => {
-                      /* FIXME #2887 blame macro invoker instead*/
-                      r.sp_diag.span_fatal(sp, (*msg));
-                  }
-                  LisConstraint(len, _) => {
-                    if len == 0 {
-                      if !zerok {
-                        r.sp_diag.span_fatal(sp, /* FIXME #2887 blame invoker
-                        */
-                                             "this must repeat at least \
-                                              once");
-                          }
-
-                    r.stack.get().idx.set(r.stack.get().idx.get() + 1u);
-                    return tt_next_token(r);
-                } else {
-                    {
-                        let mut repeat_idx = r.repeat_idx.borrow_mut();
-                        let mut repeat_len = r.repeat_len.borrow_mut();
-                        repeat_len.get().push(len);
-                        repeat_idx.get().push(0u);
-                        r.stack.set(@TtFrame {
-                            forest: tts,
-                            idx: Cell::new(0u),
-                            dotdotdoted: true,
-                            sep: sep,
-                            up: Some(r.stack.get())
-                        });
+            match stack.pop().unwrap() {
+                Frame::Sequence { .. } => {
+                    repeats.pop();
+                }
+                Frame::Delimited { forest, span, .. } => {
+                    if result_stack.is_empty() {
+                        return TokenStream::concat(result);
                     }
+                    let tree = TokenTree::Delimited(span, Delimited {
+                        delim: forest.delim,
+                        tts: TokenStream::concat(result).into(),
+                    });
+                    result = result_stack.pop().unwrap();
+                    result.push(tree.into());
                 }
-              }
             }
-          }
-          // FIXME #2887: think about span stuff here
-          TTNonterminal(sp, ident) => {
-            match *lookup_cur_matched(r, ident) {
-              /* sidestep the interpolation tricks for ident because
-              (a) idents can be in lots of places, so it'd be a pain
-              (b) we actually can, since it's a token. */
-              MatchedNonterminal(NtIdent(~sn,b)) => {
-                r.cur_span.set(sp);
-                r.cur_tok.set(IDENT(sn,b));
-                r.stack.get().idx.set(r.stack.get().idx.get() + 1u);
-                return ret_val;
-              }
-              MatchedNonterminal(ref other_whole_nt) => {
+            continue
+        };
+
+        match tree {
+            quoted::TokenTree::Sequence(sp, seq) => {
                 // FIXME(pcwalton): Bad copy.
-                r.cur_span.set(sp);
-                r.cur_tok.set(INTERPOLATED((*other_whole_nt).clone()));
-                r.stack.get().idx.set(r.stack.get().idx.get() + 1u);
-                return ret_val;
-              }
-              MatchedSeq(..) => {
-                let string = token::get_ident(ident.name);
-                r.sp_diag.span_fatal(
-                    r.cur_span.get(), /* blame the macro writer */
-                    format!("variable '{}' is still repeating at this depth",
-                            string.get()));
-              }
+                match lockstep_iter_size(&quoted::TokenTree::Sequence(sp, seq.clone()),
+                                         &interpolations,
+                                         &repeats) {
+                    LockstepIterSize::Unconstrained => {
+                        panic!(sp_diag.span_fatal(
+                            sp.clone(), /* blame macro writer */
+                            "attempted to repeat an expression \
+                             containing no syntax \
+                             variables matched as repeating at this depth"));
+                    }
+                    LockstepIterSize::Contradiction(ref msg) => {
+                        // FIXME #2887 blame macro invoker instead
+                        panic!(sp_diag.span_fatal(sp.clone(), &msg[..]));
+                    }
+                    LockstepIterSize::Constraint(len, _) => {
+                        if len == 0 {
+                            if seq.op == quoted::KleeneOp::OneOrMore {
+                                // FIXME #2887 blame invoker
+                                panic!(sp_diag.span_fatal(sp.clone(),
+                                                          "this must repeat at least once"));
+                            }
+                        } else {
+                            repeats.push((0, len));
+                            stack.push(Frame::Sequence {
+                                idx: 0,
+                                sep: seq.separator.clone(),
+                                forest: seq,
+                            });
+                        }
+                    }
+                }
             }
-          }
+            // FIXME #2887: think about span stuff here
+            quoted::TokenTree::Token(sp, SubstNt(ident)) => {
+                match lookup_cur_matched(ident, &interpolations, &repeats) {
+                    None => result.push(TokenTree::Token(sp, SubstNt(ident)).into()),
+                    Some(cur_matched) => if let MatchedNonterminal(ref nt) = *cur_matched {
+                        match **nt {
+                            // sidestep the interpolation tricks for ident because
+                            // (a) idents can be in lots of places, so it'd be a pain
+                            // (b) we actually can, since it's a token.
+                            NtIdent(ref sn) => {
+                                let token = TokenTree::Token(sn.span, token::Ident(sn.node));
+                                result.push(token.into());
+                            }
+                            NtTT(ref tt) => result.push(tt.clone().into()),
+                            _ => {
+                                let token = TokenTree::Token(sp, token::Interpolated(nt.clone()));
+                                result.push(token.into());
+                            }
+                        }
+                    } else {
+                        panic!(sp_diag.span_fatal(
+                            sp, /* blame the macro writer */
+                            &format!("variable '{}' is still repeating at this depth", ident)));
+                    }
+                }
+            }
+            quoted::TokenTree::Delimited(span, delimited) => {
+                stack.push(Frame::Delimited { forest: delimited, idx: 0, span: span });
+                result_stack.push(mem::replace(&mut result, Vec::new()));
+            }
+            quoted::TokenTree::Token(span, tok) => result.push(TokenTree::Token(span, tok).into()),
+            quoted::TokenTree::MetaVarDecl(..) => panic!("unexpected `TokenTree::MetaVarDecl"),
         }
     }
+}
 
+fn lookup_cur_matched(ident: Ident,
+                      interpolations: &HashMap<Ident, Rc<NamedMatch>>,
+                      repeats: &[(usize, usize)])
+                      -> Option<Rc<NamedMatch>> {
+    interpolations.get(&ident).map(|matched| {
+        repeats.iter().fold(matched.clone(), |ad, &(idx, _)| {
+            match *ad {
+                MatchedNonterminal(_) => {
+                    // end of the line; duplicate henceforth
+                    ad.clone()
+                }
+                MatchedSeq(ref ads, _) => ads[idx].clone()
+            }
+        })
+    })
+}
+
+#[derive(Clone)]
+enum LockstepIterSize {
+    Unconstrained,
+    Constraint(usize, Ident),
+    Contradiction(String),
+}
+
+impl Add for LockstepIterSize {
+    type Output = LockstepIterSize;
+
+    fn add(self, other: LockstepIterSize) -> LockstepIterSize {
+        match self {
+            LockstepIterSize::Unconstrained => other,
+            LockstepIterSize::Contradiction(_) => self,
+            LockstepIterSize::Constraint(l_len, ref l_id) => match other {
+                LockstepIterSize::Unconstrained => self.clone(),
+                LockstepIterSize::Contradiction(_) => other,
+                LockstepIterSize::Constraint(r_len, _) if l_len == r_len => self.clone(),
+                LockstepIterSize::Constraint(r_len, r_id) => {
+                    let msg = format!("inconsistent lockstep iteration: \
+                                       '{}' has {} items, but '{}' has {}",
+                                      l_id, l_len, r_id, r_len);
+                    LockstepIterSize::Contradiction(msg)
+                }
+            },
+        }
+    }
+}
+
+fn lockstep_iter_size(tree: &quoted::TokenTree,
+                      interpolations: &HashMap<Ident, Rc<NamedMatch>>,
+                      repeats: &[(usize, usize)])
+                      -> LockstepIterSize {
+    use self::quoted::TokenTree;
+    match *tree {
+        TokenTree::Delimited(_, ref delimed) => {
+            delimed.tts.iter().fold(LockstepIterSize::Unconstrained, |size, tt| {
+                size + lockstep_iter_size(tt, interpolations, repeats)
+            })
+        },
+        TokenTree::Sequence(_, ref seq) => {
+            seq.tts.iter().fold(LockstepIterSize::Unconstrained, |size, tt| {
+                size + lockstep_iter_size(tt, interpolations, repeats)
+            })
+        },
+        TokenTree::Token(_, SubstNt(name)) | TokenTree::MetaVarDecl(_, name, _) =>
+            match lookup_cur_matched(name, interpolations, repeats) {
+                Some(matched) => match *matched {
+                    MatchedNonterminal(_) => LockstepIterSize::Unconstrained,
+                    MatchedSeq(ref ads, _) => LockstepIterSize::Constraint(ads.len(), name),
+                },
+                _ => LockstepIterSize::Unconstrained
+            },
+        TokenTree::Token(..) => LockstepIterSize::Unconstrained,
+    }
 }

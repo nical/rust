@@ -8,12 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-enum E { V0, V1(int) }
-static C: &'static E = &V0;
+
+enum E { V0, V1(isize) }
+static C: &'static E = &E::V0;
 
 pub fn main() {
     match *C {
-        V0 => (),
-        _ => fail!()
+        E::V0 => (),
+        _ => panic!()
     }
 }

@@ -18,21 +18,22 @@ This does not occur with concrete types, only with references
 to traits.
 */
 
+
 // original
 trait Inner {
     fn print(&self);
 }
 
-impl Inner for int {
+impl Inner for isize {
     fn print(&self) { print!("Inner: {}\n", *self); }
 }
 
 struct Outer<'a> {
-    inner: &'a Inner
+    inner: &'a (Inner+'a)
 }
 
 impl<'a> Outer<'a> {
-    fn new<'r>(inner: &'r Inner) -> Outer<'r> {
+    fn new(inner: &Inner) -> Outer {
         Outer {
             inner: inner
         }
@@ -40,17 +41,19 @@ impl<'a> Outer<'a> {
 }
 
 pub fn main() {
-    let inner = 5;
+    let inner: isize = 5;
     let outer = Outer::new(&inner as &Inner);
     outer.inner.print();
 }
 
 
 // minimal
-trait MyTrait<T> { }
+pub trait MyTrait<T> {
+    fn dummy(&self, t: T) -> T { panic!() }
+}
 
-pub struct MyContainer<'a, T> {
-    foos: ~[&'a MyTrait<T>],
+pub struct MyContainer<'a, T:'a> {
+    foos: Vec<&'a (MyTrait<T>+'a)> ,
 }
 
 impl<'a, T> MyContainer<'a, T> {

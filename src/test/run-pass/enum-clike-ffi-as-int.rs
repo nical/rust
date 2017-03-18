@@ -8,6 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 /*!
  * C-like enums have to be represented as LLVM ints, not wrapped in a
  * struct, because it's important for the FFI that they interoperate
@@ -24,16 +25,17 @@
 
 #[repr(u32)]
 enum Foo {
-  A = 0,
-  B = 23
+    A = 0,
+    B = 23
 }
 
 #[inline(never)]
-extern "C" fn foo(_x: uint) -> Foo { B }
+extern "C" fn foo(_x: usize) -> Foo { Foo::B }
 
 pub fn main() {
-  unsafe {
-    let f: extern "C" fn(uint) -> u32 = ::std::cast::transmute(foo);
-    assert_eq!(f(0xDEADBEEF), B as u32);
-  }
+    unsafe {
+        let f: extern "C" fn(usize) -> u32 =
+            ::std::mem::transmute(foo as extern "C" fn(usize) -> Foo);
+        assert_eq!(f(0xDEADBEEF), Foo::B as u32);
+    }
 }

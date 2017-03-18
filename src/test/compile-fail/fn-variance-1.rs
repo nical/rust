@@ -8,18 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn takes_imm(x: &int) { }
+fn takes_imm(x: &isize) { }
 
-fn takes_mut(x: &mut int) { }
+fn takes_mut(x: &mut isize) { }
 
-fn apply<T>(t: T, f: |T|) {
+fn apply<T, F>(t: T, f: F) where F: FnOnce(T) {
     f(t)
 }
 
 fn main() {
-    apply(&3, takes_mut); //~ ERROR (values differ in mutability)
     apply(&3, takes_imm);
+    apply(&3, takes_mut);
+    //~^ ERROR (types differ in mutability)
 
     apply(&mut 3, takes_mut);
-    apply(&mut 3, takes_imm); //~ ERROR (values differ in mutability)
+    apply(&mut 3, takes_imm);
+    //~^ ERROR (types differ in mutability)
 }

@@ -10,7 +10,7 @@
 
 
 pub fn main() {
-    let i: int =
-        match Some::<int>(3) { None::<int> => { fail!() } Some::<int>(_) => { 5 } };
-    info!("{}", i);
+    let i: isize =
+        match Some::<isize>(3) { None::<isize> => { panic!() } Some::<isize>(_) => { 5 } };
+    println!("{}", i);
 }

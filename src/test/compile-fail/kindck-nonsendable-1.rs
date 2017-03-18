@@ -8,13 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
 
-fn foo(_x: @uint) {}
+use std::rc::Rc;
+
+fn foo(_x: Rc<usize>) {}
+
+fn bar<F:FnOnce() + Send>(_: F) { }
 
 fn main() {
-    let x = @3u;
-    let _: proc() = proc() foo(x); //~ ERROR does not fulfill `Send`
-    let _: proc() = proc() foo(x); //~ ERROR does not fulfill `Send`
-    let _: proc() = proc() foo(x); //~ ERROR does not fulfill `Send`
+    let x = Rc::new(3);
+    bar(move|| foo(x));
+    //~^ ERROR : std::marker::Send` is not satisfied
 }

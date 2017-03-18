@@ -8,15 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-trait MyTrait { }
+#![feature(box_patterns)]
+#![feature(box_syntax)]
 
-pub enum TraitWrapper {
-    A(~MyTrait),
+trait MyTrait {
+    fn dummy(&self) {}
 }
 
-fn get_tw_map<'lt>(tw: &'lt TraitWrapper) -> &'lt MyTrait {
+pub enum TraitWrapper {
+    A(Box<MyTrait+'static>),
+}
+
+fn get_tw_map(tw: &TraitWrapper) -> &MyTrait {
     match *tw {
-        A(~ref map) => map, //~ ERROR found a ~-box pattern
+        TraitWrapper::A(box ref map) => map, //~ ERROR cannot be dereferenced
     }
 }
 

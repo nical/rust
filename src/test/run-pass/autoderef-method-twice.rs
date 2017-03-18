@@ -8,17 +8,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 trait double {
-    fn double(@self) -> uint;
+    fn double(self: Box<Self>) -> usize;
 }
 
-impl double for uint {
-    fn double(@self) -> uint { *self * 2u }
+impl double for usize {
+    fn double(self: Box<usize>) -> usize { *self * 2 }
 }
 
 pub fn main() {
-    let x = @@3u;
-    assert_eq!(x.double(), 6u);
+    let x: Box<Box<_>> = box box 3;
+    assert_eq!(x.double(), 6);
 }

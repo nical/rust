@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,13 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
 
-pub fn f() -> int { return 1; }
+
+pub fn f() -> isize { return 1; }
 
 pub mod foo {
-    pub fn f() -> int { return 2; }
-    pub fn g() { assert!((f() == 2)); assert!((::f() == 1)); }
+    pub fn f() -> isize { return 2; }
+    pub fn g() {
+        assert_eq!(f(), 2);
+        assert_eq!(::f(), 1);
+    }
 }
 
 pub fn main() { return foo::g(); }

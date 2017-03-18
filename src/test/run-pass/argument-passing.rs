@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,20 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
+
 
 struct X {
-    x: int
+    x: isize
 }
 
-fn f1(a: &mut X, b: &mut int, c: int) -> int {
+fn f1(a: &mut X, b: &mut isize, c: isize) -> isize {
     let r = a.x + *b + c;
     a.x = 0;
     *b = 10;
     return r;
 }
 
-fn f2(a: int, f: |int|) -> int { f(1); return a; }
+fn f2<F>(a: isize, f: F) -> isize where F: FnOnce(isize) { f(1); return a; }
 
 pub fn main() {
     let mut a = X {x: 1};

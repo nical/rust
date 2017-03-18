@@ -8,10 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// compile-flags: --crate-type=lib
+
 // Issue #759
 // Whitespace under block opening should not expand forever
 
-fn a() -> uint {
+fn a() -> usize {
 
-    1u
+    1
 }

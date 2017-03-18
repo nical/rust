@@ -8,14 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// error-pattern: unresolved name
-
 mod foo {
-    pub fn x() { bar::x(); }
+    pub fn x() { bar::x(); } //~ ERROR failed to resolve. Use of undeclared type or module `bar`
 }
 
 mod bar {
-    fn x() { info!("x"); }
+    fn x() { println!("x"); }
 
     pub fn y() { }
 }

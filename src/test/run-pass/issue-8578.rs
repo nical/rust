@@ -8,8 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 pub struct UninterpretedOption_NamePart {
-    name_part: Option<~str>,
+    name_part: Option<String>,
 }
 
 impl<'a> UninterpretedOption_NamePart {
@@ -17,7 +19,7 @@ impl<'a> UninterpretedOption_NamePart {
         static instance: UninterpretedOption_NamePart = UninterpretedOption_NamePart {
             name_part: None,
         };
-        &'static instance
+        &instance
     }
 }
 

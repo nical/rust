@@ -11,10 +11,11 @@
 
 
 
-fn f() -> int { return 42; }
+
+fn f() -> isize { return 42; }
 
 pub fn main() {
-    let g: extern fn() -> int = f;
-    let i: int = g();
+    let g: fn() -> isize = f;
+    let i: isize = g();
     assert_eq!(i, 42);
 }

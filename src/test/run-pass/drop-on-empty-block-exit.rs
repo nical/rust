@@ -8,11 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+// pretty-expanded FIXME #23616
 
-enum t { foo(@int), }
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
+enum t { foo(Box<isize>), }
 
 pub fn main() {
-    let tt = foo(@10);
-    match tt { foo(_z) => { } }
+    let tt = t::foo(box 10);
+    match tt { t::foo(_z) => { } }
 }

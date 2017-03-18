@@ -8,14 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::cmp::{Eq, Ord};
-use std::num::NumCast;
+pub trait NumCast: Sized {
+    fn from(i: i32) -> Option<Self>;
+}
 
-pub trait NumExt: Eq + Ord + Num + NumCast {}
+pub trait NumExt: PartialEq + PartialOrd + NumCast {}
 
 impl NumExt for f32 {}
+impl NumCast for f32 {
+    fn from(i: i32) -> Option<f32> { Some(i as f32) }
+}
 
-fn num_eq_one<T:NumExt>(n: T) {
+fn num_eq_one<T: NumExt>(n: T) {
     println!("{}", n == NumCast::from(1).unwrap())
 }
 

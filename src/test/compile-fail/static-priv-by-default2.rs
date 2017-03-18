@@ -10,12 +10,12 @@
 
 // aux-build:static_priv_by_default.rs
 
-extern mod static_priv_by_default;
+extern crate static_priv_by_default;
 
 mod child {
     pub mod childs_child {
-        static private: int = 0;
-        pub static public: int = 0;
+        static private: isize = 0;
+        pub static public: isize = 0;
     }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -11,7 +11,8 @@
 // This is meant as a test case for Issue 3961.
 //
 // Test via: rustc --pretty normal src/test/pretty/block-comment-wchar.rs
-//
+// ignore-tidy-cr
+// ignore-tidy-tab
 // pp-exact:block-comment-wchar.pp
 fn f() {
     fn nested() {
@@ -103,12 +104,13 @@ fn f() {
 fn main() {
     // Taken from http://www.unicode.org/Public/UNIDATA/PropList.txt
     let chars =
-        ['\x0A', '\x0B', '\x0C', '\x0D', '\x20', '\x85', '\xA0', '\u1680',
-         '\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005', '\u2006',
-         '\u2007', '\u2008', '\u2009', '\u200A', '\u2028', '\u2029', '\u202F',
-         '\u205F', '\u3000'];
-    for c in chars.iter() {
+        ['\x0A', '\x0B', '\x0C', '\x0D', '\x20', '\u{85}', '\u{A0}',
+         '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}',
+         '\u{2004}', '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}',
+         '\u{2009}', '\u{200A}', '\u{2028}', '\u{2029}', '\u{202F}',
+         '\u{205F}', '\u{3000}'];
+    for c in &chars {
         let ws = c.is_whitespace();
-        println!("{:?} {:?}" , c , ws);
+        println!("{} {}" , c , ws);
     }
 }

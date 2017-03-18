@@ -11,27 +11,37 @@
 // Test that certain pattern-match type errors are non-fatal
 
 enum A {
-    B(int, int),
-    C(int, int, int),
+    B(isize, isize),
+    C(isize, isize, isize),
     D
 }
 
 struct S {
-    a: int
+    a: isize
 }
 
 fn f(_c: char) {}
 
 fn main() {
-    match B(1, 2) {
-        B(_, _, _) => (), //~ ERROR this pattern has 3 fields, but
-        D(_) => (),       //~ ERROR this pattern has 1 field, but
+    match A::B(1, 2) {
+        A::B(_, _, _) => (), //~ ERROR this pattern has 3 fields, but
+        A::D(_) => (),       //~ ERROR expected tuple struct/variant, found unit variant `A::D`
         _ => ()
     }
     match 'c' {
-        S { .. } => (),   //~ ERROR mismatched types: expected `char` but found a structure pattern
+        S { .. } => (),
+        //~^ ERROR mismatched types
+        //~| expected type `char`
+        //~| found type `S`
+        //~| expected char, found struct `S`
 
         _ => ()
     }
-    f(true);            //~ ERROR mismatched types: expected `char` but found `bool`
+    f(true);
+    //~^ ERROR mismatched types
+    //~| expected char, found bool
+
+    match () {
+        E::V => {} //~ ERROR failed to resolve. Use of undeclared type or module `E`
+    }
 }

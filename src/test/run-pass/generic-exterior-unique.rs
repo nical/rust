@@ -8,12 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct Recbox<T> {x: ~T}
 
-fn reclift<T>(t: T) -> Recbox<T> { return Recbox {x: ~t}; }
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
+struct Recbox<T> {x: Box<T>}
+
+fn reclift<T>(t: T) -> Recbox<T> { return Recbox {x: box t}; }
 
 pub fn main() {
-    let foo: int = 17;
-    let rbfoo: Recbox<int> = reclift::<int>(foo);
+    let foo: isize = 17;
+    let rbfoo: Recbox<isize> = reclift::<isize>(foo);
     assert_eq!(*rbfoo.x, foo);
 }

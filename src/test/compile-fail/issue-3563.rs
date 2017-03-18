@@ -9,8 +9,10 @@
 // except according to those terms.
 
 trait A {
-  fn a(&self) {
-      || self.b() //~ ERROR type `&Self` does not implement any method in scope named `b`
-  }
+    fn a(&self) {
+        || self.b()
+        //~^ ERROR no method named `b` found for type `&Self` in the current scope
+        //~| ERROR mismatched types
+    }
 }
 fn main() {}

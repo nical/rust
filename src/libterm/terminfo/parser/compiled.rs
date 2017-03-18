@@ -8,19 +8,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(non_uppercase_statics)];
+#![allow(non_upper_case_globals, missing_docs)]
 
-/// ncurses-compatible compiled terminfo format parsing (term(5))
+//! ncurses-compatible compiled terminfo format parsing (term(5))
 
-
-use std::{vec, str};
-use std::hashmap::HashMap;
+use std::collections::HashMap;
+use std::io::prelude::*;
 use std::io;
 use super::super::TermInfo;
 
 // These are the orders ncurses uses in its compiled format (as of 5.9). Not sure if portable.
 
-pub static boolfnames: &'static[&'static str] = &'static["auto_left_margin", "auto_right_margin",
+#[rustfmt_skip]
+pub static boolfnames: &'static[&'static str] = &["auto_left_margin", "auto_right_margin",
     "no_esc_ctlc", "ceol_standout_glitch", "eat_newline_glitch", "erase_overstrike", "generic_type",
     "hard_copy", "has_meta_key", "has_status_line", "insert_null_glitch", "memory_above",
     "memory_below", "move_insert_mode", "move_standout_mode", "over_strike", "status_line_esc_ok",
@@ -32,12 +32,14 @@ pub static boolfnames: &'static[&'static str] = &'static["auto_left_margin", "au
     "no_correctly_working_cr", "gnu_has_meta_key", "linefeed_is_newline", "has_hardware_tabs",
     "return_does_clr_eol"];
 
-pub static boolnames: &'static[&'static str] = &'static["bw", "am", "xsb", "xhp", "xenl", "eo",
+#[rustfmt_skip]
+pub static boolnames: &'static[&'static str] = &["bw", "am", "xsb", "xhp", "xenl", "eo",
     "gn", "hc", "km", "hs", "in", "db", "da", "mir", "msgr", "os", "eslok", "xt", "hz", "ul", "xon",
     "nxon", "mc5i", "chts", "nrrmc", "npc", "ndscr", "ccc", "bce", "hls", "xhpa", "crxm", "daisy",
     "xvpa", "sam", "cpix", "lpix", "OTbs", "OTns", "OTnc", "OTMT", "OTNL", "OTpt", "OTxr"];
 
-pub static numfnames: &'static[&'static str] = &'static[ "columns", "init_tabs", "lines",
+#[rustfmt_skip]
+pub static numfnames: &'static[&'static str] = &[ "columns", "init_tabs", "lines",
     "lines_of_memory", "magic_cookie_glitch", "padding_baud_rate", "virtual_terminal",
     "width_status_line", "num_labels", "label_height", "label_width", "max_attributes",
     "maximum_windows", "max_colors", "max_pairs", "no_color_video", "buffer_capacity",
@@ -47,12 +49,14 @@ pub static numfnames: &'static[&'static str] = &'static[ "columns", "init_tabs",
     "bit_image_entwining", "bit_image_type", "magic_cookie_glitch_ul", "carriage_return_delay",
     "new_line_delay", "backspace_delay", "horizontal_tab_delay", "number_of_function_keys"];
 
-pub static numnames: &'static[&'static str] = &'static[ "cols", "it", "lines", "lm", "xmc", "pb",
+#[rustfmt_skip]
+pub static numnames: &'static[&'static str] = &[ "cols", "it", "lines", "lm", "xmc", "pb",
     "vt", "wsl", "nlab", "lh", "lw", "ma", "wnum", "colors", "pairs", "ncv", "bufsz", "spinv",
     "spinh", "maddr", "mjump", "mcs", "mls", "npins", "orc", "orl", "orhi", "orvi", "cps", "widcs",
     "btns", "bitwin", "bitype", "UTug", "OTdC", "OTdN", "OTdB", "OTdT", "OTkn"];
 
-pub static stringfnames: &'static[&'static str] = &'static[ "back_tab", "bell", "carriage_return",
+#[rustfmt_skip]
+pub static stringfnames: &'static[&'static str] = &[ "back_tab", "bell", "carriage_return",
     "change_scroll_region", "clear_all_tabs", "clear_screen", "clr_eol", "clr_eos",
     "column_address", "command_character", "cursor_address", "cursor_down", "cursor_home",
     "cursor_invisible", "cursor_left", "cursor_mem_address", "cursor_normal", "cursor_right",
@@ -125,7 +129,8 @@ pub static stringfnames: &'static[&'static str] = &'static[ "back_tab", "bell", 
     "acs_lrcorner", "acs_ltee", "acs_rtee", "acs_btee", "acs_ttee", "acs_hline", "acs_vline",
     "acs_plus", "memory_lock", "memory_unlock", "box_chars_1"];
 
-pub static stringnames: &'static[&'static str] = &'static[ "cbt", "_", "cr", "csr", "tbc", "clear",
+#[rustfmt_skip]
+pub static stringnames: &'static[&'static str] = &[ "cbt", "_", "cr", "csr", "tbc", "clear",
     "_", "_", "hpa", "cmdch", "cup", "cud1", "home", "civis", "cub1", "mrcup", "cnorm", "cuf1",
     "ll", "cuu1", "cvvis", "dch1", "dl1", "dsl", "hd", "smacs", "blink", "bold", "smcup", "smdc",
     "dim", "smir", "invis", "prot", "rev", "smso", "smul", "ech", "rmacs", "sgr0", "rmcup", "rmdc",
@@ -159,135 +164,132 @@ pub static stringnames: &'static[&'static str] = &'static[ "cbt", "_", "cr", "cs
     "OTG3", "OTG1", "OTG4", "OTGR", "OTGL", "OTGU", "OTGD", "OTGH", "OTGV", "OTGC", "meml", "memu",
     "box1"];
 
-/// Parse a compiled terminfo entry, using long capability names if `longnames` is true
-pub fn parse(file: &mut io::Reader,
-             longnames: bool) -> Result<~TermInfo, ~str> {
-    macro_rules! if_ok( ($e:expr) => (
-        match $e { Ok(e) => e, Err(e) => return Err(format!("{}", e)) }
-    ) )
-
-    let bnames;
-    let snames;
-    let nnames;
-
-    if longnames {
-        bnames = boolfnames;
-        snames = stringfnames;
-        nnames = numfnames;
-    } else {
-        bnames = boolnames;
-        snames = stringnames;
-        nnames = numnames;
+fn read_le_u16(r: &mut io::Read) -> io::Result<u16> {
+    let mut b = [0; 2];
+    let mut amt = 0;
+    while amt < b.len() {
+        match r.read(&mut b[amt..])? {
+            0 => return Err(io::Error::new(io::ErrorKind::Other, "end of file")),
+            n => amt += n,
+        }
     }
+    Ok((b[0] as u16) | ((b[1] as u16) << 8))
+}
+
+fn read_byte(r: &mut io::Read) -> io::Result<u8> {
+    match r.bytes().next() {
+        Some(s) => s,
+        None => Err(io::Error::new(io::ErrorKind::Other, "end of file")),
+    }
+}
+
+/// Parse a compiled terminfo entry, using long capability names if `longnames`
+/// is true
+pub fn parse(file: &mut io::Read, longnames: bool) -> Result<TermInfo, String> {
+    macro_rules! t( ($e:expr) => (
+        match $e {
+            Ok(e) => e,
+            Err(e) => return Err(format!("{}", e))
+        }
+    ) );
+
+    let (bnames, snames, nnames) = if longnames {
+        (boolfnames, stringfnames, numfnames)
+    } else {
+        (boolnames, stringnames, numnames)
+    };
 
     // Check magic number
-    let magic = if_ok!(file.read_le_u16());
+    let magic = t!(read_le_u16(file));
     if magic != 0x011A {
-        return Err(format!("invalid magic number: expected {:x} but found {:x}",
-                           0x011A, magic as uint));
+        return Err(format!("invalid magic number: expected {:x}, found {:x}",
+                           0x011A,
+                           magic));
     }
 
-    let names_bytes          = if_ok!(file.read_le_i16()) as int;
-    let bools_bytes          = if_ok!(file.read_le_i16()) as int;
-    let numbers_count        = if_ok!(file.read_le_i16()) as int;
-    let string_offsets_count = if_ok!(file.read_le_i16()) as int;
-    let string_table_bytes   = if_ok!(file.read_le_i16()) as int;
-
-    assert!(names_bytes          > 0);
-
-    debug!("names_bytes = {}", names_bytes);
-    debug!("bools_bytes = {}", bools_bytes);
-    debug!("numbers_count = {}", numbers_count);
-    debug!("string_offsets_count = {}", string_offsets_count);
-    debug!("string_table_bytes = {}", string_table_bytes);
-
-    if (bools_bytes as uint) > boolnames.len() {
-        error!("expected bools_bytes to be less than {} but found {}", boolnames.len(),
-               bools_bytes);
-        return Err(~"incompatible file: more booleans than expected");
+    // According to the spec, these fields must be >= -1 where -1 means that the feature is not
+    // supported. Using 0 instead of -1 works because we skip sections with length 0.
+    macro_rules! read_nonneg {
+        () => {{
+            match t!(read_le_u16(file)) as i16 {
+                n if n >= 0 => n as usize,
+                -1 => 0,
+                _ => return Err("incompatible file: length fields must be  >= -1".to_string()),
+            }
+        }}
     }
 
-    if (numbers_count as uint) > numnames.len() {
-        error!("expected numbers_count to be less than {} but found {}", numnames.len(),
-               numbers_count);
-        return Err(~"incompatible file: more numbers than expected");
+    let names_bytes = read_nonneg!();
+    let bools_bytes = read_nonneg!();
+    let numbers_count = read_nonneg!();
+    let string_offsets_count = read_nonneg!();
+    let string_table_bytes = read_nonneg!();
+
+    if names_bytes == 0 {
+        return Err("incompatible file: names field must be at least 1 byte wide".to_string());
     }
 
-    if (string_offsets_count as uint) > stringnames.len() {
-        error!("expected string_offsets_count to be less than {} but found {}", stringnames.len(),
-               string_offsets_count);
-        return Err(~"incompatible file: more string offsets than expected");
+    if bools_bytes > boolnames.len() {
+        return Err("incompatible file: more booleans than expected".to_string());
+    }
+
+    if numbers_count > numnames.len() {
+        return Err("incompatible file: more numbers than expected".to_string());
+    }
+
+    if string_offsets_count > stringnames.len() {
+        return Err("incompatible file: more string offsets than expected".to_string());
     }
 
     // don't read NUL
-    let bytes = if_ok!(file.read_bytes(names_bytes as uint - 1));
-    let names_str = match str::from_utf8_owned(bytes) {
-        Some(s) => s, None => return Err(~"input not utf-8"),
+    let mut bytes = Vec::new();
+    t!(file.take((names_bytes - 1) as u64).read_to_end(&mut bytes));
+    let names_str = match String::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(_) => return Err("input not utf-8".to_string()),
     };
 
-    let term_names: ~[~str] = names_str.split('|').map(|s| s.to_owned()).collect();
-
-    if_ok!(file.read_byte()); // consume NUL
-
-    debug!("term names: {:?}", term_names);
-
-    let mut bools_map = HashMap::new();
-    if bools_bytes != 0 {
-        for i in range(0, bools_bytes) {
-            let b = if_ok!(file.read_byte());
-            if b < 0 {
-                error!("EOF reading bools after {} entries", i);
-                return Err(~"error: expected more bools but hit EOF");
-            } else if b == 1 {
-                debug!("{} set", bnames[i]);
-                bools_map.insert(bnames[i].to_owned(), true);
-            }
-        }
+    let term_names: Vec<String> = names_str.split('|')
+                                           .map(|s| s.to_string())
+                                           .collect();
+    // consume NUL
+    if t!(read_byte(file)) != b'\0' {
+        return Err("incompatible file: missing null terminator for names section".to_string());
     }
 
-    debug!("bools: {:?}", bools_map);
+    let bools_map: HashMap<String, bool> = t! {
+        (0..bools_bytes).filter_map(|i| match read_byte(file) {
+            Err(e) => Some(Err(e)),
+            Ok(1) => Some(Ok((bnames[i].to_string(), true))),
+            Ok(_) => None
+        }).collect()
+    };
 
     if (bools_bytes + names_bytes) % 2 == 1 {
-        debug!("adjusting for padding between bools and numbers");
-        if_ok!(file.read_byte()); // compensate for padding
+        t!(read_byte(file)); // compensate for padding
     }
 
-    let mut numbers_map = HashMap::new();
-    if numbers_count != 0 {
-        for i in range(0, numbers_count) {
-            let n = if_ok!(file.read_le_u16());
-            if n != 0xFFFF {
-                debug!("{}\\#{}", nnames[i], n);
-                numbers_map.insert(nnames[i].to_owned(), n);
-            }
-        }
-    }
+    let numbers_map: HashMap<String, u16> = t! {
+        (0..numbers_count).filter_map(|i| match read_le_u16(file) {
+            Ok(0xFFFF) => None,
+            Ok(n) => Some(Ok((nnames[i].to_string(), n))),
+            Err(e) => Some(Err(e))
+        }).collect()
+    };
 
-    debug!("numbers: {:?}", numbers_map);
+    let string_map: HashMap<String, Vec<u8>> = if string_offsets_count > 0 {
+        let string_offsets: Vec<u16> = t!((0..string_offsets_count)
+                                                .map(|_| read_le_u16(file))
+                                                .collect());
 
-    let mut string_map = HashMap::new();
+        let mut string_table = Vec::new();
+        t!(file.take(string_table_bytes as u64).read_to_end(&mut string_table));
 
-    if string_offsets_count != 0 {
-        let mut string_offsets = vec::with_capacity(10);
-        for _ in range(0, string_offsets_count) {
-            string_offsets.push(if_ok!(file.read_le_u16()));
-        }
-
-        debug!("offsets: {:?}", string_offsets);
-
-        let string_table = if_ok!(file.read_bytes(string_table_bytes as uint));
-
-        if string_table.len() != string_table_bytes as uint {
-            error!("EOF reading string table after {} bytes, wanted {}", string_table.len(),
-                   string_table_bytes);
-            return Err(~"error: hit EOF before end of string table");
-        }
-
-        for (i, v) in string_offsets.iter().enumerate() {
-            let offset = *v;
-            if offset == 0xFFFF { // non-entry
-                continue;
-            }
+        t!(string_offsets.into_iter().enumerate().filter(|&(_, offset)| {
+            // non-entry
+            offset != 0xFFFF
+        }).map(|(i, offset)| {
+            let offset = offset as usize;
 
             let name = if snames[i] == "_" {
                 stringfnames[i]
@@ -298,43 +300,45 @@ pub fn parse(file: &mut io::Reader,
             if offset == 0xFFFE {
                 // undocumented: FFFE indicates cap@, which means the capability is not present
                 // unsure if the handling for this is correct
-                string_map.insert(name.to_owned(), ~[]);
-                continue;
+                return Ok((name.to_string(), Vec::new()));
             }
 
-
             // Find the offset of the NUL we want to go to
-            let nulpos = string_table.slice(offset as uint, string_table_bytes as uint)
-                .iter().position(|&b| b == 0);
+            let nulpos = string_table[offset..string_table_bytes].iter().position(|&b| b == 0);
             match nulpos {
-                Some(len) => {
-                    string_map.insert(name.to_owned(),
-                                      string_table.slice(offset as uint,
-                                                         offset as uint + len).to_owned())
-                },
-                None => {
-                    return Err(~"invalid file: missing NUL in string_table");
-                }
-            };
-        }
-    }
+                Some(len) => Ok((name.to_string(), string_table[offset..offset + len].to_vec())),
+                None => Err("invalid file: missing NUL in string_table".to_string()),
+            }
+        }).collect())
+    } else {
+        HashMap::new()
+    };
 
     // And that's all there is to it
-    Ok(~TermInfo {names: term_names, bools: bools_map, numbers: numbers_map, strings: string_map })
+    Ok(TermInfo {
+        names: term_names,
+        bools: bools_map,
+        numbers: numbers_map,
+        strings: string_map,
+    })
 }
 
 /// Create a dummy TermInfo struct for msys terminals
-pub fn msys_terminfo() -> ~TermInfo {
+pub fn msys_terminfo() -> TermInfo {
     let mut strings = HashMap::new();
-    strings.insert(~"sgr0", bytes!("\x1b[0m").to_owned());
-    strings.insert(~"bold", bytes!("\x1b[1m").to_owned());
-    strings.insert(~"setaf", bytes!("\x1b[3%p1%dm").to_owned());
-    strings.insert(~"setab", bytes!("\x1b[4%p1%dm").to_owned());
-    ~TermInfo {
-        names: ~[~"cygwin"], // msys is a fork of an older cygwin version
+    strings.insert("sgr0".to_string(), b"\x1B[0m".to_vec());
+    strings.insert("bold".to_string(), b"\x1B[1m".to_vec());
+    strings.insert("setaf".to_string(), b"\x1B[3%p1%dm".to_vec());
+    strings.insert("setab".to_string(), b"\x1B[4%p1%dm".to_vec());
+
+    let mut numbers = HashMap::new();
+    numbers.insert("colors".to_string(), 8u16);
+
+    TermInfo {
+        names: vec!["cygwin".to_string()], // msys is a fork of an older cygwin version
         bools: HashMap::new(),
-        numbers: HashMap::new(),
-        strings: strings
+        numbers: numbers,
+        strings: strings,
     }
 }
 
@@ -348,12 +352,5 @@ mod test {
         assert_eq!(boolfnames.len(), boolnames.len());
         assert_eq!(numfnames.len(), numnames.len());
         assert_eq!(stringfnames.len(), stringnames.len());
-    }
-
-    #[test]
-    #[ignore(reason = "no ncurses on buildbots, needs a bundled terminfo file to test against")]
-    fn test_parse() {
-        // FIXME #6870: Distribute a compiled file in src/tests and test there
-        // parse(io::fs_reader(&p("/usr/share/terminfo/r/rxvt-256color")).unwrap(), false);
     }
 }

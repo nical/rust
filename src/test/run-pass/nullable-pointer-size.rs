@@ -8,12 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(macro_rules)];
 
 use std::mem;
 
-enum E<T> { Thing(int, T), Nothing((), ((), ()), [i8, ..0]) }
-struct S<T>(int, T);
+enum E<T> { Thing(isize, T), Nothing((), ((), ()), [i8; 0]) }
+struct S<T>(isize, T);
 
 // These are macros so we get useful assert messages.
 
@@ -37,10 +36,7 @@ macro_rules! check_type {
 }
 
 pub fn main() {
-    check_type!(&'static int);
-    check_type!(~int);
-    check_type!(@int);
-    check_type!(~str);
-    check_type!(~[int]);
+    check_type!(&'static isize);
+    check_type!(Box<isize>);
     check_type!(extern fn());
 }

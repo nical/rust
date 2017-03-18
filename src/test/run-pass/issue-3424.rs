@@ -1,6 +1,4 @@
-// xfail-fast
-
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -11,19 +9,18 @@
 // except according to those terms.
 
 // rustc --test ignores2.rs && ./ignores2
-extern mod extra;
 
-use std::path::{Path};
-use std::path;
-use std::result;
+pub struct Path;
 
-type rsrc_loader = proc(path: &Path) -> result::Result<~str, ~str>;
+type rsrc_loader = Box<FnMut(&Path) -> Result<String, String>>;
 
 fn tester()
 {
-    let loader: rsrc_loader = proc(_path) {result::Ok(~"more blah")};
+    let mut loader: rsrc_loader = Box::new(move |_path| {
+        Ok("more blah".to_string())
+    });
 
-    let path = path::Path::new("blah");
+    let path = Path;
     assert!(loader(&path).is_ok());
 }
 

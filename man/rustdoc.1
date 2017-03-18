@@ -1,4 +1,4 @@
-.TH RUSTDOC "1" "July 2013" "rustdoc 0.7" "User Commands"
+.TH RUSTDOC "1" "September 2016" "rustdoc 1.13.0" "User Commands"
 .SH NAME
 rustdoc \- generate documentation from Rust source code
 .SH SYNOPSIS
@@ -8,52 +8,93 @@ rustdoc \- generate documentation from Rust source code
 .SH DESCRIPTION
 This tool generates API reference documentation by extracting comments from
 source code written in the Rust language, available at
-<\fBhttps://www.rust-lang.org\fR>. It accepts several input formats and provides
-several output formats for the generated documentation.
+<\fBhttps://www.rust-lang.org\fR>. It accepts several input formats and
+provides several output formats for the generated documentation.
 
 .SH OPTIONS
 
 .TP
--r --input-format <val>
+\fB\-r\fR, \fB\-\-input\-format\fR \fIFORMAT\fR
 html or json (default: inferred)
 .TP
--w --output-format <val>
+\fB\-w\fR, \fB\-\-output\-format\fR \fIFORMAT\fR
 html or json (default: html)
 .TP
--o --output <val>
-where to place the output (default: doc/ for html, doc.json for json)
+\fB\-o\fR, \fB\-\-output\fR \fIOUTPUT\fR
+where to place the output (default: \fIdoc/\fR for html,
+\fIdoc.json\fR for json)
 .TP
---passes <val>
-space-separated list of passes to run (default: '')
+\fB\-\-passes\fR \fILIST\fR
+space\[hy]separated list of passes to run (default: '')
 .TP
---no-defaults
+\fB\-\-no\-defaults\fR
 don't run the default passes
 .TP
---plugins <val>
+\fB\-\-plugins\fR \fILIST\fR
 space-separated list of plugins to run (default: '')
 .TP
---plugin-path <val>
-directory to load plugins from (default: /tmp/rustdoc_ng/plugins)
+\fB\-\-plugin\-path\fR \fIDIR\fR
+directory to load plugins from (default: \fI/tmp/rustdoc_ng/plugins\fR)
 .TP
--L --library-path <val>
+\fB\-\-target\fR \fITRIPLE\fR
+target triple to document
+.TP
+\fB\-\-crate\-name\fR \fINAME\fR
+specify the name of this crate
+.TP
+\fB\-L\fR, \fB\-\-library\-path\fR \fIDIR\fR
 directory to add to crate search path
 .TP
--h, --help
+\fB\-\-cfg\fR \fISPEC\fR
+pass a \fI\-\-cfg\fR to rustc
+.TP
+\fB\-\-extern\fR \fIVAL\fR
+pass an \fI\-\-extern\fR to rustc
+.TP
+\fB\-\-test\fR
+run code examples as tests
+.TP
+\fB\-\-test\-args\fR \fIARGS\fR
+pass arguments to the test runner
+.TP
+\fB\-\-html\-in\-header\fR \fIFILE\fR
+file to add to <head>
+.TP
+\fB\-\-html\-before\-content\fR \fIFILE\fR
+file to add in <body>, before content
+.TP
+\fB\-\-html\-after\-content\fR \fIFILE\fR
+file to add in <body>, after content
+.TP
+\fB\-\-markdown\-css\fR \fIFILE\fR
+CSS files to include via <link> in a rendered Markdown file
+.TP
+\fB\-\-markdown\-playground\-url\fR \fIURL\fR
+URL to send code snippets to
+.TP
+\fB\-\-markdown\-no\-toc\fR
+don't include table of contents
+.TP
+\fB\-h\fR, \fB\-\-help\fR
 Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print rustdoc's version
 
 .SH "OUTPUT FORMATS"
 
 The rustdoc tool can generate output in either an HTML or JSON format.
 
 If using an HTML format, then the specified output destination will be the root
-directory of an HTML structure for all the documentation. Pages will be placed
-into this directory, and source files will also possibly be rendered into it as
-well.
+directory of an HTML structure for all the documentation.
+Pages will be placed into this directory, and source files will also
+possibly be rendered into it as well.
 
 If using a JSON format, then the specified output destination will have the
-rustdoc output serialized as JSON into it. This output format exists to
-pre-compile documentation for crates, and for usage in non-rustdoc tools. The
-JSON output is the following hash:
+rustdoc output serialized as JSON into it.
+This output format exists to pre\[hy]compile documentation for crates,
+and for usage in non\[hy]rustdoc tools.
+The JSON output is the following hash:
 
     {
         "schema": VERSION,
@@ -61,11 +102,12 @@ JSON output is the following hash:
         "plugins": ...,
     }
 
-The schema version indicates what the structure of crate/plugins will look
-like. Within a schema version the structure will remain the same. The `crate`
-field will contain all relevant documentation for the source being documented,
-and the `plugins` field will contain the output of the plugins run over the
-crate.
+The schema version indicates what the structure of crate/plugins will
+look like.
+Within a schema version the structure will remain the same.
+The \fIcrate\fR field will contain all relevant documentation for the
+source being documented, and the \fIplugins\fR field will contain the
+output of the plugins run over the crate.
 
 .SH "EXAMPLES"
 
@@ -73,26 +115,26 @@ To generate documentation for the source in the current directory:
     $ rustdoc hello.rs
 
 List all available passes that rustdoc has, along with default passes:
-    $ rustdoc --passes list
+    $ rustdoc \-\-passes list
 
 To precompile the documentation for a crate, and then use it to render html at
 a later date:
-    $ rustdoc -w json hello.rs
+    $ rustdoc \-w json hello.rs
     $ rustdoc doc.json
 
 The generated HTML can be viewed with any standard web browser.
 
 .SH "SEE ALSO"
 
-rustc
+.BR rustc (1)
 
 .SH "BUGS"
-See <\fBhttps://github.com/mozilla/rust/issues\fR> for issues.
+See <\fBhttps://github.com/rust\-lang/rust/issues\fR>
+for issues.
 
 .SH "AUTHOR"
-See \fBAUTHORS.txt\fR in the rust source distribution. Graydon Hoare
-<\fIgraydon@mozilla.com\fR> is the project leader.
+See \fIAUTHORS.txt\fR in the Rust source distribution.
 
 .SH "COPYRIGHT"
-This work is dual-licensed under Apache 2.0 and MIT terms.  See \fBCOPYRIGHT\fR
-file in the rust source distribution.
+This work is dual\[hy]licensed under Apache\ 2.0 and MIT terms.
+See \fICOPYRIGHT\fR file in the rust source distribution.

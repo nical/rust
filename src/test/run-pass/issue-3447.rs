@@ -8,7 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 use std::cell::RefCell;
 
@@ -16,7 +17,7 @@ static S: &'static str = "str";
 
 struct list<T> {
     element: T,
-    next: Option<@RefCell<list<T>>>
+    next: Option<Box<RefCell<list<T>>>>
 }
 
 impl<T:'static> list<T> {
@@ -26,7 +27,7 @@ impl<T:'static> list<T> {
             next: None
         };
 
-        self.next = Some(@RefCell::new(newList));
+        self.next = Some(box RefCell::new(newList));
     }
 }
 

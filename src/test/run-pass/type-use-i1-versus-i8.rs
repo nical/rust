@@ -8,12 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::unstable;
+// pretty-expanded FIXME #23616
+
+use std::ptr;
 
 pub fn main() {
     unsafe {
         let mut x: bool = false;
         // this line breaks it
-        unstable::intrinsics::move_val_init(&mut x, false);
+        ptr::write(&mut x, false);
     }
 }

@@ -10,13 +10,13 @@
 
 // Make sure #1399 stays fixed
 
-struct A { a: ~int }
+struct A { a: Box<isize> }
 
-fn foo() -> 'static || -> int {
-    let k = ~22;
+fn foo() -> Box<FnMut() -> isize + 'static> {
+    let k: Box<_> = Box::new(22);
     let _u = A {a: k.clone()};
-    let result: 'static || -> int = || 22;
-    result
+    let result  = || 22;
+    Box::new(result)
 }
 
 pub fn main() {

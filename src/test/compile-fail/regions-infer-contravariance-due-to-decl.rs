@@ -14,18 +14,18 @@
 // Note: see variance-regions-*.rs for the tests that check that the
 // variance inference works in the first place.
 
-use std::kinds::marker;
+use std::marker;
 
 // This is contravariant with respect to 'a, meaning that
 // Contravariant<'foo> <: Contravariant<'static> because
 // 'foo <= 'static
 struct Contravariant<'a> {
-    marker: marker::ContravariantLifetime<'a>
+    marker: marker::PhantomData<&'a()>
 }
 
 fn use_<'short,'long>(c: Contravariant<'short>,
-                      s: &'short int,
-                      l: &'long int,
+                      s: &'short isize,
+                      l: &'long isize,
                       _where:Option<&'short &'long ()>) {
 
     // Test whether Contravariant<'short> <: Contravariant<'long>.  Since
@@ -33,7 +33,6 @@ fn use_<'short,'long>(c: Contravariant<'short>,
     // covariant with respect to its parameter 'a.
 
     let _: Contravariant<'long> = c; //~ ERROR mismatched types
-    //~^ ERROR  cannot infer an appropriate lifetime
 }
 
 fn main() {}

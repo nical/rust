@@ -1,4 +1,4 @@
-// Copyright 2014 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2014-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,219 +8,144 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast: check-fast screws up repr paths
+#![deny(warnings)]
+#![allow(unused_must_use)]
+#![allow(unused_features)]
+#![feature(box_syntax)]
 
-#[feature(macro_rules)];
-#[deny(warnings)];
-#[allow(unused_must_use)];
-
-use std::fmt;
-use std::io::MemWriter;
-use std::io;
-use std::str;
+use std::fmt::{self, Write};
+use std::usize;
 
 struct A;
 struct B;
+struct C;
+struct D;
 
-impl fmt::Signed for A {
-    fn fmt(_: &A, f: &mut fmt::Formatter) -> fmt::Result {
-        f.buf.write("aloha".as_bytes())
+impl fmt::LowerHex for A {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("aloha")
     }
 }
-impl fmt::Signed for B {
-    fn fmt(_: &B, f: &mut fmt::Formatter) -> fmt::Result {
-        f.buf.write("adios".as_bytes())
+impl fmt::UpperHex for B {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("adios")
+    }
+}
+impl fmt::Display for C {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.pad_integral(true, "☃", "123")
+    }
+}
+impl fmt::Binary for D {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("aa")?;
+        f.write_char('☃')?;
+        f.write_str("bb")
     }
 }
 
-macro_rules! t(($a:expr, $b:expr) => { assert_eq!($a, $b.to_owned()) })
+macro_rules! t {
+    ($a:expr, $b:expr) => { assert_eq!($a, $b) }
+}
 
 pub fn main() {
-
-    // Make sure there's a poly formatter that takes anything
-    t!(format!("{:?}", 1), "1");
-    t!(format!("{:?}", A), "A");
-    t!(format!("{:?}", ()), "()");
-    t!(format!("{:?}", @(~1, "foo")), "@(~1, \"foo\")");
-
     // Various edge cases without formats
     t!(format!(""), "");
     t!(format!("hello"), "hello");
-    t!(format!("hello \\{"), "hello {");
+    t!(format!("hello {{"), "hello {");
 
     // default formatters should work
-    t!(format!("{}", 1i), "1");
-    t!(format!("{}", 1i8), "1");
-    t!(format!("{}", 1i16), "1");
-    t!(format!("{}", 1i32), "1");
-    t!(format!("{}", 1i64), "1");
-    t!(format!("{}", 1u), "1");
-    t!(format!("{}", 1u8), "1");
-    t!(format!("{}", 1u16), "1");
-    t!(format!("{}", 1u32), "1");
-    t!(format!("{}", 1u64), "1");
     t!(format!("{}", 1.0f32), "1");
     t!(format!("{}", 1.0f64), "1");
     t!(format!("{}", "a"), "a");
-    t!(format!("{}", ~"a"), "a");
+    t!(format!("{}", "a".to_string()), "a");
     t!(format!("{}", false), "false");
     t!(format!("{}", 'a'), "a");
 
     // At least exercise all the formats
-    t!(format!("{:b}", true), "true");
-    t!(format!("{:c}", '☃'), "☃");
-    t!(format!("{:d}", 10), "10");
-    t!(format!("{:i}", 10), "10");
-    t!(format!("{:u}", 10u), "10");
-    t!(format!("{:o}", 10u), "12");
-    t!(format!("{:x}", 10u), "a");
-    t!(format!("{:X}", 10u), "A");
-    t!(format!("{:s}", "foo"), "foo");
-    t!(format!("{:s}", ~"foo"), "foo");
-    t!(format!("{:p}", 0x1234 as *int), "0x1234");
-    t!(format!("{:p}", 0x1234 as *mut int), "0x1234");
-    t!(format!("{:d}", A), "aloha");
-    t!(format!("{:d}", B), "adios");
-    t!(format!("foo {:s} ☃☃☃☃☃☃", "bar"), "foo bar ☃☃☃☃☃☃");
+    t!(format!("{}", true), "true");
+    t!(format!("{}", '☃'), "☃");
+    t!(format!("{}", 10), "10");
+    t!(format!("{}", 10_usize), "10");
+    t!(format!("{:?}", '☃'), "'☃'");
+    t!(format!("{:?}", 10), "10");
+    t!(format!("{:?}", 10_usize), "10");
+    t!(format!("{:?}", "true"), "\"true\"");
+    t!(format!("{:?}", "foo\nbar"), "\"foo\\nbar\"");
+    t!(format!("{:?}", "foo\n\"bar\"\r\n\'baz\'\t\\qux\\"),
+       r#""foo\n\"bar\"\r\n\'baz\'\t\\qux\\""#);
+    t!(format!("{:?}", "foo\0bar\x01baz\u{7f}q\u{75}x"),
+       r#""foo\u{0}bar\u{1}baz\u{7f}qux""#);
+    t!(format!("{:o}", 10_usize), "12");
+    t!(format!("{:x}", 10_usize), "a");
+    t!(format!("{:X}", 10_usize), "A");
+    t!(format!("{}", "foo"), "foo");
+    t!(format!("{}", "foo".to_string()), "foo");
+    if cfg!(target_pointer_width = "32") {
+        t!(format!("{:#p}", 0x1234 as *const isize), "0x00001234");
+        t!(format!("{:#p}", 0x1234 as *mut isize), "0x00001234");
+    } else {
+        t!(format!("{:#p}", 0x1234 as *const isize), "0x0000000000001234");
+        t!(format!("{:#p}", 0x1234 as *mut isize), "0x0000000000001234");
+    }
+    t!(format!("{:p}", 0x1234 as *const isize), "0x1234");
+    t!(format!("{:p}", 0x1234 as *mut isize), "0x1234");
+    t!(format!("{:x}", A), "aloha");
+    t!(format!("{:X}", B), "adios");
+    t!(format!("foo {} ☃☃☃☃☃☃", "bar"), "foo bar ☃☃☃☃☃☃");
     t!(format!("{1} {0}", 0, 1), "1 0");
     t!(format!("{foo} {bar}", foo=0, bar=1), "0 1");
     t!(format!("{foo} {1} {bar} {0}", 0, 1, foo=2, bar=3), "2 1 3 0");
     t!(format!("{} {0}", "a"), "a a");
     t!(format!("{foo_bar}", foo_bar=1), "1");
+    t!(format!("{}", 5 + 5), "10");
+    t!(format!("{:#4}", C), "☃123");
+    t!(format!("{:b}", D), "aa☃bb");
 
-    // Methods should probably work
-    t!(format!("{0, plural, =1{a#} =2{b#} zero{c#} other{d#}}", 0u), "c0");
-    t!(format!("{0, plural, =1{a#} =2{b#} zero{c#} other{d#}}", 1u), "a1");
-    t!(format!("{0, plural, =1{a#} =2{b#} zero{c#} other{d#}}", 2u), "b2");
-    t!(format!("{0, plural, =1{a#} =2{b#} zero{c#} other{d#}}", 3u), "d3");
-    t!(format!("{0, select, a{a#} b{b#} c{c#} other{d#}}", "a"), "aa");
-    t!(format!("{0, select, a{a#} b{b#} c{c#} other{d#}}", "b"), "bb");
-    t!(format!("{0, select, a{a#} b{b#} c{c#} other{d#}}", "c"), "cc");
-    t!(format!("{0, select, a{a#} b{b#} c{c#} other{d#}}", "d"), "dd");
-    t!(format!("{1, select, a{#{0:s}} other{#}}", "b", "a"), "ab");
-    t!(format!("{1, select, a{#{0}} other{#}}", "c", "b"), "b");
+    let a: &fmt::Debug = &1;
+    t!(format!("{:?}", a), "1");
+
 
     // Formatting strings and their arguments
-    t!(format!("{:s}", "a"), "a");
-    t!(format!("{:4s}", "a"), "a   ");
-    t!(format!("{:>4s}", "a"), "   a");
-    t!(format!("{:<4s}", "a"), "a   ");
-    t!(format!("{:.4s}", "a"), "a");
-    t!(format!("{:4.4s}", "a"), "a   ");
-    t!(format!("{:4.4s}", "aaaaaaaaaaaaaaaaaa"), "aaaa");
-    t!(format!("{:<4.4s}", "aaaaaaaaaaaaaaaaaa"), "aaaa");
-    t!(format!("{:>4.4s}", "aaaaaaaaaaaaaaaaaa"), "aaaa");
-    t!(format!("{:>10.4s}", "aaaaaaaaaaaaaaaaaa"), "aaaa");
-    t!(format!("{:2.4s}", "aaaaa"), "aaaa");
-    t!(format!("{:2.4s}", "aaaa"), "aaaa");
-    t!(format!("{:2.4s}", "aaa"), "aaa");
-    t!(format!("{:2.4s}", "aa"), "aa");
-    t!(format!("{:2.4s}", "a"), "a ");
-    t!(format!("{:0>2s}", "a"), "0a");
-    t!(format!("{:.*s}", 4, "aaaaaaaaaaaaaaaaaa"), "aaaa");
-    t!(format!("{:.1$s}", "aaaaaaaaaaaaaaaaaa", 4), "aaaa");
-    t!(format!("{:.a$s}", "aaaaaaaaaaaaaaaaaa", a=4), "aaaa");
-    t!(format!("{:1$s}", "a", 4), "a   ");
-    t!(format!("{1:0$s}", 4, "a"), "a   ");
-    t!(format!("{:a$s}", "a", a=4), "a   ");
-    t!(format!("{:-#s}", "a"), "a");
-    t!(format!("{:+#s}", "a"), "a");
-
-    // Formatting integers should select the right implementation based off the
-    // type of the argument. Also, hex/octal/binary should be defined for
-    // integers, but they shouldn't emit the negative sign.
-    t!(format!("{:d}", -1i), "-1");
-    t!(format!("{:d}", -1i8), "-1");
-    t!(format!("{:d}", -1i16), "-1");
-    t!(format!("{:d}", -1i32), "-1");
-    t!(format!("{:d}", -1i64), "-1");
-    t!(format!("{:t}", 1i), "1");
-    t!(format!("{:t}", 1i8), "1");
-    t!(format!("{:t}", 1i16), "1");
-    t!(format!("{:t}", 1i32), "1");
-    t!(format!("{:t}", 1i64), "1");
-    t!(format!("{:x}", 1i), "1");
-    t!(format!("{:x}", 1i8), "1");
-    t!(format!("{:x}", 1i16), "1");
-    t!(format!("{:x}", 1i32), "1");
-    t!(format!("{:x}", 1i64), "1");
-    t!(format!("{:X}", 1i), "1");
-    t!(format!("{:X}", 1i8), "1");
-    t!(format!("{:X}", 1i16), "1");
-    t!(format!("{:X}", 1i32), "1");
-    t!(format!("{:X}", 1i64), "1");
-    t!(format!("{:o}", 1i), "1");
-    t!(format!("{:o}", 1i8), "1");
-    t!(format!("{:o}", 1i16), "1");
-    t!(format!("{:o}", 1i32), "1");
-    t!(format!("{:o}", 1i64), "1");
-
-    t!(format!("{:u}", 1u), "1");
-    t!(format!("{:u}", 1u8), "1");
-    t!(format!("{:u}", 1u16), "1");
-    t!(format!("{:u}", 1u32), "1");
-    t!(format!("{:u}", 1u64), "1");
-    t!(format!("{:t}", 1u), "1");
-    t!(format!("{:t}", 1u8), "1");
-    t!(format!("{:t}", 1u16), "1");
-    t!(format!("{:t}", 1u32), "1");
-    t!(format!("{:t}", 1u64), "1");
-    t!(format!("{:x}", 1u), "1");
-    t!(format!("{:x}", 1u8), "1");
-    t!(format!("{:x}", 1u16), "1");
-    t!(format!("{:x}", 1u32), "1");
-    t!(format!("{:x}", 1u64), "1");
-    t!(format!("{:X}", 1u), "1");
-    t!(format!("{:X}", 1u8), "1");
-    t!(format!("{:X}", 1u16), "1");
-    t!(format!("{:X}", 1u32), "1");
-    t!(format!("{:X}", 1u64), "1");
-    t!(format!("{:o}", 1u), "1");
-    t!(format!("{:o}", 1u8), "1");
-    t!(format!("{:o}", 1u16), "1");
-    t!(format!("{:o}", 1u32), "1");
-    t!(format!("{:o}", 1u64), "1");
-
-    // Test the flags for formatting integers
-    t!(format!("{:3d}", 1),  "  1");
-    t!(format!("{:>3d}", 1),  "  1");
-    t!(format!("{:>+3d}", 1), " +1");
-    t!(format!("{:<3d}", 1), "1  ");
-    t!(format!("{:#d}", 1), "1");
-    t!(format!("{:#x}", 10), "0xa");
-    t!(format!("{:#X}", 10), "0xA");
-    t!(format!("{:#5x}", 10), "  0xa");
-    t!(format!("{:#o}", 10), "0o12");
-    t!(format!("{:08x}", 10),  "0000000a");
-    t!(format!("{:8x}", 10),   "       a");
-    t!(format!("{:<8x}", 10),  "a       ");
-    t!(format!("{:>8x}", 10),  "       a");
-    t!(format!("{:#08x}", 10), "0x00000a");
-    t!(format!("{:08d}", -10), "-0000010");
-    t!(format!("{:x}", -1u8), "ff");
-    t!(format!("{:X}", -1u8), "FF");
-    t!(format!("{:t}", -1u8), "11111111");
-    t!(format!("{:o}", -1u8), "377");
-    t!(format!("{:#x}", -1u8), "0xff");
-    t!(format!("{:#X}", -1u8), "0xFF");
-    t!(format!("{:#t}", -1u8), "0b11111111");
-    t!(format!("{:#o}", -1u8), "0o377");
-
-    // Signed combinations
-    t!(format!("{:+5d}", 1),  "   +1");
-    t!(format!("{:+5d}", -1), "   -1");
-    t!(format!("{:05d}", 1),   "00001");
-    t!(format!("{:05d}", -1),  "-0001");
-    t!(format!("{:+05d}", 1),  "+0001");
-    t!(format!("{:+05d}", -1), "-0001");
+    t!(format!("{}", "a"), "a");
+    t!(format!("{:4}", "a"), "a   ");
+    t!(format!("{:4}", "☃"), "☃   ");
+    t!(format!("{:>4}", "a"), "   a");
+    t!(format!("{:<4}", "a"), "a   ");
+    t!(format!("{:^5}", "a"),  "  a  ");
+    t!(format!("{:^5}", "aa"), " aa  ");
+    t!(format!("{:^4}", "a"),  " a  ");
+    t!(format!("{:^4}", "aa"), " aa ");
+    t!(format!("{:.4}", "a"), "a");
+    t!(format!("{:4.4}", "a"), "a   ");
+    t!(format!("{:4.4}", "aaaaaaaaaaaaaaaaaa"), "aaaa");
+    t!(format!("{:<4.4}", "aaaaaaaaaaaaaaaaaa"), "aaaa");
+    t!(format!("{:>4.4}", "aaaaaaaaaaaaaaaaaa"), "aaaa");
+    t!(format!("{:^4.4}", "aaaaaaaaaaaaaaaaaa"), "aaaa");
+    t!(format!("{:>10.4}", "aaaaaaaaaaaaaaaaaa"), "      aaaa");
+    t!(format!("{:2.4}", "aaaaa"), "aaaa");
+    t!(format!("{:2.4}", "aaaa"), "aaaa");
+    t!(format!("{:2.4}", "aaa"), "aaa");
+    t!(format!("{:2.4}", "aa"), "aa");
+    t!(format!("{:2.4}", "a"), "a ");
+    t!(format!("{:0>2}", "a"), "0a");
+    t!(format!("{:.*}", 4, "aaaaaaaaaaaaaaaaaa"), "aaaa");
+    t!(format!("{:.1$}", "aaaaaaaaaaaaaaaaaa", 4), "aaaa");
+    t!(format!("{:.a$}", "aaaaaaaaaaaaaaaaaa", a=4), "aaaa");
+    t!(format!("{:1$}", "a", 4), "a   ");
+    t!(format!("{1:0$}", 4, "a"), "a   ");
+    t!(format!("{:a$}", "a", a=4), "a   ");
+    t!(format!("{:-#}", "a"), "a");
+    t!(format!("{:+#}", "a"), "a");
+    t!(format!("{:/^10.8}", "1234567890"), "/12345678/");
 
     // Some float stuff
-    t!(format!("{:f}", 1.0f32), "1");
-    t!(format!("{:f}", 1.0f64), "1");
-    t!(format!("{:.3f}", 1.0f64), "1.000");
-    t!(format!("{:10.3f}", 1.0f64),   "     1.000");
-    t!(format!("{:+10.3f}", 1.0f64),  "    +1.000");
-    t!(format!("{:+10.3f}", -1.0f64), "    -1.000");
+    t!(format!("{:}", 1.0f32), "1");
+    t!(format!("{:}", 1.0f64), "1");
+    t!(format!("{:.3}", 1.0f64), "1.000");
+    t!(format!("{:10.3}", 1.0f64),   "     1.000");
+    t!(format!("{:+10.3}", 1.0f64),  "    +1.000");
+    t!(format!("{:+10.3}", -1.0f64), "    -1.000");
 
     t!(format!("{:e}", 1.2345e6f32), "1.2345e6");
     t!(format!("{:e}", 1.2345e6f64), "1.2345e6");
@@ -230,24 +155,55 @@ pub fn main() {
     t!(format!("{:+10.3e}", 1.2345e6f64),  "  +1.234e6");
     t!(format!("{:+10.3e}", -1.2345e6f64), "  -1.234e6");
 
+    // Float edge cases
+    t!(format!("{}", -0.0), "0");
+    t!(format!("{:?}", -0.0), "-0");
+    t!(format!("{:?}", 0.0), "0");
+
+
+    // Ergonomic format_args!
+    t!(format!("{0:x} {0:X}", 15), "f F");
+    t!(format!("{0:x} {0:X} {}", 15), "f F 15");
+    // NOTE: For now the longer test cases must not be followed immediately by
+    // >1 empty lines, or the pretty printer will break. Since no one wants to
+    // touch the current pretty printer (#751), we have no choice but to work
+    // around it. Some of the following test cases are also affected.
+    t!(format!("{:x}{0:X}{a:x}{:X}{1:x}{a:X}", 13, 14, a=15), "dDfEeF");
+    t!(format!("{a:x} {a:X}", a=15), "f F");
+
+    // And its edge cases
+    t!(format!("{a:.0$} {b:.0$} {0:.0$}\n{a:.c$} {b:.c$} {c:.c$}",
+               4, a="abcdefg", b="hijklmn", c=3),
+               "abcd hijk 4\nabc hij 3");
+    t!(format!("{a:.*} {0} {:.*}", 4, 3, "efgh", a="abcdef"), "abcd 4 efg");
+    t!(format!("{:.a$} {a} {a:#x}", "aaaaaa", a=2), "aa 2 0x2");
+
+
+    // Test that pointers don't get truncated.
+    {
+        let val = usize::MAX;
+        let exp = format!("{:#x}", val);
+        t!(format!("{:p}", val as *const isize), exp);
+    }
+
     // Escaping
-    t!(format!("\\{"), "{");
-    t!(format!("\\}"), "}");
-    t!(format!("\\#"), "#");
-    t!(format!("\\\\"), "\\");
+    t!(format!("{{"), "{");
+    t!(format!("}}"), "}");
 
     test_write();
     test_print();
+    test_order();
+    test_once();
 
     // make sure that format! doesn't move out of local variables
-    let a = ~3;
-    format!("{:?}", a);
-    format!("{:?}", a);
+    let a: Box<_> = box 3;
+    format!("{}", a);
+    format!("{}", a);
 
     // make sure that format! doesn't cause spurious unused-unsafe warnings when
     // it's inside of an outer unsafe block
     unsafe {
-        let a: int = ::std::cast::transmute(3u);
+        let a: isize = ::std::mem::transmute(3_usize);
         format!("{}", a);
     }
 
@@ -259,27 +215,29 @@ pub fn main() {
 }
 
 // Basic test to make sure that we can invoke the `write!` macro with an
-// io::Writer instance.
+// fmt::Write instance.
 fn test_write() {
-    let mut buf = MemWriter::new();
-    write!(&mut buf as &mut io::Writer, "{}", 3);
+    use std::fmt::Write;
+    let mut buf = String::new();
+    write!(&mut buf, "{}", 3);
     {
-        let w = &mut buf as &mut io::Writer;
+        let w = &mut buf;
         write!(w, "{foo}", foo=4);
-        write!(w, "{:s}", "hello");
+        write!(w, "{}", "hello");
         writeln!(w, "{}", "line");
         writeln!(w, "{foo}", foo="bar");
+        w.write_char('☃');
+        w.write_str("str");
     }
 
-    let s = str::from_utf8_owned(buf.unwrap()).unwrap();
-    t!(s, "34helloline\nbar\n");
+    t!(buf, "34helloline\nbar\n☃str");
 }
 
 // Just make sure that the macros are defined, there's not really a lot that we
 // can do with them just yet (to test the output)
 fn test_print() {
     print!("hi");
-    print!("{:?}", ~[0u8]);
+    print!("{:?}", vec![0u8]);
     println!("hello");
     println!("this is a {}", "test");
     println!("{foo}", foo="bar");
@@ -288,16 +246,48 @@ fn test_print() {
 // Just make sure that the macros are defined, there's not really a lot that we
 // can do with them just yet (to test the output)
 fn test_format_args() {
-    let mut buf = MemWriter::new();
+    use std::fmt::Write;
+    let mut buf = String::new();
     {
-        let w = &mut buf as &mut io::Writer;
-        format_args!(|args| { fmt::write(w, args); }, "{}", 1);
-        format_args!(|args| { fmt::write(w, args); }, "test");
-        format_args!(|args| { fmt::write(w, args); }, "{test}", test=3);
+        let w = &mut buf;
+        write!(w, "{}", format_args!("{}", 1));
+        write!(w, "{}", format_args!("test"));
+        write!(w, "{}", format_args!("{test}", test=3));
     }
-    let s = str::from_utf8_owned(buf.unwrap()).unwrap();
+    let s = buf;
     t!(s, "1test3");
 
-    let s = format_args!(fmt::format, "hello {}", "world");
+    let s = fmt::format(format_args!("hello {}", "world"));
     t!(s, "hello world");
+    let s = format!("{}: {}", "args were", format_args!("hello {}", "world"));
+    t!(s, "args were: hello world");
+}
+
+fn test_order() {
+    // Make sure format!() arguments are always evaluated in a left-to-right
+    // ordering
+    fn foo() -> isize {
+        static mut FOO: isize = 0;
+        unsafe {
+            FOO += 1;
+            FOO
+        }
+    }
+    assert_eq!(format!("{} {} {a} {b} {} {c}",
+                       foo(), foo(), foo(), a=foo(), b=foo(), c=foo()),
+               "1 2 4 5 3 6".to_string());
+}
+
+fn test_once() {
+    // Make sure each argument are evaluted only once even though it may be
+    // formatted multiple times
+    fn foo() -> isize {
+        static mut FOO: isize = 0;
+        unsafe {
+            FOO += 1;
+            FOO
+        }
+    }
+    assert_eq!(format!("{0} {0} {0} {a} {a} {a}", foo(), a=foo()),
+               "1 1 1 2 2 2".to_string());
 }

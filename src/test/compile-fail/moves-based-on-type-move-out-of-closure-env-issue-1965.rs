@@ -8,11 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::uint;
+#![feature(box_syntax, unboxed_closures)]
 
-fn test(_x: ~uint) {}
+use std::usize;
+
+fn to_fn<A,F:Fn<A>>(f: F) -> F { f }
+
+fn test(_x: Box<usize>) {}
 
 fn main() {
-    let i = ~3;
-    let _f = || test(i); //~ ERROR cannot move out
+    let i = box 3;
+    let _f = to_fn(|| test(i)); //~ ERROR cannot move out
 }

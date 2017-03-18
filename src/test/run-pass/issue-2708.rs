@@ -8,12 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+// pretty-expanded FIXME #23616
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 struct Font {
-    fontbuf: uint,
-    cairo_font: uint,
-    font_dtor: uint,
+    fontbuf: usize,
+    cairo_font: usize,
+    font_dtor: usize,
 
 }
 
@@ -30,5 +33,5 @@ fn Font() -> Font {
 }
 
 pub fn main() {
-    let _f = @Font();
+    let _f: Box<_> = box Font();
 }

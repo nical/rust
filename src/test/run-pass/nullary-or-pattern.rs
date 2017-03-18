@@ -8,13 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 enum blah { a, b, }
 
-fn or_alt(q: blah) -> int {
-  match q { a | b => { 42 } }
+fn or_alt(q: blah) -> isize {
+  match q { blah::a | blah::b => { 42 } }
 }
 
 pub fn main() {
-    assert_eq!(or_alt(a), 42);
-    assert_eq!(or_alt(b), 42);
+    assert_eq!(or_alt(blah::a), 42);
+    assert_eq!(or_alt(blah::b), 42);
 }

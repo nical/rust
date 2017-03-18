@@ -1,6 +1,4 @@
-// xfail-pretty
-
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -10,12 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-pub fn main() {
-    assert_eq!(0xffffffffu32, (-1 as u32));
-    assert_eq!(4294967295u32, (-1 as u32));
-    assert_eq!(0xffffffffffffffffu64, (-1 as u64));
-    assert_eq!(18446744073709551615u64, (-1 as u64));
 
-    assert_eq!(-2147483648i32 - 1i32, 2147483647i32);
-    assert_eq!(-9223372036854775808i64 - 1i64, 9223372036854775807i64);
+#![feature(core)]
+
+// Catch mistakes in the overflowing literals lint.
+#![deny(overflowing_literals)]
+
+pub fn main() {
+    assert_eq!(0xffffffff, (!0 as u32));
+    assert_eq!(4294967295, (!0 as u32));
+    assert_eq!(0xffffffffffffffff, (!0 as u64));
+    assert_eq!(18446744073709551615, (!0 as u64));
+
+    assert_eq!((-2147483648i32).wrapping_sub(1), 2147483647);
 }

@@ -8,8 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deriving(Eq)]
-struct Foo(uint);
+#[derive(PartialEq, Debug)]
+struct Foo(usize);
 
 fn foo() -> Foo {
     Foo(42)

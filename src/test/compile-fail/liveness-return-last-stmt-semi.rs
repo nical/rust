@@ -10,18 +10,17 @@
 //
 // regression test for #8005
 
-#[feature(macro_rules)];
+macro_rules! test { () => { fn foo() -> i32 { 1; } } }
+                                           //~^ ERROR mismatched types
+                                           //~| HELP consider removing this semicolon
 
-macro_rules! test ( () => { fn foo() -> int { 1i; } } ) //~ ERROR  not all control paths return a value
-                                             //~^ NOTE consider removing this semicolon
+fn no_return() -> i32 {} //~ ERROR mismatched types
 
-fn no_return() -> int {} //~ ERROR  not all control paths return a value
-
-fn bar(x: u32) -> u32 { //~ ERROR  not all control paths return a value
-    x * 2; //~ NOTE consider removing this semicolon
+fn bar(x: u32) -> u32 { //~ ERROR mismatched types
+    x * 2; //~ HELP consider removing this semicolon
 }
 
-fn baz(x: u64) -> u32 { //~ ERROR  not all control paths return a value
+fn baz(x: u64) -> u32 { //~ ERROR mismatched types
     x * 2;
 }
 

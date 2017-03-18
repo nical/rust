@@ -7,29 +7,30 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+//
 
 
 // Tests that we can call a function bounded over a supertrait from
 // a default method
 
-fn require_y<T: Y>(x: T) -> int { x.y() }
+fn require_y<T: Y>(x: T) -> isize { x.y() }
 
 trait Y {
-    fn y(self) -> int;
+    fn y(self) -> isize;
 }
 
 
-trait Z: Y {
-    fn x(self) -> int {
+trait Z: Y + Sized {
+    fn x(self) -> isize {
         require_y(self)
     }
 }
 
-impl Y for int {
-    fn y(self) -> int { self }
+impl Y for isize {
+    fn y(self) -> isize { self }
 }
 
-impl Z for int {}
+impl Z for isize {}
 
 pub fn main() {
     assert_eq!(12.x(), 12);

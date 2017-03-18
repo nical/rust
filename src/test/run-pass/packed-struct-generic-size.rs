@@ -8,9 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 use std::mem;
 
-#[packed]
+#[repr(packed)]
 struct S<T, S> {
     a: T,
     b: u8,
@@ -21,7 +22,4 @@ pub fn main() {
     assert_eq!(mem::size_of::<S<u8, u8>>(), 3);
 
     assert_eq!(mem::size_of::<S<u64, u16>>(), 11);
-
-    assert_eq!(mem::size_of::<S<~str, ~[int]>>(),
-               1 + mem::size_of::<~str>() + mem::size_of::<~[int]>());
 }

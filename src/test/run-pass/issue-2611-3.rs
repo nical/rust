@@ -11,17 +11,17 @@
 // Tests that impls are allowed to have looser, more permissive bounds
 // than the traits require.
 
+
 trait A {
-  fn b<C:Freeze,D>(x: C) -> C;
+  fn b<C:Sync,D>(&self, x: C) -> C;
 }
 
 struct E {
- f: int
+ f: isize
 }
 
 impl A for E {
-  fn b<F,G>(_x: F) -> F { fail!() }
-  //~^ ERROR in method `b`, type parameter 0 has 1 bound, but
+  fn b<F,G>(&self, _x: F) -> F { panic!() }
 }
 
 pub fn main() {}

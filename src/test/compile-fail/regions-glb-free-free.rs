@@ -9,13 +9,11 @@
 // except according to those terms.
 
 mod argparse {
-    extern mod extra;
-
     pub struct Flag<'a> {
         name: &'a str,
-        desc: &'a str,
-        max_count: uint,
-        value: uint
+        pub desc: &'a str,
+        max_count: usize,
+        value: usize
     }
 
     pub fn flag<'r>(name: &'r str, desc: &'r str) -> Flag<'r> {
@@ -24,7 +22,7 @@ mod argparse {
 
     impl<'a> Flag<'a> {
         pub fn set_desc(self, s: &str) -> Flag<'a> {
-            Flag { //~ ERROR cannot infer an appropriate lifetime
+            Flag { //~ ERROR cannot infer
                 name: self.name,
                 desc: s,
                 max_count: self.max_count,
@@ -35,7 +33,7 @@ mod argparse {
 }
 
 fn main () {
-    let f : argparse::Flag = argparse::flag(~"flag", ~"My flag");
-    let updated_flag = f.set_desc(~"My new flag");
+    let f : argparse::Flag = argparse::flag("flag", "My flag");
+    let updated_flag = f.set_desc("My new flag");
     assert_eq!(updated_flag.desc, "My new flag");
 }

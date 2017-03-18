@@ -8,11 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn foo(x: &[int]) -> int {
+
+fn foo(x: &[isize]) -> isize {
     x[0]
 }
 
 pub fn main() {
-    let p = [1,2,3,4,5];
+    let p = &[1,2,3,4,5];
     assert_eq!(foo(p), 1);
 }

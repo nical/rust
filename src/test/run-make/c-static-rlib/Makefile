@@ -1,8 +1,8 @@
 -include ../tools.mk
 
-all: $(call STATICLIB,cfoo)
+all: $(call NATIVE_STATICLIB,cfoo)
 	$(RUSTC) foo.rs
 	$(RUSTC) bar.rs
-	rm $(TMPDIR)/$(call RLIB_GLOB,foo)
-	rm $(TMPDIR)/$(call STATICLIB_GLOB,cfoo)
+	$(call REMOVE_RLIBS,foo)
+	rm $(call NATIVE_STATICLIB,cfoo)
 	$(call RUN,bar)

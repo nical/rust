@@ -9,5 +9,5 @@
 // except according to those terms.
 
 fn main() {
-    let _f = 10i.abs; //~ ERROR attempted to take value of method
+    let _f = 10i32.abs; //~ ERROR attempted to take value of method
 }

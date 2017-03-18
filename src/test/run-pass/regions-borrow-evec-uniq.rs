@@ -8,16 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn foo(x: &[int]) -> int {
+
+
+fn foo(x: &[isize]) -> isize {
     x[0]
 }
 
 pub fn main() {
-    let p = ~[1,2,3,4,5];
-    let r = foo(p);
+    let p = vec![1,2,3,4,5];
+    let r = foo(&p);
     assert_eq!(r, 1);
 
-    let p = ~[5,4,3,2,1];
-    let r = foo(p);
+    let p = vec![5,4,3,2,1];
+    let r = foo(&p);
     assert_eq!(r, 5);
 }

@@ -8,19 +8,22 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+// pretty-expanded FIXME #23616
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 pub struct Foo {
-    a: int,
+    a: isize,
 }
 
 struct Bar<'a> {
-    a: ~Option<int>,
+    a: Box<Option<isize>>,
     b: &'a Foo,
 }
 
-fn check(a: @Foo) {
-    let _ic = Bar{ b: a, a: ~None };
+fn check(a: Box<Foo>) {
+    let _ic = Bar{ b: &*a, a: box None };
 }
 
 pub fn main(){}

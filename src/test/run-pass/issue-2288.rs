@@ -8,11 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 trait clam<A> {
   fn chowder(&self, y: A);
 }
+
+#[derive(Copy, Clone)]
 struct foo<A> {
   x: A,
 }
@@ -28,13 +31,13 @@ fn foo<A>(b: A) -> foo<A> {
     }
 }
 
-fn f<A>(x: @clam<A>, a: A) {
+fn f<A>(x: Box<clam<A>>, a: A) {
   x.chowder(a);
 }
 
 pub fn main() {
 
   let c = foo(42);
-  let d: @clam<int> = @c as @clam<int>;
+  let d: Box<clam<isize>> = box c as Box<clam<isize>>;
   f(d, c.x);
 }

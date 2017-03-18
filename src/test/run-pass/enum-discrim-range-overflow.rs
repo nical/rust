@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 pub enum E64 {
     H64 = 0x7FFF_FFFF_FFFF_FFFF,
     L64 = 0x8000_0000_0000_0000
@@ -19,12 +21,12 @@ pub enum E32 {
 
 pub fn f(e64: E64, e32: E32) -> (bool,bool) {
     (match e64 {
-        H64 => true,
-        L64 => false
+        E64::H64 => true,
+        E64::L64 => false
     },
      match e32 {
-        H32 => true,
-        L32 => false
+        E32::H32 => true,
+        E32::L32 => false
     })
 }
 

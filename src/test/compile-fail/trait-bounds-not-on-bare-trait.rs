@@ -9,11 +9,13 @@
 // except according to those terms.
 
 trait Foo {
+    fn dummy(&self) { }
 }
 
 // This should emit the less confusing error, not the more confusing one.
 
-fn foo(_x: Foo:Send) { //~ERROR reference to trait `Foo` where a type is expected
+fn foo(_x: Foo + Send) {
+    //~^ ERROR the trait bound `Foo + std::marker::Send + 'static: std::marker::Sized` is not
 }
 
 fn main() { }

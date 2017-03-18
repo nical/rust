@@ -8,28 +8,30 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
 struct Dog {
-    name : ~str
+    name : String
 }
 
 trait Barks {
-    fn bark(&self) -> ~str;
+    fn bark(&self) -> String;
 }
 
 impl Barks for Dog {
-    fn bark(&self) -> ~str {
+    fn bark(&self) -> String {
         return format!("woof! (I'm {})", self.name);
     }
 }
 
 
 pub fn main() {
-    let snoopy = ~Dog{name: ~"snoopy"};
-    let bubbles = ~Dog{name: ~"bubbles"};
-    let barker = [snoopy as ~Barks, bubbles as ~Barks];
+    let snoopy = box Dog{name: "snoopy".to_string()};
+    let bubbles = box Dog{name: "bubbles".to_string()};
+    let barker = [snoopy as Box<Barks>, bubbles as Box<Barks>];
 
-    for pup in barker.iter() {
+    for pup in &barker {
         println!("{}", pup.bark());
     }
 }
-

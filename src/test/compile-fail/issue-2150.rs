@@ -8,14 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deny(unreachable_code)];
-#[allow(unused_variable)];
-#[allow(dead_code)];
+#![deny(unreachable_code)]
+#![allow(unused_variables)]
+#![allow(dead_code)]
 
-fn fail_len(v: ~[int]) -> uint {
+fn fail_len(v: Vec<isize> ) -> usize {
     let mut i = 3;
-    fail!();
-    for x in v.iter() { i += 1u; }
+    panic!();
+    for x in &v { i += 1; }
     //~^ ERROR: unreachable statement
     return i;
 }

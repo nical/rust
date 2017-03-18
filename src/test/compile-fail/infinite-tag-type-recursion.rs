@@ -8,9 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+enum mlist { cons(isize, mlist), nil, }
+//~^ ERROR recursive type `mlist` has infinite size
 
-// error-pattern: illegal recursive enum type; wrap the inner value in a box
-
-enum mlist { cons(int, mlist), nil, }
-
-fn main() { let a = cons(10, cons(11, nil)); }
+fn main() { let a = mlist::cons(10, mlist::cons(11, mlist::nil)); }

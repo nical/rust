@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,81 +8,97 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-pretty
-// xfail-test
+// ignore-cross-compile
 
-extern mod extra;
-extern mod syntax;
+#![feature(quote, rustc_private)]
 
-use std::io::*;
+extern crate syntax;
+extern crate syntax_pos;
 
-use syntax::diagnostic;
-use syntax::ast;
-use syntax::codemap;
-use syntax::codemap::span;
-use syntax::parse;
-use syntax::print::*;
-
-
-trait fake_ext_ctxt {
-    fn cfg() -> ast::CrateConfig;
-    fn parse_sess() -> parse::parse_sess;
-    fn call_site() -> span;
-    fn ident_of(st: &str) -> ast::ident;
-}
-
-type fake_session = parse::parse_sess;
-
-impl fake_ext_ctxt for fake_session {
-    fn cfg() -> ast::CrateConfig { ~[] }
-    fn parse_sess() -> parse::parse_sess { self }
-    fn call_site() -> span {
-        codemap::span {
-            lo: codemap::BytePos(0),
-            hi: codemap::BytePos(0),
-            expn_info: None
-        }
-    }
-    fn ident_of(st: &str) -> ast::ident {
-        self.interner.intern(st)
-    }
-}
-
-fn mk_ctxt() -> fake_ext_ctxt {
-    parse::new_parse_sess(None) as fake_ext_ctxt
-}
+use syntax::print::pprust::*;
+use syntax::symbol::Symbol;
+use syntax_pos::DUMMY_SP;
 
 fn main() {
-    let cx = mk_ctxt();
+    let ps = syntax::parse::ParseSess::new();
+    let mut resolver = syntax::ext::base::DummyResolver;
+    let mut cx = syntax::ext::base::ExtCtxt::new(
+        &ps,
+        syntax::ext::expand::ExpansionConfig::default("qquote".to_string()),
+        &mut resolver);
+    cx.bt_push(syntax::codemap::ExpnInfo {
+        call_site: DUMMY_SP,
+        callee: syntax::codemap::NameAndSpan {
+            format: syntax::codemap::MacroBang(Symbol::intern("")),
+            allow_internal_unstable: false,
+            span: None,
+        }
+    });
+    let cx = &mut cx;
+
+    macro_rules! check {
+        ($f: ident, $($e: expr),+; $expect: expr) => ({
+            $(assert_eq!($f(&$e), $expect);)+
+        });
+    }
 
     let abc = quote_expr!(cx, 23);
-    check_pp(ext_cx, abc,  pprust::print_expr, ~"23");
+    check!(expr_to_string, abc, *quote_expr!(cx, $abc); "23");
 
+    let ty = quote_ty!(cx, isize);
+    check!(ty_to_string, ty, *quote_ty!(cx, $ty); "isize");
 
-    let ty = quote_ty!(cx, int);
-    check_pp(ext_cx, ty, pprust::print_type, ~"int");
+    let item = quote_item!(cx, static x: $ty = 10;).unwrap();
+    check!(item_to_string, item, quote_item!(cx, $item).unwrap(); "static x: isize = 10;");
 
-    let item = quote_item!(cx, static x : int = 10;).get();
-    check_pp(ext_cx, item, pprust::print_item, ~"static x: int = 10;");
-
-    let stmt = quote_stmt!(cx, let x = 20;);
-    check_pp(ext_cx, *stmt, pprust::print_stmt, ~"let x = 20;");
+    let twenty: u16 = 20;
+    let stmt = quote_stmt!(cx, let x = $twenty;).unwrap();
+    check!(stmt_to_string, stmt, quote_stmt!(cx, $stmt).unwrap(); "let x = 20u16;");
 
     let pat = quote_pat!(cx, Some(_));
-    check_pp(ext_cx, pat, pprust::print_pat, ~"Some(_)");
+    check!(pat_to_string, pat, *quote_pat!(cx, $pat); "Some(_)");
 
-}
+    let expr = quote_expr!(cx, (x, y));
+    let arm = quote_arm!(cx, (ref x, ref y) => $expr,);
+    check!(arm_to_string, arm, quote_arm!(cx, $arm); " (ref x, ref y) => (x, y),");
 
-fn check_pp<T>(cx: fake_ext_ctxt,
-               expr: T, f: |pprust::ps, T|, expect: ~str) {
-    let s = io::with_str_writer(|wr| {
-        let pp = pprust::rust_printer(wr, cx.parse_sess().interner);
-        f(pp, expr);
-        pp::eof(pp.s);
-    });
-    stdout().write_line(s);
-    if expect != ~"" {
-        error!("expect: '%s', got: '%s'", expect, s);
-        assert_eq!(s, expect);
-    }
+    let attr = quote_attr!(cx, #![cfg(foo = "bar")]);
+    check!(attribute_to_string, attr, quote_attr!(cx, $attr); r#"#![cfg(foo = "bar")]"#);
+
+    // quote_arg!
+
+    let arg = quote_arg!(cx, foo: i32);
+    check!(arg_to_string, arg, quote_arg!(cx, $arg); "foo: i32");
+
+    let function = quote_item!(cx, fn f($arg) { }).unwrap();
+    check!(item_to_string, function; "fn f(foo: i32) { }");
+
+    let args = vec![arg, quote_arg!(cx, bar: u32)];
+    let args = &args[..];
+    let function = quote_item!(cx, fn f($args) { }).unwrap();
+    check!(item_to_string, function; "fn f(foo: i32, bar: u32) { }");
+
+    // quote_block!
+
+    let block = quote_block!(cx, { $stmt let y = 40u32; });
+    check!(block_to_string, block, *quote_block!(cx, $block); "{ let x = 20u16; let y = 40u32; }");
+
+    let function = quote_item!(cx, fn f() $block).unwrap();
+    check!(item_to_string, function; "fn f() { let x = 20u16; let y = 40u32; }");
+
+    // quote_path!
+
+    let path = quote_path!(cx, ::syntax::ptr::P<MetaItem>);
+    check!(path_to_string, path, quote_path!(cx, $path); "::syntax::ptr::P<MetaItem>");
+
+    let ty = quote_ty!(cx, $path);
+    check!(ty_to_string, ty; "::syntax::ptr::P<MetaItem>");
+
+    // quote_meta_item!
+
+    let meta = quote_meta_item!(cx, cfg(foo = "bar"));
+    check!(meta_item_to_string, meta, quote_meta_item!(cx, $meta); r#"cfg(foo = "bar")"#);
+
+    let attr = quote_attr!(cx, #![$meta]);
+    check!(attribute_to_string, attr; r#"#![cfg(foo = "bar")]"#);
 }

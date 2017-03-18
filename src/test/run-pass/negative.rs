@@ -8,9 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 pub fn main() {
     match -5 {
       -5 => {}
-      _ => { fail!() }
+      _ => { panic!() }
     }
 }

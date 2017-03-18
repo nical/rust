@@ -8,14 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+
 trait vec_utils<T> {
-    fn map_<U>(x: &Self, f: |&T| -> U) -> ~[U];
+    fn map_<U, F>(x: &Self, f: F) -> Vec<U> where F: FnMut(&T) -> U;
 }
 
-impl<T> vec_utils<T> for ~[T] {
-    fn map_<U>(x: &~[T], f: |&T| -> U) -> ~[U] {
-        let mut r = ~[];
-        for elt in x.iter() {
+impl<T> vec_utils<T> for Vec<T> {
+    fn map_<U, F>(x: &Vec<T> , mut f: F) -> Vec<U> where F: FnMut(&T) -> U {
+        let mut r = Vec::new();
+        for elt in x {
             r.push(f(elt));
         }
         r
@@ -23,5 +25,5 @@ impl<T> vec_utils<T> for ~[T] {
 }
 
 pub fn main() {
-    assert_eq!(vec_utils::map_(&~[1,2,3], |&x| x+1), ~[2,3,4]);
+    assert_eq!(vec_utils::map_(&vec![1,2,3], |&x| x+1), [2,3,4]);
 }

@@ -8,13 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 // error-pattern:index out of bounds: the len is 1 but the index is 2
+
+
 fn main() {
-    let v: ~[int] = ~[10];
-    let x: int = 0;
+    let v: Vec<isize> = vec![10];
+    let x: usize = 0;
     assert_eq!(v[x], 10);
-    // Bounds-check failure.
+    // Bounds-check panic.
 
     assert_eq!(v[x + 2], 20);
 }

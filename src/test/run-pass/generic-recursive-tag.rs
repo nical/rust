@@ -8,11 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
-enum list<T> { cons(@T, @list<T>), nil, }
+enum list<T> { cons(Box<T>, Box<list<T>>), nil, }
 
 pub fn main() {
-    let _a: list<int> =
-        cons::<int>(@10, @cons::<int>(@12, @cons::<int>(@13, @nil::<int>)));
+    let _a: list<isize> =
+        list::cons::<isize>(box 10,
+        box list::cons::<isize>(box 12,
+        box list::cons::<isize>(box 13,
+        box list::nil::<isize>)));
 }

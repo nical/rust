@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,21 +8,29 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
 
-#[feature(simd)];
+
+#![feature(repr_simd, platform_intrinsics)]
 
 use std::ops;
 
-#[simd] struct f32x4(f32, f32, f32, f32);
+#[repr(simd)]
+#[derive(Copy, Clone)]
+struct f32x4(f32, f32, f32, f32);
 
-fn add<T: ops::Add<T, T>>(lhs: T, rhs: T) -> T {
+extern "platform-intrinsic" {
+    fn simd_add<T>(x: T, y: T) -> T;
+}
+
+fn add<T: ops::Add<Output=T>>(lhs: T, rhs: T) -> T {
     lhs + rhs
 }
 
-impl ops::Add<f32x4, f32x4> for f32x4 {
-    fn add(&self, rhs: &f32x4) -> f32x4 {
-        *self + *rhs
+impl ops::Add for f32x4 {
+    type Output = f32x4;
+
+    fn add(self, rhs: f32x4) -> f32x4 {
+        unsafe {simd_add(self, rhs)}
     }
 }
 

@@ -1,4 +1,5 @@
 include ../tools.mk
 
 all:
-	$(RUSTC) --rlib foo.rs
+	$(RUSTC) --crate-type=rlib foo.rs
+	$(RUSTC) --crate-type=rlib,rlib foo.rs

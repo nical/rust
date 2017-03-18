@@ -8,12 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 struct X {
-    a: int
+    a: isize
 }
 
 trait Changer {
-    fn change(mut self) -> Self;
+    fn change(self) -> Self;
 }
 
 impl Changer for X {

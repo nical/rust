@@ -8,24 +8,26 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 trait Foo<T> {
     fn get(&self) -> T;
 }
 
 struct S {
-    x: int
+    x: isize
 }
 
-impl Foo<int> for S {
-    fn get(&self) -> int {
+impl Foo<isize> for S {
+    fn get(&self) -> isize {
         self.x
     }
 }
 
 pub fn main() {
-    let x = @S { x: 1 };
-    let y = x as @Foo<int>;
+    let x = box S { x: 1 };
+    let y = x as Box<Foo<isize>>;
     assert_eq!(y.get(), 1);
 }

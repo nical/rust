@@ -8,33 +8,41 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deny(unused_result, unused_must_use)];
-#[allow(dead_code)];
+#![deny(unused_results, unused_must_use)]
+#![allow(dead_code)]
 
 #[must_use]
 enum MustUse { Test }
 
-fn foo<T>() -> T { fail!() }
+#[must_use = "some message"]
+enum MustUseMsg { Test2 }
 
-fn bar() -> int { return foo::<int>(); }
+fn foo<T>() -> T { panic!() }
+
+fn bar() -> isize { return foo::<isize>(); }
 fn baz() -> MustUse { return foo::<MustUse>(); }
+fn qux() -> MustUseMsg { return foo::<MustUseMsg>(); }
 
-#[allow(unused_result)]
+#[allow(unused_results)]
 fn test() {
-    foo::<int>();
+    foo::<isize>();
     foo::<MustUse>(); //~ ERROR: unused result which must be used
+    foo::<MustUseMsg>(); //~ ERROR: unused result which must be used: some message
 }
 
-#[allow(unused_result, unused_must_use)]
+#[allow(unused_results, unused_must_use)]
 fn test2() {
-    foo::<int>();
+    foo::<isize>();
     foo::<MustUse>();
+    foo::<MustUseMsg>();
 }
 
 fn main() {
-    foo::<int>(); //~ ERROR: unused result
+    foo::<isize>(); //~ ERROR: unused result
     foo::<MustUse>(); //~ ERROR: unused result which must be used
+    foo::<MustUseMsg>(); //~ ERROR: unused result which must be used: some message
 
-    let _ = foo::<int>();
+    let _ = foo::<isize>();
     let _ = foo::<MustUse>();
+    let _ = foo::<MustUseMsg>();
 }

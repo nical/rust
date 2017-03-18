@@ -8,8 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 trait Foo {
-    fn foo(&self, mut x: int) -> int {
+    fn foo(&self, mut x: isize) -> isize {
         let val = x;
         x = 37 * x;
         val + x
@@ -30,11 +31,11 @@ pub fn main() {
     assert_eq!(X.foo(2), 76);
 
     enum Bar {
-       Foo(int),
+       Foo(isize),
        Baz(f32, u8)
     }
 
-    let (x, mut y) = (32, Foo(21));
+    let (x, mut y) = (32, Bar::Foo(21));
 
     match x {
         mut z @ 32 => {
@@ -46,29 +47,29 @@ pub fn main() {
     }
 
     check_bar(&y);
-    y = Baz(10.0, 3);
+    y = Bar::Baz(10.0, 3);
     check_bar(&y);
 
     fn check_bar(y: &Bar) {
         match y {
-            &Foo(a) => {
+            &Bar::Foo(a) => {
                 assert_eq!(a, 21);
             }
-            &Baz(a, b) => {
+            &Bar::Baz(a, b) => {
                 assert_eq!(a, 10.0);
                 assert_eq!(b, 3);
             }
         }
     }
 
-    fn foo1((x, mut y): (f64, int), mut z: int) -> int {
+    fn foo1((x, mut y): (f64, isize), mut z: isize) -> isize {
         y = 2 * 6;
-        z = y + (x as int);
+        z = y + (x as isize);
         y - z
     }
 
     struct A {
-        x: int
+        x: isize
     }
     let A { x: mut x } = A { x: 10 };
     assert_eq!(x, 10);

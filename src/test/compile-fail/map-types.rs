@@ -8,16 +8,22 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+#![feature(box_syntax)]
 
-use std::container::Map;
-use std::hashmap::HashMap;
+use std::collections::HashMap;
+
+trait Map<K, V>
+{
+    fn get(&self, k: K) -> V { panic!() }
+}
+
+impl<K, V> Map<K, V> for HashMap<K, V> {}
 
 // Test that trait types printed in error msgs include the type arguments.
 
 fn main() {
-    let x: @HashMap<~str, ~str> = @HashMap::new();
-    let x: @Map<~str, ~str> = x;
-    let y: @Map<uint, ~str> = @x;
-    //~^ ERROR failed to find an implementation of trait std::container::Map<uint,~str> for @std::container::Map<~str,~str>:'static
+    let x: Box<HashMap<isize, isize>> = box HashMap::new();
+    let x: Box<Map<isize, isize>> = x;
+    let y: Box<Map<usize, isize>> = Box::new(x);
+    //~^ ERROR `std::boxed::Box<Map<isize, isize>>: Map<usize, isize>` is not satisfied
 }

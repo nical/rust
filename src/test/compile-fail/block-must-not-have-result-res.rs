@@ -8,13 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// error-pattern:mismatched types: expected `()` but found `bool`
-
 struct r;
 
 impl Drop for r {
     fn drop(&mut self) {
-        true
+        true //~  ERROR mismatched types
     }
 }
 

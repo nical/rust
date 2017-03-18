@@ -8,10 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 trait Canvas {
-    fn add_point(&self, point: &int);
-    fn add_points(&self, shapes: &[int]) {
-        for pt in shapes.iter() {
+    fn add_point(&self, point: &isize);
+    fn add_points(&self, shapes: &[isize]) {
+        for pt in shapes {
             self.add_point(pt)
         }
     }

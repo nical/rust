@@ -8,21 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
-
-
 enum noption<T> { some(T), }
 
-struct Pair { x: int, y: int }
+struct Pair { x: isize, y: isize }
 
 pub fn main() {
-    let nop: noption<int> = some::<int>(5);
-    match nop { some::<int>(n) => { info!("{:?}", n); assert!((n == 5)); } }
-    let nop2: noption<Pair> = some(Pair{x: 17, y: 42});
+    let nop: noption<isize> = noption::some::<isize>(5);
+    match nop { noption::some::<isize>(n) => { println!("{}", n); assert_eq!(n, 5); } }
+    let nop2: noption<Pair> = noption::some(Pair{x: 17, y: 42});
     match nop2 {
-      some(t) => {
-        info!("{:?}", t.x);
-        info!("{:?}", t.y);
+      noption::some(t) => {
+        println!("{}", t.x);
+        println!("{}", t.y);
         assert_eq!(t.x, 17);
         assert_eq!(t.y, 42);
       }

@@ -8,8 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
 
-struct X { x: int, y: int, z: int }
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
-pub fn main() { let x = @X {x: 1, y: 2, z: 3}; let y = x; assert!((y.y == 2)); }
+struct X { x: isize, y: isize, z: isize }
+
+pub fn main() { let x: Box<_> = box X {x: 1, y: 2, z: 3}; let y = x; assert_eq!(y.y, 2); }

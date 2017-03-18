@@ -8,25 +8,28 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 trait Foo {
-    fn foo(&self) -> ~str;
+    fn foo(&self) -> String;
 }
 
-impl<T:Foo> Foo for @T {
-    fn foo(&self) -> ~str {
-        format!("@{}", (**self).foo())
+impl<T:Foo> Foo for Box<T> {
+    fn foo(&self) -> String {
+        format!("box {}", (**self).foo())
     }
 }
 
-impl Foo for uint {
-    fn foo(&self) -> ~str {
+impl Foo for usize {
+    fn foo(&self) -> String {
         format!("{}", *self)
     }
 }
 
 pub fn main() {
-    let x = @3u;
-    assert_eq!(x.foo(), ~"@3");
+    let x: Box<_> = box 3;
+    assert_eq!(x.foo(), "box 3".to_string());
 }

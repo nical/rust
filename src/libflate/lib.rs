@@ -8,126 +8,161 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-/*!
+//! Simple [DEFLATE][def]-based compression. This is a wrapper around the
+//! [`miniz`][mz] library, which is a one-file pure-C implementation of zlib.
+//!
+//! [def]: https://en.wikipedia.org/wiki/DEFLATE
+//! [mz]: https://code.google.com/p/miniz/
 
-Simple compression
+#![crate_name = "flate"]
+#![unstable(feature = "rustc_private", issue = "27812")]
+#![crate_type = "rlib"]
+#![crate_type = "dylib"]
+#![doc(html_logo_url = "https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png",
+       html_favicon_url = "https://doc.rust-lang.org/favicon.ico",
+       html_root_url = "https://doc.rust-lang.org/nightly/",
+       test(attr(deny(warnings))))]
+#![deny(warnings)]
 
-*/
+#![feature(libc)]
+#![feature(staged_api)]
+#![feature(unique)]
+#![cfg_attr(test, feature(rand))]
 
-#[crate_id = "flate#0.10-pre"];
-#[crate_type = "rlib"];
-#[crate_type = "dylib"];
-#[license = "MIT/ASL2"];
-#[allow(missing_doc)];
+extern crate libc;
 
-use std::libc::{c_void, size_t, c_int};
-use std::libc;
-use std::vec;
+use libc::{c_int, c_void, size_t};
+use std::fmt;
+use std::ops::Deref;
+use std::ptr::Unique;
+use std::slice;
 
-pub mod rustrt {
-    use std::libc::{c_int, c_void, size_t};
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Error {
+    _unused: (),
+}
 
-    #[link(name = "miniz", kind = "static")]
-    extern {
-        pub fn tdefl_compress_mem_to_heap(psrc_buf: *c_void,
-                                          src_buf_len: size_t,
-                                          pout_len: *mut size_t,
-                                          flags: c_int)
-                                          -> *c_void;
-
-        pub fn tinfl_decompress_mem_to_heap(psrc_buf: *c_void,
-                                            src_buf_len: size_t,
-                                            pout_len: *mut size_t,
-                                            flags: c_int)
-                                            -> *c_void;
+impl Error {
+    fn new() -> Error {
+        Error { _unused: () }
     }
 }
 
-static LZ_NORM : c_int = 0x80;  // LZ with 128 probes, "normal"
-static TINFL_FLAG_PARSE_ZLIB_HEADER : c_int = 0x1; // parse zlib header and adler32 checksum
-static TDEFL_WRITE_ZLIB_HEADER : c_int = 0x01000; // write zlib header and adler32 checksum
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        "decompression error".fmt(f)
+    }
+}
 
-fn deflate_bytes_internal(bytes: &[u8], flags: c_int) -> ~[u8] {
+pub struct Bytes {
+    ptr: Unique<u8>,
+    len: usize,
+}
+
+impl Deref for Bytes {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(*self.ptr, self.len) }
+    }
+}
+
+impl Drop for Bytes {
+    fn drop(&mut self) {
+        unsafe {
+            libc::free(*self.ptr as *mut _);
+        }
+    }
+}
+
+extern "C" {
+    /// Raw miniz compression function.
+    fn tdefl_compress_mem_to_heap(psrc_buf: *const c_void,
+                                  src_buf_len: size_t,
+                                  pout_len: *mut size_t,
+                                  flags: c_int)
+                                  -> *mut c_void;
+
+    /// Raw miniz decompression function.
+    fn tinfl_decompress_mem_to_heap(psrc_buf: *const c_void,
+                                    src_buf_len: size_t,
+                                    pout_len: *mut size_t,
+                                    flags: c_int)
+                                    -> *mut c_void;
+}
+
+const LZ_FAST: c_int = 0x01;  // LZ with 1 probe, "fast"
+const TDEFL_GREEDY_PARSING_FLAG: c_int = 0x04000; // fast greedy parsing instead of lazy parsing
+
+/// Compress a buffer without writing any sort of header on the output. Fast
+/// compression is used because it is almost twice as fast as default
+/// compression and the compression ratio is only marginally worse.
+pub fn deflate_bytes(bytes: &[u8]) -> Bytes {
+    let flags = LZ_FAST | TDEFL_GREEDY_PARSING_FLAG;
     unsafe {
-        let mut outsz : size_t = 0;
-        let res = rustrt::tdefl_compress_mem_to_heap(bytes.as_ptr() as *c_void,
-                                                     bytes.len() as size_t,
-                                                     &mut outsz,
-                                                     flags);
-        assert!(res as int != 0);
-            let out = vec::raw::from_buf_raw(res as *u8,
-                                             outsz as uint);
-        libc::free(res as *mut c_void);
-        out
+        let mut outsz: size_t = 0;
+        let res = tdefl_compress_mem_to_heap(bytes.as_ptr() as *const _,
+                                             bytes.len() as size_t,
+                                             &mut outsz,
+                                             flags);
+        assert!(!res.is_null());
+        Bytes {
+            ptr: Unique::new(res as *mut u8),
+            len: outsz as usize,
+        }
     }
 }
 
-pub fn deflate_bytes(bytes: &[u8]) -> ~[u8] {
-    deflate_bytes_internal(bytes, LZ_NORM)
-}
-
-pub fn deflate_bytes_zlib(bytes: &[u8]) -> ~[u8] {
-    deflate_bytes_internal(bytes, LZ_NORM | TDEFL_WRITE_ZLIB_HEADER)
-}
-
-fn inflate_bytes_internal(bytes: &[u8], flags: c_int) -> ~[u8] {
+/// Decompress a buffer without parsing any sort of header on the input.
+pub fn inflate_bytes(bytes: &[u8]) -> Result<Bytes, Error> {
+    let flags = 0;
     unsafe {
-        let mut outsz : size_t = 0;
-        let res = rustrt::tinfl_decompress_mem_to_heap(bytes.as_ptr() as *c_void,
-                                                       bytes.len() as size_t,
-                                                       &mut outsz,
-                                                       flags);
-        assert!(res as int != 0);
-        let out = vec::raw::from_buf_raw(res as *u8,
-                                         outsz as uint);
-        libc::free(res as *mut c_void);
-        out
+        let mut outsz: size_t = 0;
+        let res = tinfl_decompress_mem_to_heap(bytes.as_ptr() as *const _,
+                                               bytes.len() as size_t,
+                                               &mut outsz,
+                                               flags);
+        if !res.is_null() {
+            Ok(Bytes {
+                ptr: Unique::new(res as *mut u8),
+                len: outsz as usize,
+            })
+        } else {
+            Err(Error::new())
+        }
     }
-}
-
-pub fn inflate_bytes(bytes: &[u8]) -> ~[u8] {
-    inflate_bytes_internal(bytes, 0)
-}
-
-pub fn inflate_bytes_zlib(bytes: &[u8]) -> ~[u8] {
-    inflate_bytes_internal(bytes, TINFL_FLAG_PARSE_ZLIB_HEADER)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{inflate_bytes, deflate_bytes};
-    use std::rand;
-    use std::rand::Rng;
+    #![allow(deprecated)]
+    use super::{deflate_bytes, inflate_bytes};
+    use std::__rand::{Rng, thread_rng};
 
     #[test]
     fn test_flate_round_trip() {
-        let mut r = rand::rng();
-        let mut words = ~[];
-        for _ in range(0, 20) {
-            let range = r.gen_range(1u, 10);
-            words.push(r.gen_vec::<u8>(range));
+        let mut r = thread_rng();
+        let mut words = vec![];
+        for _ in 0..20 {
+            let range = r.gen_range(1, 10);
+            let v = r.gen_iter::<u8>().take(range).collect::<Vec<u8>>();
+            words.push(v);
         }
-        for _ in range(0, 20) {
-            let mut input = ~[];
-            for _ in range(0, 2000) {
-                input.push_all(r.choose(words));
+        for _ in 0..20 {
+            let mut input = vec![];
+            for _ in 0..2000 {
+                input.extend_from_slice(r.choose(&words).unwrap());
             }
-            debug!("de/inflate of {} bytes of random word-sequences",
-                   input.len());
-            let cmp = deflate_bytes(input);
-            let out = inflate_bytes(cmp);
-            debug!("{} bytes deflated to {} ({:.1f}% size)",
-                   input.len(), cmp.len(),
-                   100.0 * ((cmp.len() as f64) / (input.len() as f64)));
-            assert_eq!(input, out);
+            let cmp = deflate_bytes(&input);
+            let out = inflate_bytes(&cmp).unwrap();
+            assert_eq!(&*input, &*out);
         }
     }
 
     #[test]
     fn test_zlib_flate() {
-        let bytes = ~[1, 2, 3, 4, 5];
-        let deflated = deflate_bytes(bytes);
-        let inflated = inflate_bytes(deflated);
-        assert_eq!(inflated, bytes);
+        let bytes = vec![1, 2, 3, 4, 5];
+        let deflated = deflate_bytes(&bytes);
+        let inflated = inflate_bytes(&deflated).unwrap();
+        assert_eq!(&*inflated, &*bytes);
     }
 }

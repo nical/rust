@@ -8,8 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn swap(f: |~[int]| -> ~[int]) -> ~[int] {
-    let x = ~[1, 2, 3];
+
+
+fn swap<F>(f: F) -> Vec<isize> where F: FnOnce(Vec<isize>) -> Vec<isize> {
+    let x = vec![1, 2, 3];
     f(x)
 }
 

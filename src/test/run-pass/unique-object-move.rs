@@ -10,15 +10,20 @@
 
 // Issue #5192
 
-pub trait EventLoop { }
+// pretty-expanded FIXME #23616
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
+pub trait EventLoop { fn foo(&self) {} }
 
 pub struct UvEventLoop {
-    uvio: int
+    uvio: isize
 }
 
 impl EventLoop for UvEventLoop { }
 
 pub fn main() {
-    let loop_: ~EventLoop = ~UvEventLoop { uvio: 0 } as ~EventLoop;
+    let loop_: Box<EventLoop> = box UvEventLoop { uvio: 0 } as Box<EventLoop>;
     let _loop2_ = loop_;
 }

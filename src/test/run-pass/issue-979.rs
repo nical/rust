@@ -8,29 +8,26 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
-
 use std::cell::Cell;
 
-struct r {
-    b: @Cell<int>,
+struct r<'a> {
+    b: &'a Cell<isize>,
 }
 
-#[unsafe_destructor]
-impl Drop for r {
+impl<'a> Drop for r<'a> {
     fn drop(&mut self) {
         self.b.set(self.b.get() + 1);
     }
 }
 
-fn r(b: @Cell<int>) -> r {
+fn r(b: &Cell<isize>) -> r {
     r {
         b: b
     }
 }
 
 pub fn main() {
-    let b = @Cell::new(0);
+    let b = &Cell::new(0);
     {
         let _p = Some(r(b));
     }

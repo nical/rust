@@ -8,73 +8,72 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(macro_rules)];
 
-macro_rules! assert_approx_eq(
+macro_rules! assert_approx_eq {
     ($a:expr, $b:expr) => ({
         let (a, b) = (&$a, &$b);
         assert!((*a - *b).abs() < 1.0e-6,
                 "{} is not approximately equal to {}", *a, *b);
     })
-)
+}
 
-static A: int = -4 + 3;
-static A2: uint = 3 + 3;
+static A: isize = -4 + 3;
+static A2: usize = 3 + 3;
 static B: f64 = 3.0 + 2.7;
 
-static C: int = 3 - 4;
-static D: uint = 3 - 3;
+static C: isize = 3 - 4;
+static D: usize = 3 - 3;
 static E: f64 = 3.0 - 2.7;
 
-static E2: int = -3 * 3;
-static F: uint = 3 * 3;
+static E2: isize = -3 * 3;
+static F: usize = 3 * 3;
 static G: f64 = 3.3 * 3.3;
 
-static H: int = 3 / -1;
-static I: uint = 3 / 3;
+static H: isize = 3 / -1;
+static I: usize = 3 / 3;
 static J: f64 = 3.3 / 3.3;
 
 static N: bool = true && false;
 
 static O: bool = true || false;
 
-static P: int = 3 & 1;
-static Q: uint = 1 & 3;
+static P: isize = 3 & 1;
+static Q: usize = 1 & 3;
 
-static R: int = 3 | 1;
-static S: uint = 1 | 3;
+static R: isize = 3 | 1;
+static S: usize = 1 | 3;
 
-static T: int = 3 ^ 1;
-static U: uint = 1 ^ 3;
+static T: isize = 3 ^ 1;
+static U: usize = 1 ^ 3;
 
-static V: int = 1 << 3;
+static V: isize = 1 << 3;
 
 // NOTE: better shr coverage
-static W: int = 1024 >> 4;
-static X: uint = 1024 >> 4;
+static W: isize = 1024 >> 4;
+static X: usize = 1024 >> 4;
 
 static Y: bool = 1 == 1;
-static Z: bool = 1.0 == 1.0;
+static Z: bool = 1.0f64 == 1.0;
 
 static AA: bool = 1 <= 2;
 static AB: bool = -1 <= 2;
-static AC: bool = 1.0 <= 2.0;
+static AC: bool = 1.0f64 <= 2.0;
 
 static AD: bool = 1 < 2;
 static AE: bool = -1 < 2;
-static AF: bool = 1.0 < 2.0;
+static AF: bool = 1.0f64 < 2.0;
 
 static AG: bool = 1 != 2;
 static AH: bool = -1 != 2;
-static AI: bool = 1.0 != 2.0;
+static AI: bool = 1.0f64 != 2.0;
 
 static AJ: bool = 2 >= 1;
 static AK: bool = 2 >= -2;
-static AL: bool = 1.0 >= -2.0;
+static AL: bool = 1.0f64 >= -2.0;
 
 static AM: bool = 2 > 1;
 static AN: bool = 2 > -2;
-static AO: bool = 1.0 > -2.0;
+static AO: bool = 1.0f64 > -2.0;
 
 pub fn main() {
     assert_eq!(A, -1);

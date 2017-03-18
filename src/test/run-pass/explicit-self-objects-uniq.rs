@@ -8,22 +8,26 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
 trait Foo {
-    fn f(~self);
+    fn f(self: Box<Self>);
 }
 
 struct S {
-    x: int
+    x: isize
 }
 
 impl Foo for S {
-    fn f(~self) {
+    fn f(self: Box<S>) {
         assert_eq!(self.x, 3);
     }
 }
 
 pub fn main() {
-    let x = ~S { x: 3 };
-    let y = x as ~Foo;
+    let x = box S { x: 3 };
+    let y = x as Box<Foo>;
     y.f();
 }

@@ -8,10 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// error-pattern:unsupported cast
+// error-pattern:casting
 
-use std::libc;
+#![feature(libc)]
+
+extern crate libc;
 
 fn main() {
-  info!("{:?}", 1.0 as *libc::FILE); // Can't cast float to foreign.
+  println!("{:?}", 1.0 as *const libc::FILE); // Can't cast float to foreign.
 }

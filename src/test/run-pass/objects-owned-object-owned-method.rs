@@ -9,24 +9,28 @@
 // except according to those terms.
 
 // Test invoked `&self` methods on owned objects where the values
-// closed over contain managed values. This implies that the ~ boxes
+// closed over contain managed values. This implies that the boxes
 // will have headers that must be skipped over.
 
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
 trait FooTrait {
-    fn foo(~self) -> uint;
+    fn foo(self: Box<Self>) -> usize;
 }
 
 struct BarStruct {
-    x: uint
+    x: usize
 }
 
 impl FooTrait for BarStruct {
-    fn foo(~self) -> uint {
+    fn foo(self: Box<BarStruct>) -> usize {
         self.x
     }
 }
 
 pub fn main() {
-    let foo = ~BarStruct{ x: 22 } as ~FooTrait;
+    let foo = box BarStruct{ x: 22 } as Box<FooTrait>;
     assert_eq!(22, foo.foo());
 }

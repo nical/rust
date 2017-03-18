@@ -8,25 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// compile-flags:-F experimental -D unstable
+// compile-flags: -F unused_features
+// aux-build:lint_output_format.rs
 
-#[deprecated]
-fn foo() -> uint {
-    20
-}
+#![allow(deprecated)]
 
-#[experimental]
-fn bar() -> uint {
-    40
-}
-
-#[unstable]
-fn baz() -> uint {
-    30
-}
+extern crate lint_output_format; //~ ERROR use of unstable library feature
+use lint_output_format::{foo, bar}; //~ ERROR use of unstable library feature
 
 fn main() {
-    let _x = foo(); //~ WARNING #[warn(deprecated)] on by default
-    let _y = bar(); //~ ERROR [-F experimental]
-    let _z = baz(); //~ ERROR [-D unstable]
+    let _x = foo();
+    let _y = bar(); //~ ERROR use of unstable library feature
 }

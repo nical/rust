@@ -8,18 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern mod extra;
-
 // error-pattern: mismatched types
 
-enum bar { t1((), Option<~[int]>), t2, }
+enum bar { t1((), Option<Vec<isize> >), t2, }
 
 fn foo(t: bar) {
     match t {
-      t1(_, Some::<int>(x)) => {
-        info!("{:?}", x);
+      bar::t1(_, Some::<isize>(x)) => {
+        println!("{}", x);
       }
-      _ => { fail!(); }
+      _ => { panic!(); }
     }
 }
 

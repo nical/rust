@@ -8,15 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(default_type_params)];
+use std::marker;
 
-struct Foo<A, B, C = (A, B)>;
+struct Foo<A, B, C = (A, B)>(
+    marker::PhantomData<(A,B,C)>);
 
 impl<A, B, C = (A, B)> Foo<A, B, C> {
-    fn new() -> Foo<A, B, C> {Foo}
+    fn new() -> Foo<A, B, C> {Foo(marker::PhantomData)}
 }
 
 fn main() {
-    Foo::<int>::new(); //~ ERROR the impl referenced by this path needs at least 2 type parameters, but 1 type parameter were supplied
-    //~^ ERROR not enough type parameters provided: expected at least 2, found 1
+    Foo::<isize>::new();
+    //~^ ERROR wrong number of type arguments
 }

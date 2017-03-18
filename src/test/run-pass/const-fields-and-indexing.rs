@@ -8,26 +8,26 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-static x : [int, ..4] = [1,2,3,4];
-static p : int = x[2];
-static y : &'static [int] = &[1,2,3,4];
-static q : int = y[2];
+const x : [isize; 4] = [1,2,3,4];
+static p : isize = x[2];
+const y : &'static [isize] = &[1,2,3,4];
+static q : isize = y[2];
 
-struct S {a: int, b: int}
+struct S {a: isize, b: isize}
 
-static s : S = S {a: 10, b: 20};
-static t : int = s.b;
+const s : S = S {a: 10, b: 20};
+static t : isize = s.b;
 
-struct K {a: int, b: int, c: D}
-struct D { d: int, e: int }
+struct K {a: isize, b: isize, c: D}
+struct D { d: isize, e: isize }
 
-static k : K = K {a: 10, b: 20, c: D {d: 30, e: 40}};
-static m : int = k.c.e;
+const k : K = K {a: 10, b: 20, c: D {d: 30, e: 40}};
+static m : isize = k.c.e;
 
 pub fn main() {
-    println!("{:?}", p);
-    println!("{:?}", q);
-    println!("{:?}", t);
+    println!("{}", p);
+    println!("{}", q);
+    println!("{}", t);
     assert_eq!(p, 3);
     assert_eq!(q, 3);
     assert_eq!(t, 20);

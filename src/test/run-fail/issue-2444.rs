@@ -8,15 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// error-pattern:explicit failure
+// error-pattern:explicit panic
 
-extern mod extra;
-use extra::arc;
+use std::sync::Arc;
 
-enum e<T> { e(arc::Arc<T>) }
+enum e<T> {
+    ee(Arc<T>),
+}
 
-fn foo() -> e<int> {fail!();}
+fn foo() -> e<isize> {
+    panic!();
+}
 
 fn main() {
-   let _f = foo();
+    let _f = foo();
 }

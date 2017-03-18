@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,11 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
 
-fn foo(i: int) -> int { i + 1 }
 
-fn apply<A>(f: |A| -> A, v: A) -> A { f(v) }
+fn foo(i: isize) -> isize { i + 1 }
+
+fn apply<A, F>(f: F, v: A) -> A where F: FnOnce(A) -> A { f(v) }
 
 pub fn main() {
     let f = {|i| foo(i)};

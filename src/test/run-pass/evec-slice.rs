@@ -8,21 +8,21 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(dead_assignment)];
+#![allow(dead_assignment)]
 
 pub fn main() {
-    let x : &[int] = &[1,2,3,4,5];
-    let mut z = &[1,2,3,4,5];
+    let x : &[isize] = &[1,2,3,4,5];
+    let mut z : &[isize] = &[1,2,3,4,5];
     z = x;
     assert_eq!(z[0], 1);
     assert_eq!(z[4], 5);
 
-    let a : &[int] = &[1,1,1,1,1];
-    let b : &[int] = &[2,2,2,2,2];
-    let c : &[int] = &[2,2,2,2,3];
-    let cc : &[int] = &[2,2,2,2,2,2];
+    let a : &[isize] = &[1,1,1,1,1];
+    let b : &[isize] = &[2,2,2,2,2];
+    let c : &[isize] = &[2,2,2,2,3];
+    let cc : &[isize] = &[2,2,2,2,2,2];
 
-    info!("{:?}", a);
+    println!("{:?}", a);
 
     assert!(a < b);
     assert!(a <= b);
@@ -30,7 +30,7 @@ pub fn main() {
     assert!(b >= a);
     assert!(b > a);
 
-    info!("{:?}", b);
+    println!("{:?}", b);
 
     assert!(b < c);
     assert!(b <= c);
@@ -44,7 +44,7 @@ pub fn main() {
     assert!(c >= a);
     assert!(c > a);
 
-    info!("{:?}", c);
+    println!("{:?}", c);
 
     assert!(a < cc);
     assert!(a <= cc);
@@ -52,5 +52,5 @@ pub fn main() {
     assert!(cc >= a);
     assert!(cc > a);
 
-    info!("{:?}", cc);
+    println!("{:?}", cc);
 }

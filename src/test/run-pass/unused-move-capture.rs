@@ -8,8 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
+
 pub fn main() {
-    let _x = ~1;
-    let lam_move: || = || {};
+    let _x: Box<_> = box 1;
+    let lam_move = || {};
     lam_move();
 }

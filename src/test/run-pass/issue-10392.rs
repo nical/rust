@@ -8,11 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-struct A { foo: int }
-struct B { a: int, b: int, c: int }
 
-fn mka() -> A { fail!() }
-fn mkb() -> B { fail!() }
+struct A { foo: isize }
+struct B { a: isize, b: isize, c: isize }
+
+fn mka() -> A { panic!() }
+fn mkb() -> B { panic!() }
 
 fn test() {
     let A { foo, } = mka();

@@ -8,11 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deriving(Eq)]
+#[derive(PartialEq, Debug)]
 struct Foo {
-    x: int,
-    y: int,
-    z: int,
+    x: isize,
+    y: isize,
+    z: isize,
 }
 
 pub fn main() {

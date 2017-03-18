@@ -1,6 +1,4 @@
-// xfail-fast
-
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -16,9 +14,10 @@
 // pretty-print such view items. If that happens again, this should
 // begin failing.
 
+// pretty-expanded FIXME #23616
+
 mod m {
-    use std::vec;
-    pub fn f() -> ~[int] { vec::from_elem(1u, 0) }
+    pub fn f() -> Vec<isize> { Vec::new() }
 }
 
 pub fn main() { let _x = m::f(); }

@@ -8,10 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn take(x: int) -> int {x}
+
+// pretty-expanded FIXME #23616
+
+fn take(x: isize) -> isize {x}
 
 fn the_loop() {
-    let mut list = ~[];
+    let mut list = Vec::new();
     loop {
         let x = 5;
         if x > 3 {

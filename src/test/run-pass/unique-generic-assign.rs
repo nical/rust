@@ -10,7 +10,10 @@
 
 // Issue #976
 
-fn f<T>(x: ~T) {
+
+// pretty-expanded FIXME #23616
+
+fn f<T>(x: Box<T>) {
     let _x2 = x;
 }
 pub fn main() { }

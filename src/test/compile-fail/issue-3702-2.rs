@@ -8,15 +8,22 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-trait Add {
-    fn to_int(&self) -> int;
-    fn add_dynamic(&self, other: &Add) -> int;
+pub trait ToPrimitive {
+    fn to_int(&self) -> isize { 0 }
 }
 
-impl Add for int {
-    fn to_int(&self) -> int { *self }
-    fn add_dynamic(&self, other: &Add) -> int {
-        self.to_int() + other.to_int() //~ ERROR multiple applicable methods in scope
+impl ToPrimitive for i32 {}
+impl ToPrimitive for isize {}
+
+trait Add {
+    fn to_int(&self) -> isize;
+    fn add_dynamic(&self, other: &Add) -> isize;
+}
+
+impl Add for isize {
+    fn to_int(&self) -> isize { *self }
+    fn add_dynamic(&self, other: &Add) -> isize {
+        self.to_int() + other.to_int() //~ ERROR multiple applicable items in scope
     }
 }
 

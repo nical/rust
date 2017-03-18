@@ -8,7 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[allow(unused_variable)];
+// pretty-expanded FIXME #23616
+
+#![allow(unused_variables)]
 
 pub fn main() {
     // We should be able to type infer inside of ||s.

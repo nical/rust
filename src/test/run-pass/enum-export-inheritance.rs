@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 mod a {
     pub enum Foo {
         Bar,
@@ -17,5 +19,5 @@ mod a {
 }
 
 pub fn main() {
-    let _x = a::Bar;
+    let _x = a::Foo::Bar;
 }

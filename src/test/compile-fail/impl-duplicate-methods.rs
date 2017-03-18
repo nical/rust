@@ -9,9 +9,12 @@
 // except according to those terms.
 
 struct Foo;
+
 impl Foo {
-    fn orange(&self){}
-    fn orange(&self){}   //~ ERROR error: duplicate definition of value `orange`
+    fn orange(&self) {} //~ NOTE previous definition of `orange` here
+    fn orange(&self) {}
+    //~^ ERROR duplicate definition
+    //~| NOTE duplicate definition
 }
 
 fn main() {}

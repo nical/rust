@@ -8,13 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
 struct BuildData {
-    foo: int,
-    bar: ~int
+    foo: isize,
+    bar: Box<isize>,
 }
 
 fn main() {
-    let foo = BuildData { //~ ERROR missing field: `bar`
+    let foo = BuildData { //~ ERROR missing field `bar` in initializer of `BuildData`
         foo: 0
     };
 }

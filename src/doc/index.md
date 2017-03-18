@@ -1,64 +1,49 @@
-% Rust documentation
+% Rust Documentation
 
-<!-- Completely hide the TOC and the section numbers -->
-<style type="text/css">
-#TOC { display: none; }
-.header-section-number { display: none; }
-li {list-style-type: none; }
+<style>
+nav {
+    display: none;
+}
 </style>
 
-* [The Rust tutorial](tutorial.html)  (* [PDF](tutorial.pdf))
-* [The Rust reference manual](rust.html) (* [PDF](rust.pdf))
+This page is an overview of the documentation included with your Rust install.
+Other unofficial documentation may exist elsewhere; for example, the [Rust
+Learning] project collects documentation from the community, and [Docs.rs]
+builds documentation for individual Rust packages.
 
-# Guides
+# API Documentation
 
-* [Pointers](guide-pointers.html)
-* [References and Lifetimes](guide-lifetimes.html)
-* [Containers and Iterators](guide-container.html)
-* [Tasks and Communication](guide-tasks.html)
-* [Foreign Function Interface](guide-ffi.html)
-* [Macros](guide-macros.html)
-* [Packaging](guide-rustpkg.html)
-* [Testing](guide-testing.html)
-* [Conditions](guide-conditions.html)
-* [Rust's Runtime](guide-runtime.html)
+Rust provides a standard library with a number of features; [we host its
+documentation here][api].
 
-# Libraries
+# Extended Error Documentation
 
-* [The standard library, `libstd`](std/index.html)
-* [The extra library, `libextra`](extra/index.html)
+Many of Rust's errors come with error codes, and you can request extended
+diagnostics from the compiler on those errors. We also [have the text of those
+extended errors on the web][err], if you prefer to read them that way.
 
-* [The M:N runtime library, `libgreen`](green/index.html)
-* [The 1:1 runtime library, `libnative`](native/index.html)
+# The Rust Bookshelf
 
-* [The Rust libuv library, `librustuv`](rustuv/index.html)
-* [The Rust packaging library, `librustpkg`](rustpkg/index.html)
+Rust provides a number of book-length sets of documentation, collectively
+nicknamed 'The Rust Bookshelf.'
 
-* [The Rust parser, `libsyntax`](syntax/index.html)
-* [The Rust compiler, `librustc`](rustc/index.html)
+* [The Rust Programming Language][book] teaches you how to program in Rust.
+* [The Unstable Book][unstable-book] has documentation for unstable features.
+* [The Rustonomicon][nomicon] is your guidebook to the dark arts of unsafe Rust.
+* [The Reference][ref] is not a formal spec, but is more detailed and comprehensive than the book.
 
-* [The `arena` allocation library](arena/index.html)
-* [The `flate` compression library](flate/index.html)
-* [The `glob` file path matching library](glob/index.html)
-* [The `semver` version collation library](semver/index.html)
-* [The `term` terminal-handling library](term/index.html)
-* [The UUID library](uuid/index.html)
+Another few words about the reference: it is guaranteed to be accurate, but not
+complete. We now have a policy that all new features must be included in the
+reference before stabilization; however, we are still back-filling things that
+landed before then. That work is being tracked [here][38643].
 
-# Tooling
+[Rust Learning]: https://github.com/ctjhoa/rust-learning
+[Docs.rs]: https://docs.rs/
+[api]: std/index.html
+[ref]: reference/index.html
+[38643]: https://github.com/rust-lang/rust/issues/38643
+[err]: error-index.html
+[book]: book/index.html
+[nomicon]: nomicon/index.html
+[unstable-book]: unstable-book/index.html
 
-* [The `rustdoc` manual](rustdoc.html)
-* [The `rustpkg` manual](rustpkg.html)
-
-# FAQs
-
-* [Language FAQ](complement-lang-faq.html)
-* [Project FAQ](complement-project-faq.html)
-* [Usage FAQ](complement-usage-faq.html)
-* [Code cheatsheet](complement-cheatsheet.html) - "How do I do X?"
-* [How to submit a bug report](complement-bugreport.html)
-
-# External resources
-
-* The Rust [IRC channel](http://chat.mibbit.com/?server=irc.mozilla.org&channel=%23rust) - `#rust` on irc.mozilla.org
-* The Rust community on [Reddit](http://reddit.com/r/rust)
-* The Rust [wiki](http://github.com/mozilla/rust/wiki)

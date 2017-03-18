@@ -10,11 +10,10 @@
 
 
 trait NewTrait : SomeNonExistentTrait {}
-//~^ ERROR attempt to derive a nonexistent trait `SomeNonExistentTrait`
+//~^ ERROR cannot find trait `SomeNonExistentTrait` in this scope
 
-impl SomeNonExistentTrait for int {}
-//~^ ERROR attempt to implement a nonexistent trait `SomeNonExistentTrait`
+impl SomeNonExistentTrait for isize {}
+//~^ ERROR cannot find trait `SomeNonExistentTrait` in this scope
 
 fn f<T:SomeNonExistentTrait>() {}
-//~^ ERROR attempt to bound type parameter with a nonexistent trait `SomeNonExistentTrait`
-
+//~^ ERROR cannot find trait `SomeNonExistentTrait` in this scope

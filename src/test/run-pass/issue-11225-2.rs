@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -9,10 +9,12 @@
 // except according to those terms.
 
 // aux-build:issue-11225-2.rs
-// xfail-fast
 
-extern mod foo = "issue-11225-2";
+// pretty-expanded FIXME #23616
+
+extern crate issue_11225_2 as foo;
 
 pub fn main() {
     foo::foo(1);
+    foo::foo_ufcs(1);
 }

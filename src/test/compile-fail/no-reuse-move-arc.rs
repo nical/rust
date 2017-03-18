@@ -8,21 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern mod extra;
-use extra::arc;
-
-use std::task;
+use std::sync::Arc;
+use std::thread;
 
 fn main() {
-    let v = ~[1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    let arc_v = arc::Arc::new(v);
+    let v = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let arc_v = Arc::new(v);
 
-    task::spawn(proc() {
-        let v = arc_v.get();
-        assert_eq!(v[3], 4);
+    thread::spawn(move|| {
+        assert_eq!((*arc_v)[3], 4);
     });
 
-    assert_eq!((arc_v.get())[2], 3); //~ ERROR use of moved value: `arc_v`
+    assert_eq!((*arc_v)[2], 3); //~ ERROR use of moved value: `arc_v`
 
-    info!("{:?}", arc_v); //~ ERROR use of moved value: `arc_v`
+    println!("{:?}", *arc_v); //~ ERROR use of moved value: `arc_v`
 }

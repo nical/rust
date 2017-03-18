@@ -7,19 +7,20 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+//
 
 type FontTableTag = u32;
 
 trait FontTableTagConversions {
-  fn tag_to_str(self);
+  fn tag_to_string(self);
 }
 
 impl FontTableTagConversions for FontTableTag {
-  fn tag_to_str(self) {
+  fn tag_to_string(self) {
     &self;
   }
 }
 
 pub fn main() {
-    5.tag_to_str();
+    5.tag_to_string();
 }

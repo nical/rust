@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# xfail-license
+#
 # Copyright 2013 The Rust Project Developers. See the COPYRIGHT
 # file at the top-level directory of this distribution and at
 # http://rust-lang.org/COPYRIGHT.
@@ -12,8 +12,8 @@
 
 """
 This script creates a pile of compile-fail tests check that all the
-derivings have spans that point to the fields, rather than the
-#[deriving(...)] line.
+derives have spans that point to the fields, rather than the
+#[derive(...)] line.
 
 sample usage: src/etc/generate-deriving-span-tests.py
 """
@@ -35,10 +35,7 @@ TEMPLATE = """// Copyright {year} The Rust Project Developers. See the COPYRIGHT
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// This file was auto-generated using 'src/etc/generate-keyword-span-tests.py'
-
-#[feature(struct_variant)];
-extern mod extra;
+// This file was auto-generated using 'src/etc/generate-deriving-span-tests.py'
 
 {error_deriving}
 struct Error;
@@ -47,7 +44,7 @@ fn main() {{}}
 """
 
 ENUM_STRING = """
-#[deriving({traits})]
+#[derive({traits})]
 enum Enum {{
    A(
      Error {errors}
@@ -55,7 +52,7 @@ enum Enum {{
 }}
 """
 ENUM_STRUCT_VARIANT_STRING = """
-#[deriving({traits})]
+#[derive({traits})]
 enum Enum {{
    A {{
      x: Error {errors}
@@ -63,13 +60,13 @@ enum Enum {{
 }}
 """
 STRUCT_STRING = """
-#[deriving({traits})]
+#[derive({traits})]
 struct Struct {{
     x: Error {errors}
 }}
 """
 STRUCT_TUPLE_STRING = """
-#[deriving({traits})]
+#[derive({traits})]
 struct Struct(
     Error {errors}
 );
@@ -81,14 +78,14 @@ def create_test_case(type, trait, super_traits, number_of_errors):
     string = [ENUM_STRING, ENUM_STRUCT_VARIANT_STRING, STRUCT_STRING, STRUCT_TUPLE_STRING][type]
     all_traits = ','.join([trait] + super_traits)
     super_traits = ','.join(super_traits)
-    error_deriving = '#[deriving(%s)]' % super_traits if super_traits else ''
+    error_deriving = '#[derive(%s)]' % super_traits if super_traits else ''
 
     errors = '\n'.join('//~%s ERROR' % ('^' * n) for n in range(error_count))
     code = string.format(traits = all_traits, errors = errors)
     return TEMPLATE.format(year = YEAR, error_deriving=error_deriving, code = code)
 
 def write_file(name, string):
-    test_file = os.path.join(TEST_DIR, 'deriving-span-%s.rs' % name)
+    test_file = os.path.join(TEST_DIR, 'derives-span-%s.rs' % name)
 
     # set write permission if file exists, so it can be changed
     if os.path.exists(test_file):
@@ -107,7 +104,6 @@ STRUCT = 2
 ALL = STRUCT | ENUM
 
 traits = {
-    'Zero': (STRUCT, [], 1),
     'Default': (STRUCT, [], 1),
     'FromPrimitive': (0, [], 0), # only works for C-like enums
 
@@ -115,10 +111,13 @@ traits = {
     'Encodable': (0, [], 0), # FIXME: quoting gives horrible spans
 }
 
-for (trait, supers, errs) in [('Rand', [], 1),
-                              ('Clone', [], 1), ('DeepClone', ['Clone'], 1),
-                              ('Eq', [], 2), ('Ord', [], 8),
-                              ('TotalEq', [], 1), ('TotalOrd', ['TotalEq'], 1)]:
+for (trait, supers, errs) in [('Clone', [], 1),
+                              ('PartialEq', [], 2),
+                              ('PartialOrd', ['PartialEq'], 9),
+                              ('Eq', ['PartialEq'], 1),
+                              ('Ord', ['Eq', 'PartialOrd', 'PartialEq'], 1),
+                              ('Debug', [], 1),
+                              ('Hash', [], 1)]:
     traits[trait] = (ALL, supers, errs)
 
 for (trait, (types, super_traits, error_count)) in traits.items():

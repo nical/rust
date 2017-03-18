@@ -9,13 +9,13 @@
 // except according to those terms.
 
 struct a {
-    b: uint,
-    c: uint
+    b: usize,
+    c: usize
 }
 
 impl a {
     fn foo(&self) {
-        let a { x, y } = self.d; //~ ERROR attempted access of field `d`
+        let a { x, y } = self.d; //~ ERROR no field `d` on type `&a`
         //~^ ERROR struct `a` does not have a field named `x`
         //~^^ ERROR struct `a` does not have a field named `y`
         //~^^^ ERROR pattern does not mention field `b`

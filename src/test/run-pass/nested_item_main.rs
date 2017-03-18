@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -9,11 +9,11 @@
 // except according to those terms.
 
 // aux-build:nested_item.rs
-// xfail-fast
 
-extern mod nested_item;
+
+extern crate nested_item;
 
 pub fn main() {
     assert_eq!(2, nested_item::foo::<()>());
-    assert_eq!(2, nested_item::foo::<int>());
+    assert_eq!(2, nested_item::foo::<isize>());
 }

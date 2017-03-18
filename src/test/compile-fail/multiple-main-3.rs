@@ -8,12 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![feature(main)]
+
 #[main]
 fn main1() {
 }
 
 mod foo {
     #[main]
-    fn main2() { //~ ERROR multiple 'main' functions
+    fn main2() { //~ ERROR multiple functions with a #[main] attribute
     }
 }

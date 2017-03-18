@@ -8,15 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(macro_rules)];
 
 #[cfg(foo)]
-macro_rules! foo( () => (1) )
+macro_rules! foo { () => (1) }
 
 #[cfg(not(foo))]
-macro_rules! foo( () => (2) )
+macro_rules! foo { () => (2) }
 
 pub fn main() {
     assert_eq!(foo!(), 2);
 }
-

@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn broken<'r>(v: &'r [u8], i: uint, j: uint) -> &'r [u8] { v.slice(i, j) }
+// pretty-expanded FIXME #23616
+
+fn broken(v: &[u8], i: usize, j: usize) -> &[u8] { &v[i..j] }
 
 pub fn main() {}

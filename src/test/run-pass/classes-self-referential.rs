@@ -8,7 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+
+// pretty-expanded FIXME #23616
 
 struct kitten {
     cat: Option<cat>,
@@ -20,6 +21,6 @@ fn kitten(cat: Option<cat>) -> kitten {
     }
 }
 
-type cat = @kitten;
+type cat = Box<kitten>;
 
 pub fn main() {}

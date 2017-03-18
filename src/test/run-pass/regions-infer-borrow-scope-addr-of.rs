@@ -8,14 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::util;
+
+use std::mem::swap;
 
 pub fn main() {
     let mut x = 4;
 
-    for i in range(0u, 3) {
+    for i in 0_usize..3 {
         // ensure that the borrow in this alt
-        // does not inferfere with the swap
+        // does not interfere with the swap
         // below.  note that it would it you
         // naively borrowed &x for the lifetime
         // of the variable x, as we once did
@@ -26,6 +27,6 @@ pub fn main() {
             }
         }
         let mut y = 4;
-        util::swap(&mut y, &mut x);
+        swap(&mut y, &mut x);
     }
 }

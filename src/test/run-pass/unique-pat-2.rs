@@ -9,13 +9,17 @@
 // except according to those terms.
 
 
-struct Foo {a: int, b: uint}
+#![allow(unknown_features)]
+#![feature(box_patterns)]
+#![feature(box_syntax)]
 
-enum bar { u(~Foo), w(int), }
+struct Foo {a: isize, b: usize}
+
+enum bar { u(Box<Foo>), w(isize), }
 
 pub fn main() {
-    assert!(match u(~Foo{a: 10, b: 40u}) {
-              u(~Foo{a: a, b: b}) => { a + (b as int) }
+    assert!(match bar::u(box Foo{a: 10, b: 40}) {
+              bar::u(box Foo{a: a, b: b}) => { a + (b as isize) }
               _ => { 66 }
             } == 50);
 }

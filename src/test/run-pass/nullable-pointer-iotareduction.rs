@@ -1,8 +1,4 @@
-// xfail-test
-
-// xfail'd due to a bug in move detection for macros.
-
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -12,7 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{option, cast};
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 // Iota-reduction is a rule in the Calculus of (Co-)Inductive Constructions,
 // which "says that a destructor applied to an object built from a constructor
@@ -22,46 +20,46 @@ use std::{option, cast};
 // trying to get assert failure messages that at least identify which case
 // failed.
 
-enum E<T> { Thing(int, T), Nothing((), ((), ()), [i8, ..0]) }
+enum E<T> { Thing(isize, T), Nothing((), ((), ()), [i8; 0]) }
 impl<T> E<T> {
     fn is_none(&self) -> bool {
         match *self {
-            Thing(..) => false,
-            Nothing(..) => true
+            E::Thing(..) => false,
+            E::Nothing(..) => true
         }
     }
-    fn get_ref<'r>(&'r self) -> (int, &'r T) {
+    fn get_ref(&self) -> (isize, &T) {
         match *self {
-            Nothing(..) => fail!("E::get_ref(Nothing::<%s>)",  stringify!($T)),
-            Thing(x, ref y) => (x, y)
+            E::Nothing(..) => panic!("E::get_ref(Nothing::<{}>)",  stringify!(T)),
+            E::Thing(x, ref y) => (x, y)
         }
     }
 }
 
 macro_rules! check_option {
-    ($e:expr: $T:ty) => {{
-        check_option!($e: $T, |ptr| assert!(*ptr == $e));
+    ($e:expr, $T:ty) => {{
+        check_option!($e, $T, |ptr| assert_eq!(*ptr, $e));
     }};
-    ($e:expr: $T:ty, |$v:ident| $chk:expr) => {{
-        assert!(option::None::<$T>.is_none());
+    ($e:expr, $T:ty, |$v:ident| $chk:expr) => {{
+        assert!(None::<$T>.is_none());
         let e = $e;
-        let s_ = option::Some::<$T>(e);
-        let $v = s_.get_ref();
+        let s_ = Some::<$T>(e);
+        let $v = s_.as_ref().unwrap();
         $chk
     }}
 }
 
 macro_rules! check_fancy {
-    ($e:expr: $T:ty) => {{
-        check_fancy!($e: $T, |ptr| assert!(*ptr == $e));
+    ($e:expr, $T:ty) => {{
+        check_fancy!($e, $T, |ptr| assert_eq!(*ptr, $e));
     }};
-    ($e:expr: $T:ty, |$v:ident| $chk:expr) => {{
-        assert!(Nothing::<$T>((), ((), ()), [23i8, ..0]).is_none());
+    ($e:expr, $T:ty, |$v:ident| $chk:expr) => {{
+        assert!(E::Nothing::<$T>((), ((), ()), [23; 0]).is_none());
         let e = $e;
-        let t_ = Thing::<$T>(23, e);
+        let t_ = E::Thing::<$T>(23, e);
         match t_.get_ref() {
             (23, $v) => { $chk }
-            _ => fail!("Thing::<%s>(23, %s).get_ref() != (23, _)",
+            _ => panic!("Thing::<{}>(23, {}).get_ref() != (23, _)",
                        stringify!($T), stringify!($e))
         }
     }}
@@ -75,13 +73,11 @@ macro_rules! check_type {
 }
 
 pub fn main() {
-    check_type!(&17: &int);
-    check_type!(~18: ~int);
-    check_type!(@19: @int);
-    check_type!(~"foo": ~str);
-    check_type!(~[20, 22]: ~[int]);
-    let mint: uint = unsafe { cast::transmute(main) };
-    check_type!(main: extern fn(), |pthing| {
-        assert!(mint == unsafe { cast::transmute(*pthing) })
+    check_type!(&17, &isize);
+    check_type!(box 18, Box<isize>);
+    check_type!("foo".to_string(), String);
+    check_type!(vec![20, 22], Vec<isize>);
+    check_type!(main, fn(), |pthing| {
+        assert_eq!(main as fn(), *pthing as fn())
     });
 }

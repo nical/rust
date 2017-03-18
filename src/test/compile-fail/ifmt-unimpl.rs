@@ -9,6 +9,6 @@
 // except according to those terms.
 
 fn main() {
-    format!("{:d}", "3");
-    //~^ ERROR: failed to find an implementation of trait std::fmt::Signed
+    format!("{:X}", "3");
+    //~^ ERROR: `str: std::fmt::UpperHex` is not satisfied
 }

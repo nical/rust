@@ -8,14 +8,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[deny(missing_doc)];
-#[doc="module"];
+// pretty-expanded FIXME #23616
+
+#![deny(missing_docs)]
+#![doc="module"]
 
 #[doc="struct"]
 pub struct Foo;
 
 pub fn foo() {
-    #[doc="fn"];
+    #![doc="fn"]
 }
 
 #[doc="main"]

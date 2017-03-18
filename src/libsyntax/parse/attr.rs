@@ -8,197 +8,259 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use attr;
 use ast;
-use codemap::{spanned, Spanned, mk_sp};
-use parse::common::*; //resolve bug?
+use syntax_pos::{mk_sp, Span};
+use codemap::spanned;
+use parse::common::SeqSep;
+use parse::PResult;
 use parse::token;
-use parse::parser::Parser;
-use parse::token::INTERPOLATED;
+use parse::parser::{Parser, TokenType};
 
-// a parser that can parse attributes.
-pub trait ParserAttr {
-    fn parse_outer_attributes(&mut self) -> ~[ast::Attribute];
-    fn parse_attribute(&mut self, permit_inner: bool) -> ast::Attribute;
-    fn parse_inner_attrs_and_next(&mut self)
-                                  -> (~[ast::Attribute], ~[ast::Attribute]);
-    fn parse_meta_item(&mut self) -> @ast::MetaItem;
-    fn parse_meta_seq(&mut self) -> ~[@ast::MetaItem];
-    fn parse_optional_meta(&mut self) -> ~[@ast::MetaItem];
+#[derive(PartialEq, Eq, Debug)]
+enum InnerAttributeParsePolicy<'a> {
+    Permitted,
+    NotPermitted { reason: &'a str },
 }
 
-impl ParserAttr for Parser {
-    // Parse attributes that appear before an item
-    fn parse_outer_attributes(&mut self) -> ~[ast::Attribute] {
-        let mut attrs: ~[ast::Attribute] = ~[];
+const DEFAULT_UNEXPECTED_INNER_ATTR_ERR_MSG: &'static str = "an inner attribute is not \
+                                                             permitted in this context";
+
+impl<'a> Parser<'a> {
+    /// Parse attributes that appear before an item
+    pub fn parse_outer_attributes(&mut self) -> PResult<'a, Vec<ast::Attribute>> {
+        let mut attrs: Vec<ast::Attribute> = Vec::new();
+        let mut just_parsed_doc_comment = false;
         loop {
-            debug!("parse_outer_attributes: self.token={:?}",
-                   self.token);
+            debug!("parse_outer_attributes: self.token={:?}", self.token);
             match self.token {
-              token::INTERPOLATED(token::NtAttr(..)) => {
-                attrs.push(self.parse_attribute(false));
-              }
-              token::POUND => {
-                if self.look_ahead(1, |t| *t != token::LBRACKET) {
-                    break;
+                token::Pound => {
+                    let inner_error_reason = if just_parsed_doc_comment {
+                        "an inner attribute is not permitted following an outer doc comment"
+                    } else if !attrs.is_empty() {
+                        "an inner attribute is not permitted following an outer attribute"
+                    } else {
+                        DEFAULT_UNEXPECTED_INNER_ATTR_ERR_MSG
+                    };
+                    let inner_parse_policy =
+                        InnerAttributeParsePolicy::NotPermitted { reason: inner_error_reason };
+                    attrs.push(self.parse_attribute_with_inner_parse_policy(inner_parse_policy)?);
+                    just_parsed_doc_comment = false;
                 }
-                attrs.push(self.parse_attribute(false));
-              }
-              token::DOC_COMMENT(s) => {
-                let attr = ::attr::mk_sugared_doc_attr(
-                    self.id_to_interned_str(s),
-                    self.span.lo,
-                    self.span.hi
-                );
-                if attr.node.style != ast::AttrOuter {
-                  self.fatal("expected outer comment");
+                token::DocComment(s) => {
+                    let Span { lo, hi, .. } = self.span;
+                    let attr = attr::mk_sugared_doc_attr(attr::mk_attr_id(), s, lo, hi);
+                    if attr.style != ast::AttrStyle::Outer {
+                        let mut err = self.fatal("expected outer doc comment");
+                        err.note("inner doc comments like this (starting with \
+                                  `//!` or `/*!`) can only appear before items");
+                        return Err(err);
+                    }
+                    attrs.push(attr);
+                    self.bump();
+                    just_parsed_doc_comment = true;
                 }
-                attrs.push(attr);
-                self.bump();
-              }
-              _ => break
+                _ => break,
             }
         }
-        return attrs;
+        return Ok(attrs);
     }
 
-    // matches attribute = # [ meta_item ]
-    //
-    // if permit_inner is true, then a trailing `;` indicates an inner
-    // attribute
-    fn parse_attribute(&mut self, permit_inner: bool) -> ast::Attribute {
-        debug!("parse_attributes: permit_inner={:?} self.token={:?}",
-               permit_inner, self.token);
-        let (span, value) = match self.token {
-            INTERPOLATED(token::NtAttr(attr)) => {
-                assert!(attr.node.style == ast::AttrOuter);
-                self.bump();
-                (attr.span, attr.node.value)
-            }
-            token::POUND => {
+    /// Matches `attribute = # ! [ meta_item ]`
+    ///
+    /// If permit_inner is true, then a leading `!` indicates an inner
+    /// attribute
+    pub fn parse_attribute(&mut self, permit_inner: bool) -> PResult<'a, ast::Attribute> {
+        debug!("parse_attribute: permit_inner={:?} self.token={:?}",
+               permit_inner,
+               self.token);
+        let inner_parse_policy = if permit_inner {
+            InnerAttributeParsePolicy::Permitted
+        } else {
+            InnerAttributeParsePolicy::NotPermitted
+                { reason: DEFAULT_UNEXPECTED_INNER_ATTR_ERR_MSG }
+        };
+        self.parse_attribute_with_inner_parse_policy(inner_parse_policy)
+    }
+
+    /// The same as `parse_attribute`, except it takes in an `InnerAttributeParsePolicy`
+    /// that prescribes how to handle inner attributes.
+    fn parse_attribute_with_inner_parse_policy(&mut self,
+                                               inner_parse_policy: InnerAttributeParsePolicy)
+                                               -> PResult<'a, ast::Attribute> {
+        debug!("parse_attribute_with_inner_parse_policy: inner_parse_policy={:?} self.token={:?}",
+               inner_parse_policy,
+               self.token);
+        let (span, value, mut style) = match self.token {
+            token::Pound => {
                 let lo = self.span.lo;
                 self.bump();
-                self.expect(&token::LBRACKET);
-                let meta_item = self.parse_meta_item();
-                self.expect(&token::RBRACKET);
-                let hi = self.span.hi;
-                (mk_sp(lo, hi), meta_item)
+
+                if inner_parse_policy == InnerAttributeParsePolicy::Permitted {
+                    self.expected_tokens.push(TokenType::Token(token::Not));
+                }
+                let style = if self.token == token::Not {
+                    self.bump();
+                    if let InnerAttributeParsePolicy::NotPermitted { reason } = inner_parse_policy
+                    {
+                        let span = self.span;
+                        self.diagnostic()
+                            .struct_span_err(span, reason)
+                            .note("inner attributes and doc comments, like `#![no_std]` or \
+                                   `//! My crate`, annotate the item enclosing them, and are \
+                                   usually found at the beginning of source files. Outer \
+                                   attributes and doc comments, like `#[test]` and
+                                   `/// My function`, annotate the item following them.")
+                            .emit()
+                    }
+                    ast::AttrStyle::Inner
+                } else {
+                    ast::AttrStyle::Outer
+                };
+
+                self.expect(&token::OpenDelim(token::Bracket))?;
+                let meta_item = self.parse_meta_item()?;
+                self.expect(&token::CloseDelim(token::Bracket))?;
+                let hi = self.prev_span.hi;
+
+                (mk_sp(lo, hi), meta_item, style)
             }
             _ => {
-                let token_str = self.this_token_to_str();
-                self.fatal(format!("expected `\\#` but found `{}`",
-                                   token_str));
+                let token_str = self.this_token_to_string();
+                return Err(self.fatal(&format!("expected `#`, found `{}`", token_str)));
             }
         };
-        let style = if permit_inner && self.token == token::SEMI {
+
+        if inner_parse_policy == InnerAttributeParsePolicy::Permitted &&
+           self.token == token::Semi {
             self.bump();
-            ast::AttrInner
-        } else {
-            ast::AttrOuter
-        };
-        return Spanned {
+            self.span_warn(span,
+                           "this inner attribute syntax is deprecated. The new syntax is \
+                            `#![foo]`, with a bang and no semicolon");
+            style = ast::AttrStyle::Inner;
+        }
+
+        Ok(ast::Attribute {
+            id: attr::mk_attr_id(),
+            style: style,
+            value: value,
+            is_sugared_doc: false,
             span: span,
-            node: ast::Attribute_ {
-                style: style,
-                value: value,
-                is_sugared_doc: false
-            }
-        };
+        })
     }
 
-    // Parse attributes that appear after the opening of an item, each
-    // terminated by a semicolon. In addition to a vector of inner attributes,
-    // this function also returns a vector that may contain the first outer
-    // attribute of the next item (since we can't know whether the attribute
-    // is an inner attribute of the containing item or an outer attribute of
-    // the first contained item until we see the semi).
+    /// Parse attributes that appear after the opening of an item. These should
+    /// be preceded by an exclamation mark, but we accept and warn about one
+    /// terminated by a semicolon.
 
-    // matches inner_attrs* outer_attr?
-    // you can make the 'next' field an Option, but the result is going to be
-    // more useful as a vector.
-    fn parse_inner_attrs_and_next(&mut self)
-                                  -> (~[ast::Attribute], ~[ast::Attribute]) {
-        let mut inner_attrs: ~[ast::Attribute] = ~[];
-        let mut next_outer_attrs: ~[ast::Attribute] = ~[];
+    /// matches inner_attrs*
+    pub fn parse_inner_attributes(&mut self) -> PResult<'a, Vec<ast::Attribute>> {
+        let mut attrs: Vec<ast::Attribute> = vec![];
         loop {
-            let attr = match self.token {
-                token::INTERPOLATED(token::NtAttr(..)) => {
-                    self.parse_attribute(true)
-                }
-                token::POUND => {
-                    if self.look_ahead(1, |t| *t != token::LBRACKET) {
-                        // This is an extension
+            match self.token {
+                token::Pound => {
+                    // Don't even try to parse if it's not an inner attribute.
+                    if !self.look_ahead(1, |t| t == &token::Not) {
                         break;
                     }
-                    self.parse_attribute(true)
-                }
-                token::DOC_COMMENT(s) => {
-                    self.bump();
-                    ::attr::mk_sugared_doc_attr(self.id_to_interned_str(s),
-                                                self.span.lo,
-                                                self.span.hi)
-                }
-                _ => {
-                    break;
-                }
-            };
-            if attr.node.style == ast::AttrInner {
-                inner_attrs.push(attr);
-            } else {
-                next_outer_attrs.push(attr);
-                break;
-            }
-        }
-        (inner_attrs, next_outer_attrs)
-    }
 
-    // matches meta_item = IDENT
-    // | IDENT = lit
-    // | IDENT meta_seq
-    fn parse_meta_item(&mut self) -> @ast::MetaItem {
-        let lo = self.span.lo;
-        let ident = self.parse_ident();
-        let name = self.id_to_interned_str(ident);
-        match self.token {
-            token::EQ => {
-                self.bump();
-                let lit = self.parse_lit();
-                // FIXME #623 Non-string meta items are not serialized correctly;
-                // just forbid them for now
-                match lit.node {
-                    ast::LitStr(..) => {}
-                    _ => {
-                        self.span_err(
-                            lit.span,
-                            "non-string literals are not allowed in meta-items");
+                    let attr = self.parse_attribute(true)?;
+                    assert!(attr.style == ast::AttrStyle::Inner);
+                    attrs.push(attr);
+                }
+                token::DocComment(s) => {
+                    // we need to get the position of this token before we bump.
+                    let Span { lo, hi, .. } = self.span;
+                    let attr = attr::mk_sugared_doc_attr(attr::mk_attr_id(), s, lo, hi);
+                    if attr.style == ast::AttrStyle::Inner {
+                        attrs.push(attr);
+                        self.bump();
+                    } else {
+                        break;
                     }
                 }
-                let hi = self.span.hi;
-                @spanned(lo, hi, ast::MetaNameValue(name, lit))
-            }
-            token::LPAREN => {
-                let inner_items = self.parse_meta_seq();
-                let hi = self.span.hi;
-                @spanned(lo, hi, ast::MetaList(name, inner_items))
-            }
-            _ => {
-                let hi = self.last_span.hi;
-                @spanned(lo, hi, ast::MetaWord(name))
+                _ => break,
             }
         }
+        Ok(attrs)
     }
 
-    // matches meta_seq = ( COMMASEP(meta_item) )
-    fn parse_meta_seq(&mut self) -> ~[@ast::MetaItem] {
-        self.parse_seq(&token::LPAREN,
-                       &token::RPAREN,
-                       seq_sep_trailing_disallowed(token::COMMA),
-                       |p| p.parse_meta_item()).node
-    }
+    fn parse_unsuffixed_lit(&mut self) -> PResult<'a, ast::Lit> {
+        let lit = self.parse_lit()?;
+        debug!("Checking if {:?} is unusuffixed.", lit);
 
-    fn parse_optional_meta(&mut self) -> ~[@ast::MetaItem] {
-        match self.token {
-            token::LPAREN => self.parse_meta_seq(),
-            _ => ~[]
+        if !lit.node.is_unsuffixed() {
+            let msg = "suffixed literals are not allowed in attributes";
+            self.diagnostic().struct_span_err(lit.span, msg)
+                             .help("instead of using a suffixed literal \
+                                    (1u8, 1.0f32, etc.), use an unsuffixed version \
+                                    (1, 1.0, etc.).")
+                             .emit()
         }
+
+        Ok(lit)
+    }
+
+    /// Per RFC#1559, matches the following grammar:
+    ///
+    /// meta_item : IDENT ( '=' UNSUFFIXED_LIT | '(' meta_item_inner? ')' )? ;
+    /// meta_item_inner : (meta_item | UNSUFFIXED_LIT) (',' meta_item_inner)? ;
+    pub fn parse_meta_item(&mut self) -> PResult<'a, ast::MetaItem> {
+        let nt_meta = match self.token {
+            token::Interpolated(ref nt) => match **nt {
+                token::NtMeta(ref e) => Some(e.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+
+        if let Some(meta) = nt_meta {
+            self.bump();
+            return Ok(meta);
+        }
+
+        let lo = self.span.lo;
+        let ident = self.parse_ident()?;
+        let node = if self.eat(&token::Eq) {
+            ast::MetaItemKind::NameValue(self.parse_unsuffixed_lit()?)
+        } else if self.token == token::OpenDelim(token::Paren) {
+            ast::MetaItemKind::List(self.parse_meta_seq()?)
+        } else {
+            ast::MetaItemKind::Word
+        };
+        let hi = self.prev_span.hi;
+        Ok(ast::MetaItem { name: ident.name, node: node, span: mk_sp(lo, hi) })
+    }
+
+    /// matches meta_item_inner : (meta_item | UNSUFFIXED_LIT) ;
+    fn parse_meta_item_inner(&mut self) -> PResult<'a, ast::NestedMetaItem> {
+        let sp = self.span;
+        let lo = self.span.lo;
+
+        match self.parse_unsuffixed_lit() {
+            Ok(lit) => {
+                return Ok(spanned(lo, self.prev_span.hi, ast::NestedMetaItemKind::Literal(lit)))
+            }
+            Err(ref mut err) => self.diagnostic().cancel(err)
+        }
+
+        match self.parse_meta_item() {
+            Ok(mi) => {
+                return Ok(spanned(lo, self.prev_span.hi, ast::NestedMetaItemKind::MetaItem(mi)))
+            }
+            Err(ref mut err) => self.diagnostic().cancel(err)
+        }
+
+        let found = self.this_token_to_string();
+        let msg = format!("expected unsuffixed literal or identifier, found {}", found);
+        Err(self.diagnostic().struct_span_err(sp, &msg))
+    }
+
+    /// matches meta_seq = ( COMMASEP(meta_item_inner) )
+    fn parse_meta_seq(&mut self) -> PResult<'a, Vec<ast::NestedMetaItem>> {
+        self.parse_unspanned_seq(&token::OpenDelim(token::Paren),
+                                 &token::CloseDelim(token::Paren),
+                                 SeqSep::trailing_allowed(token::Comma),
+                                 |p: &mut Parser<'a>| p.parse_meta_item_inner())
     }
 }

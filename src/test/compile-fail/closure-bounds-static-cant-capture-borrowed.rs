@@ -8,12 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn bar(blk: ||:'static) {
+fn bar<F>(blk: F) where F: FnOnce() + 'static {
 }
 
 fn foo(x: &()) {
     bar(|| {
-        let _ = x; //~ ERROR does not fulfill `'static`
+        //~^ ERROR cannot infer
+        //~| ERROR does not fulfill
+        let _ = x;
     })
 }
 

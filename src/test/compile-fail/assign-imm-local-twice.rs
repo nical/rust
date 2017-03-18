@@ -9,11 +9,12 @@
 // except according to those terms.
 
 fn test() {
-    let v: int;
-    v = 1; //~ NOTE prior assignment occurs here
-    info!("v={}", v);
+    let v: isize;
+    v = 1; //~ NOTE first assignment
+    println!("v={}", v);
     v = 2; //~ ERROR re-assignment of immutable variable
-    info!("v={}", v);
+           //~| NOTE re-assignment of immutable
+    println!("v={}", v);
 }
 
 fn main() {

@@ -9,9 +9,11 @@
 // except according to those terms.
 
 // Issue #922
-fn f2(_thing: ||) { }
+// pretty-expanded FIXME #23616
 
-fn f(thing: ||) {
+fn f2<F>(_thing: F) where F: FnOnce() { }
+
+fn f<F>(thing: F) where F: FnOnce() {
     f2(thing);
 }
 

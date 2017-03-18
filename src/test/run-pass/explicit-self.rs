@@ -8,7 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[feature(managed_boxes)];
+
+#![allow(unknown_features)]
+#![feature(box_syntax)]
 
 static tau: f64 = 2.0*3.14159265358979323;
 
@@ -22,8 +24,8 @@ enum shape {
 
 fn compute_area(shape: &shape) -> f64 {
     match *shape {
-        circle(_, radius) => 0.5 * tau * radius * radius,
-        rectangle(_, ref size) => size.w * size.h
+        shape::circle(_, radius) => 0.5 * tau * radius * radius,
+        shape::rectangle(_, ref size) => size.w * size.h
     }
 }
 
@@ -38,18 +40,18 @@ impl shape {
 fn select_based_on_unit_circle<'r, T>(
     threshold: f64, a: &'r T, b: &'r T) -> &'r T {
 
-    let shape = &circle(Point{x: 0.0, y: 0.0}, 1.0);
+    let shape = &shape::circle(Point{x: 0.0, y: 0.0}, 1.0);
     shape.select(threshold, a, b)
 }
 
-#[deriving(Clone)]
+#[derive(Clone)]
 struct thing {
     x: A
 }
 
-#[deriving(Clone)]
+#[derive(Clone)]
 struct A {
-    a: @int
+    a: isize
 }
 
 fn thing(x: A) -> thing {
@@ -59,26 +61,20 @@ fn thing(x: A) -> thing {
 }
 
 impl thing {
-    pub fn foo(@self) -> int { *self.x.a }
-    pub fn bar(~self) -> int { *self.x.a }
-    pub fn quux(&self) -> int { *self.x.a }
+    pub fn bar(self: Box<thing>) -> isize { self.x.a }
+    pub fn quux(&self) -> isize { self.x.a }
     pub fn baz<'a>(&'a self) -> &'a A { &self.x }
-    pub fn spam(self) -> int { *self.x.a }
+    pub fn spam(self) -> isize { self.x.a }
 }
 
 trait Nus { fn f(&self); }
 impl Nus for thing { fn f(&self) {} }
 
 pub fn main() {
-
-    let x = @thing(A {a: @10});
-    assert_eq!(x.foo(), 10);
-    assert_eq!(x.quux(), 10);
-
-    let y = ~thing(A {a: @10});
+    let y: Box<_> = box thing(A {a: 10});
     assert_eq!(y.clone().bar(), 10);
     assert_eq!(y.quux(), 10);
 
-    let z = thing(A {a: @11});
+    let z = thing(A {a: 11});
     assert_eq!(z.spam(), 11);
 }

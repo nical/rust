@@ -15,7 +15,7 @@
 //
 // This test began its life as a test for issue #4325.
 
-struct Node<'b, T> {
+struct Node<'b, T:'b> {
   val: T,
   next: Option<&'b Node<'b, T>>
 }
@@ -24,7 +24,7 @@ impl<'b, T> Node<'b, T> {
   fn get<'a>(&'a self) -> &'b T {
     match self.next {
       Some(ref next) => next.get(),
-      None => &self.val //~ ERROR cannot infer an appropriate lifetime
+      None => &self.val //~ ERROR cannot infer
     }
   }
 }

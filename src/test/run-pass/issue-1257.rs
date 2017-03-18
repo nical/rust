@@ -8,11 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// pretty-expanded FIXME #23616
+
 pub fn main () {
-  let mut line = ~"";
+  let mut line = "".to_string();
   let mut i = 0;
-  while line != ~"exit" {
-    line = if i == 9 { ~"exit" } else { ~"notexit" };
+  while line != "exit".to_string() {
+    line = if i == 9 { "exit".to_string() } else { "notexit".to_string() };
     i += 1;
   }
 }

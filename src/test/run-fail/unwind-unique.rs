@@ -11,10 +11,10 @@
 // error-pattern:fail
 
 fn failfn() {
-    fail!();
+    panic!();
 }
 
 fn main() {
-    ~0;
+    Box::new(0);
     failfn();
 }

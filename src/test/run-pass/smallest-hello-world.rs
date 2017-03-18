@@ -1,4 +1,4 @@
-// Copyright 2013 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,35 +8,33 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-test - FIXME(#8538) some kind of problem linking induced by extern "C" fns that I do not understand
-// xfail-fast - check-fast doesn't like this
+// Smallest "hello world" with a libc runtime
 
-// Smallest hello world with no runtime
+// pretty-expanded FIXME #23616
 
-#[no_std];
+#![feature(intrinsics, lang_items, start, no_core, libc)]
+#![no_core]
 
-// This is an unfortunate thing to have to do on linux :(
-#[cfg(target_os = "linux")]
-#[doc(hidden)]
-pub mod linkhack {
-    #[link_args="-lrustrt -lrt"]
-    extern {}
-}
+extern crate libc;
 
-extern {
-    fn puts(s: *u8);
-}
+extern { fn puts(s: *const u8); }
+extern "rust-intrinsic" { fn transmute<T, U>(t: T) -> U; }
 
-extern "rust-intrinsic" {
-    fn transmute<T, U>(t: T) -> U;
-}
+#[lang = "eh_personality"] extern fn eh_personality() {}
+#[lang = "eh_unwind_resume"] extern fn eh_unwind_resume() {}
+#[lang = "panic_fmt"] fn panic_fmt() -> ! { loop {} }
+#[no_mangle] pub extern fn rust_eh_register_frames () {}
+#[no_mangle] pub extern fn rust_eh_unregister_frames () {}
 
 #[start]
-pub fn main(_: int, _: **u8, _: *u8) -> int {
+fn main(_: isize, _: *const *const u8) -> isize {
     unsafe {
-        let (ptr, _): (*u8, uint) = transmute("Hello!");
+        let (ptr, _): (*const u8, usize) = transmute("Hello!\0");
         puts(ptr);
     }
     return 0;
 }
 
+#[cfg(target_os = "android")]
+#[link(name="gcc")]
+extern { }

@@ -8,8 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-enum foo { foo(bar) }
-enum bar { bar_none, bar_some(bar) } //~ ERROR illegal recursive enum type; wrap the inner value in a box to make it representable
+enum foo { foo_(bar) }
+enum bar { bar_none, bar_some(bar) }
+//~^ ERROR recursive type `bar` has infinite size
 
 fn main() {
 }

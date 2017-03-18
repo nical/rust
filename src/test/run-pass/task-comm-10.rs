@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,32 +8,35 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// xfail-fast
+// ignore-emscripten no threads support
 
-extern mod extra;
+#![feature(std_misc)]
 
-use std::task;
+use std::thread;
+use std::sync::mpsc::{channel, Sender};
 
-fn start(c: &Chan<Chan<~str>>) {
-    let (p, ch) = Chan::new();
-    c.send(ch);
+fn start(tx: &Sender<Sender<String>>) {
+    let (tx2, rx) = channel();
+    tx.send(tx2).unwrap();
 
     let mut a;
     let mut b;
-    a = p.recv();
-    assert!(a == ~"A");
-    error!("{:?}", a);
-    b = p.recv();
-    assert!(b == ~"B");
-    error!("{:?}", b);
+    a = rx.recv().unwrap();
+    assert_eq!(a, "A".to_string());
+    println!("{}", a);
+    b = rx.recv().unwrap();
+    assert_eq!(b, "B".to_string());
+    println!("{}", b);
 }
 
 pub fn main() {
-    let (p, ch) = Chan::new();
-    let _child = task::spawn(proc() { start(&ch) });
+    let (tx, rx) = channel();
+    let child = thread::spawn(move|| { start(&tx) });
 
-    let mut c = p.recv();
-    c.send(~"A");
-    c.send(~"B");
-    task::deschedule();
+    let mut c = rx.recv().unwrap();
+    c.send("A".to_string()).unwrap();
+    c.send("B".to_string()).unwrap();
+    thread::yield_now();
+
+    child.join();
 }

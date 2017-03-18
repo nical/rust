@@ -10,6 +10,10 @@
 
 fn main() {
     match None {
-        Err(_) => () //~ ERROR mismatched types: expected `std::option::Option<<generic #1>>` but found `std::result::Result<<generic #2>,<generic #3>>`
+        Err(_) => ()
+        //~^ ERROR mismatched types
+        //~| expected type `std::option::Option<_>`
+        //~| found type `std::result::Result<_, _>`
+        //~| expected enum `std::option::Option`, found enum `std::result::Result`
     }
 }

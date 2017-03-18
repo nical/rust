@@ -8,13 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::libc;
-use std::task;
+// ignore-emscripten no threads support
+
+#![feature(libc)]
+
+extern crate libc;
+use std::thread;
 
 mod rustrt {
-    use std::libc;
+    extern crate libc;
 
-    #[link(name = "rustrt")]
+    #[link(name = "rust_test_helpers", kind = "static")]
     extern {
         pub fn rust_dbg_call(cb: extern "C" fn(libc::uintptr_t) -> libc::uintptr_t,
                              data: libc::uintptr_t)
@@ -23,26 +27,26 @@ mod rustrt {
 }
 
 extern fn cb(data: libc::uintptr_t) -> libc::uintptr_t {
-    if data == 1u {
+    if data == 1 {
         data
     } else {
-        count(data - 1u) + 1u
+        count(data - 1) + 1
     }
 }
 
-fn count(n: uint) -> uint {
+fn count(n: libc::uintptr_t) -> libc::uintptr_t {
     unsafe {
-        info!("n = {}", n);
+        println!("n = {}", n);
         rustrt::rust_dbg_call(cb, n)
     }
 }
 
 pub fn main() {
-    // Make sure we're on a task with small Rust stacks (main currently
+    // Make sure we're on a thread with small Rust stacks (main currently
     // has a large stack)
-    task::spawn(proc() {
-        let result = count(1000u);
-        info!("result = {}", result);
-        assert_eq!(result, 1000u);
-    });
+    thread::spawn(move|| {
+        let result = count(1000);
+        println!("result = {}", result);
+        assert_eq!(result, 1000);
+    }).join();
 }
