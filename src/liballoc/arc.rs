@@ -822,6 +822,37 @@ impl<T> Weak<T> {
 }
 
 impl<T: ?Sized> Weak<T> {
+    /// Creates another pointer to the same inner value, increasing the
+    /// weak reference count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// let weak_five = Arc::downgrade(&Arc::new(5));
+    ///
+    /// let _other_weak_five = weak_five.new_ref();
+    /// // weak_five and _other_weak_five point to the same value.
+    /// ```
+    #[inline]
+    fn new_ref(&self) -> Weak<T> {
+        // See comments in Arc::new_ref() for why this is relaxed.  This can use a
+        // fetch_add (ignoring the lock) because the weak count is only locked
+        // where are *no other* weak pointers in existence. (So we can't be
+        // running this code in that case).
+        let old_size = self.inner().weak.fetch_add(1, Relaxed);
+
+        // See comments in Arc::new_ref() for why we do this (for mem::forget).
+        if old_size > MAX_REFCOUNT {
+            unsafe {
+                abort();
+            }
+        }
+
+        return Weak { ptr: self.ptr };
+    }
+
     /// Upgrades the `Weak` pointer to an [`Arc`][arc], if possible.
     ///
     /// Returns [`None`][option] if the strong count has reached zero and the
@@ -893,6 +924,8 @@ impl<T: ?Sized> Clone for Weak<T> {
     ///
     /// This creates another pointer to the same inner value, increasing the
     /// weak reference count.
+    /// This is equivallent to calling `new_ref` with the added genericity of being callable
+    /// through the `Clone` trait.
     ///
     /// # Examples
     ///
@@ -905,20 +938,7 @@ impl<T: ?Sized> Clone for Weak<T> {
     /// ```
     #[inline]
     fn clone(&self) -> Weak<T> {
-        // See comments in Arc::clone() for why this is relaxed.  This can use a
-        // fetch_add (ignoring the lock) because the weak count is only locked
-        // where are *no other* weak pointers in existence. (So we can't be
-        // running this code in that case).
-        let old_size = self.inner().weak.fetch_add(1, Relaxed);
-
-        // See comments in Arc::clone() for why we do this (for mem::forget).
-        if old_size > MAX_REFCOUNT {
-            unsafe {
-                abort();
-            }
-        }
-
-        return Weak { ptr: self.ptr };
+        self.new_ref()
     }
 }
 
