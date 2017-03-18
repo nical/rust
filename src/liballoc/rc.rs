@@ -578,9 +578,7 @@ impl<T: ?Sized> Rc<T> {
     }
 
     #[inline]
-    /// Makes a clone of the `Rc` pointer.
-    ///
-    /// This creates another pointer to the same inner value, increasing the
+    /// Creates another pointer to the same inner value, increasing the
     /// strong reference count.
     ///
     /// # Examples
@@ -725,7 +723,7 @@ impl<T: ?Sized> Clone for Rc<T> {
     /// This creates another pointer to the same inner value, increasing the
     /// strong reference count.
     /// This is equivallent to calling `new_ref` with the added genericity of being callable
-    /// through the Clone `trait`.
+    /// through the `Clone` trait.
     ///
     /// # Examples
     ///
