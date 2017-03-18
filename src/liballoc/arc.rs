@@ -486,13 +486,8 @@ impl<T: ?Sized> Arc<T> {
         let other_ptr: *const ArcInner<T> = *other.ptr;
         this_ptr == other_ptr
     }
-}
 
-#[stable(feature = "rust1", since = "1.0.0")]
-impl<T: ?Sized> Clone for Arc<T> {
-    /// Makes a clone of the `Arc` pointer.
-    ///
-    /// This creates another pointer to the same inner value, increasing the
+    /// Creates another pointer to the same inner value, increasing the
     /// strong reference count.
     ///
     /// # Examples
@@ -502,10 +497,10 @@ impl<T: ?Sized> Clone for Arc<T> {
     ///
     /// let five = Arc::new(5);
     ///
-    /// five.clone();
+    /// let _five_bis = five.new_ref();
+    /// // five and _five_bis point to the same value.
     /// ```
-    #[inline]
-    fn clone(&self) -> Arc<T> {
+    pub fn new_ref(&self) -> Arc<T> {
         // Using a relaxed ordering is alright here, as knowledge of the
         // original reference prevents other threads from erroneously deleting
         // the object.
@@ -535,6 +530,30 @@ impl<T: ?Sized> Clone for Arc<T> {
         }
 
         Arc { ptr: self.ptr }
+    }
+}
+
+#[stable(feature = "rust1", since = "1.0.0")]
+impl<T: ?Sized> Clone for Arc<T> {
+    /// Makes a clone of the `Arc` pointer.
+    ///
+    /// This creates another pointer to the same inner value, increasing the
+    /// strong reference count.
+    /// This is equivallent to calling `new_ref` with the added genericity of being callable
+    /// through the `Clone` trait.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// let five = Arc::new(5);
+    ///
+    /// five.clone();
+    /// ```
+    #[inline]
+    fn clone(&self) -> Arc<T> {
+        self.new_ref()
     }
 }
 
