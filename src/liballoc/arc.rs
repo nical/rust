@@ -341,6 +341,51 @@ impl<T> Arc<T> {
 }
 
 impl<T: ?Sized> Arc<T> {
+    /// Creates another pointer to the same inner value, increasing the
+    /// strong reference count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// let five = Arc::new(5);
+    ///
+    /// let _other_five = five.new_ref();
+    /// // five and _other_five point to the same value.
+    /// ```
+    pub fn new_ref(&self) -> Arc<T> {
+        // Using a relaxed ordering is alright here, as knowledge of the
+        // original reference prevents other threads from erroneously deleting
+        // the object.
+        //
+        // As explained in the [Boost documentation][1], Increasing the
+        // reference counter can always be done with memory_order_relaxed: New
+        // references to an object can only be formed from an existing
+        // reference, and passing an existing reference from one thread to
+        // another must already provide any required synchronization.
+        //
+        // [1]: (www.boost.org/doc/libs/1_55_0/doc/html/atomic/usage_examples.html)
+        let old_size = self.inner().strong.fetch_add(1, Relaxed);
+
+        // However we need to guard against massive refcounts in case someone
+        // is `mem::forget`ing Arcs. If we don't do this the count can overflow
+        // and users will use-after free. We racily saturate to `isize::MAX` on
+        // the assumption that there aren't ~2 billion threads incrementing
+        // the reference count at once. This branch will never be taken in
+        // any realistic program.
+        //
+        // We abort because such a program is incredibly degenerate, and we
+        // don't care to support it.
+        if old_size > MAX_REFCOUNT {
+            unsafe {
+                abort();
+            }
+        }
+
+        Arc { ptr: self.ptr }
+    }
+
     /// Creates a new [`Weak`][weak] pointer to this value.
     ///
     /// [weak]: struct.Weak.html
@@ -494,6 +539,8 @@ impl<T: ?Sized> Clone for Arc<T> {
     ///
     /// This creates another pointer to the same inner value, increasing the
     /// strong reference count.
+    /// This is equivallent to calling `new_ref` with the added genericity of being callable
+    /// through the `Clone` trait.
     ///
     /// # Examples
     ///
@@ -506,35 +553,7 @@ impl<T: ?Sized> Clone for Arc<T> {
     /// ```
     #[inline]
     fn clone(&self) -> Arc<T> {
-        // Using a relaxed ordering is alright here, as knowledge of the
-        // original reference prevents other threads from erroneously deleting
-        // the object.
-        //
-        // As explained in the [Boost documentation][1], Increasing the
-        // reference counter can always be done with memory_order_relaxed: New
-        // references to an object can only be formed from an existing
-        // reference, and passing an existing reference from one thread to
-        // another must already provide any required synchronization.
-        //
-        // [1]: (www.boost.org/doc/libs/1_55_0/doc/html/atomic/usage_examples.html)
-        let old_size = self.inner().strong.fetch_add(1, Relaxed);
-
-        // However we need to guard against massive refcounts in case someone
-        // is `mem::forget`ing Arcs. If we don't do this the count can overflow
-        // and users will use-after free. We racily saturate to `isize::MAX` on
-        // the assumption that there aren't ~2 billion threads incrementing
-        // the reference count at once. This branch will never be taken in
-        // any realistic program.
-        //
-        // We abort because such a program is incredibly degenerate, and we
-        // don't care to support it.
-        if old_size > MAX_REFCOUNT {
-            unsafe {
-                abort();
-            }
-        }
-
-        Arc { ptr: self.ptr }
+        self.new_ref()
     }
 }
 
