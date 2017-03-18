@@ -1008,6 +1008,25 @@ impl<T> Weak<T> {
 }
 
 impl<T: ?Sized> Weak<T> {
+    /// Creates another pointer to the same inner value, increasing the
+    /// weak reference count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    ///
+    /// let weak_five = Rc::downgrade(&Rc::new(5));
+    ///
+    /// let _other_weak_five = weak_five.new_ref();
+    /// // weak_five and _other_weak_five point to the same value.
+    /// ```
+    #[inline]
+    fn new_ref(&self) -> Weak<T> {
+        self.inc_weak();
+        Weak { ptr: self.ptr }
+    }
+
     /// Upgrades the `Weak` pointer to an [`Rc`][rc], if possible.
     ///
     /// Returns [`None`][option] if the strong count has reached zero and the
@@ -1093,6 +1112,8 @@ impl<T: ?Sized> Clone for Weak<T> {
     ///
     /// This creates another pointer to the same inner value, increasing the
     /// weak reference count.
+    /// This is equivallent to calling `new_ref` with the added genericity of being callable
+    /// through the `Clone` trait.
     ///
     /// # Examples
     ///
@@ -1105,8 +1126,7 @@ impl<T: ?Sized> Clone for Weak<T> {
     /// ```
     #[inline]
     fn clone(&self) -> Weak<T> {
-        self.inc_weak();
-        Weak { ptr: self.ptr }
+        self.new_ref()
     }
 }
 
