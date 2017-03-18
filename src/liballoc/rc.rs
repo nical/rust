@@ -443,6 +443,25 @@ impl Rc<str> {
 }
 
 impl<T: ?Sized> Rc<T> {
+    /// Creates another pointer to the same inner value, increasing the
+    /// strong reference count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    ///
+    /// let five = Rc::new(5);
+    ///
+    /// let _other_five = five.clone();
+    /// // _other_five and five point to the same value.
+    /// ```
+    #[inline]
+    fn new_ref(&self) -> Rc<T> {
+        self.inc_strong();
+        Rc { ptr: self.ptr }
+    }
+
     /// Creates a new [`Weak`][weak] pointer to this value.
     ///
     /// [weak]: struct.Weak.html
@@ -702,6 +721,8 @@ impl<T: ?Sized> Clone for Rc<T> {
     ///
     /// This creates another pointer to the same inner value, increasing the
     /// strong reference count.
+    /// This is equivallent to calling `new_ref` with the added genericity of being callable
+    /// through the `Clone` trait.
     ///
     /// # Examples
     ///
@@ -714,8 +735,7 @@ impl<T: ?Sized> Clone for Rc<T> {
     /// ```
     #[inline]
     fn clone(&self) -> Rc<T> {
-        self.inc_strong();
-        Rc { ptr: self.ptr }
+        self.new_ref()
     }
 }
 
